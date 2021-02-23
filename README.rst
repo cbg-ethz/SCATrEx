@@ -23,4 +23,4 @@ underlying evolutionary process.
 
 
 * Free software: GNU General Public License v3
-* Documentation: https://scitram.readthedocs.io.
+* Documentation: https://scatrex.readthedocs.io.
