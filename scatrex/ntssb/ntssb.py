@@ -1621,9 +1621,11 @@ class NTSSB(object):
         if counts:
             root_label = self.root['node'].num_data()
         if show_labels and counts:
-            root_label = self.root['label'] + '\n' + str(self.root['node'].num_local_data()) + ' cells'
+            root_label = self.root['label'] + '<br/><br/>' + str(self.root['node'].num_local_data()) + ' cells'
         if events:
             root_label = self.root['node'].event_str
+        if show_labels and events:
+            root_label = self.root['label'] + '<br/><br/>' + self.root['node'].event_str
 
         style = None
         if root_fillcolor is not None:
@@ -1633,7 +1635,7 @@ class NTSSB(object):
         if gene is not None:
             style = 'filled'
             fillcolor=name_color_dict[str(self.root['label'])]
-        g.node(str(self.root['label']), str(root_label), fillcolor=root_fillcolor, style=style)
+        g.node(str(self.root['label']), '<' + str(root_label) + '>', fillcolor=root_fillcolor, style=style)
 
         def descend(root, g):
             name = root['label']
@@ -1647,16 +1649,19 @@ class NTSSB(object):
                     child_label = root['children'][i]['node'].num_data()
 
                 if show_labels and counts:
-                    child_label = child_name + '\n' + str(root['children'][i]['node'].num_local_data()) + ' cells'
+                    child_label = child_name + '<br/><br/>' + str(root['children'][i]['node'].num_local_data()) + ' cells'
 
                 if events:
                     child_label = root['children'][i]['node'].event_str
+
+                if show_labels and events:
+                    child_label = child_name + '<br/><br/>' + self.root['node'].event_str
 
                 fillcolor = child['node'].color
                 if gene is not None:
                     fillcolor = name_color_dict[str(child_name)]
                     style = 'filled'
-                g.node(str(child_name), str(child_label), fillcolor=fillcolor, style=style)
+                g.node(str(child_name), '<' + str(child_label) + '>', fillcolor=fillcolor, style=style)
 
                 edge_color = 'black'
 
@@ -1717,15 +1722,20 @@ class NTSSB(object):
         if super_only:
             g = self.tssb_dict2graphviz(counts=counts, root_fillcolor=root_fillcolor, events=events, show_labels=show_labels, gene=gene, genemode=genemode, fontcolor=fontcolor)
         else:
-            g = self.root['node'].plot_tree(counts=counts, reset_names=True, root_fillcolor=root_fillcolor, show_labels=show_labels, gene=gene, genemode=genemode, fontcolor=fontcolor)
+            g = self.root['node'].plot_tree(counts=counts, reset_names=True, root_fillcolor=root_fillcolor, events=events, show_labels=show_labels, gene=gene, genemode=genemode, fontcolor=fontcolor)
             def descend(root, g):
                 for i, child in enumerate(root['children']):
-                    g = child['node'].plot_tree(g, reset_names=True, counts=counts, root_fillcolor=root_fillcolor, show_labels=show_labels, gene=gene, genemode=genemode, fontcolor=fontcolor)
+                    g = child['node'].plot_tree(g, reset_names=True, counts=counts, root_fillcolor=root_fillcolor, show_labels=show_labels, gene=gene, genemode=genemode, fontcolor=fontcolor, events=events)
                     if counts:
                         lab = str(child['pivot_node'].num_local_data())
                         if show_labels:
-                            lab = child['pivot_node'].label + '\n' + str(child['pivot_node'].num_local_data()) + ' cells'
-                        g.node(child['pivot_node'].label, lab)
+                            lab = child['pivot_node'].label + '<br/><br/>' + lab + ' cells'
+                        g.node(child['pivot_node'].label, '<' + lab + '>')
+                    elif events:
+                        lab = child['pivot_node'].event_str
+                        if show_labels:
+                            lab = child['pivot_node'].label + '<br/><br/>' + lab
+                        g.node(child['pivot_node'].label, '<' + lab + '>')
                     g.edge(child['pivot_node'].label, child['node'].root['label'])
                     g = descend(child, g)
                 return g
@@ -1761,3 +1771,10 @@ class NTSSB(object):
 
         descend(self.root, root_name)
         return assignments
+
+    def set_node_event_strings(self, **kwargs):
+        def descend(node):
+            node.set_event_string(**kwargs)
+            for child in list(node.children()):
+                descend(child)
+        descend(self.root['node'].root['node'])

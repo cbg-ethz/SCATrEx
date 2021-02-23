@@ -137,8 +137,8 @@ class Tree(ABC):
             parent_label, node_label = parent, node
             if labels:
                 try:
-                    parent_label = parent_label + '\n' + self.tree_dict[parent]['params_label']
-                    node_label = node_label + '\n' + self.tree_dict[node]['params_label']
+                    parent_label = parent_label + '\n\n' + self.tree_dict[parent]['params_label']
+                    node_label = node_label + '\n\n' + self.tree_dict[node]['params_label']
                 except:
                     pass
 

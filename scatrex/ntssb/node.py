@@ -9,6 +9,7 @@ class AbstractNode(object):
         self.is_observed  = is_observed
         self.observed_parameters = observed_parameters
         self.label        = ""
+        self.event_str    = ""
 
         self.params = dict()
         self.variational_parameters = dict(globals=dict(), locals=dict())
@@ -135,3 +136,6 @@ class AbstractNode(object):
             return self.tssb
         else:
             return self.parent().tssb_caller()
+
+    def set_event_string(self):
+        pass

@@ -566,3 +566,37 @@ class Node(AbstractNode):
             return self.global_noise_factors
         else:
             return self.parent().global_noise_factors_caller()
+
+    def set_event_string(self, var_names=None, estimated=True, unobs_threshold=1., kernel_threshold=1., max_len=5, event_fontsize=14):
+        if var_names is None:
+            var_names = np.arange(self.n_genes).astype(int).astype(str)
+
+        unobserved_factors = self.unobserved_factors
+        unobserved_factors_kernel = self.unobserved_factors_kernel
+        if estimated:
+            unobserved_factors = self.variational_parameters['locals']['unobserved_factors_mean']
+            unobserved_factors_kernel = np.exp(self.variational_parameters['locals']['unobserved_factors_kernel_log_mean'])
+
+        # Up-regulated
+        up_color = 'red'
+        up_list = np.where(np.logical_and(unobserved_factors > unobs_threshold, unobserved_factors_kernel > kernel_threshold))[0]
+        sorted_idx = np.argsort(unobserved_factors[up_list])[:max_len]
+        up_list = up_list[sorted_idx]
+        up_str = ''
+        if len(up_list) > 0:
+            up_str = f'<font point-size="{event_fontsize}" color="{up_color}">+</font>' + ','.join(var_names[up_list])
+
+        # Down-regulated
+        down_color = 'blue'
+        down_list = np.where(np.logical_and(unobserved_factors < -unobs_threshold, unobserved_factors_kernel > kernel_threshold))[0]
+        sorted_idx = np.argsort(-unobserved_factors[down_list])[:max_len]
+        down_list = down_list[sorted_idx]
+        down_str = ''
+        if len(down_list) > 0:
+            down_str =  f'<font point-size="{event_fontsize}" color="{down_color}">-</font>' + ','.join(var_names[down_list])
+
+        self.event_str = up_str
+        sep_str = ''
+        if len(up_list) > 0 and len(down_list) > 0:
+            sep_str = '<br/><br/>'
+        self.event_str = self.event_str + sep_str + down_str

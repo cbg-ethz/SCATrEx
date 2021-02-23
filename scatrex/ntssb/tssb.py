@@ -1206,9 +1206,11 @@ class TSSB(object):
         if counts:
             root_label = self.root['node'].num_local_data()
         if show_labels and counts:
-            root_label = self.root['label'] + '\n' + str(self.root['node'].num_local_data()) + ' cells'
+            root_label = self.root['label'] + '<br/><br/>' + str(self.root['node'].num_local_data()) + ' cells'
         if events:
             root_label = self.root['node'].event_str
+        if show_labels and events:
+            root_label = self.root['label'] + '<br/><br/>' + self.root['node'].event_str
         if weights:
             root_label = name_weight_dict[self.root['label']]
             root_label = str(root_label)[:5]
@@ -1223,7 +1225,7 @@ class TSSB(object):
         else:
             style = 'filled'
             fillcolor = self.color
-        g.node(str(self.root['label']), str(root_label), fillcolor=fillcolor, style=style)
+        g.node(str(self.root['label']), '<' + str(root_label) + '>', fillcolor=fillcolor, style=style)
 
         def descend(root, g):
             name = root['label']
@@ -1237,10 +1239,13 @@ class TSSB(object):
                     child_label = root['children'][i]['node'].num_local_data()
 
                 if show_labels and counts:
-                    child_label = child_name + '\n' + str(root['children'][i]['node'].num_local_data()) + ' cells'
+                    child_label = child_name + '<br/><br/>' + str(root['children'][i]['node'].num_local_data()) + ' cells'
 
                 if events:
                     child_label = root['children'][i]['node'].event_str
+
+                if show_labels and events:
+                    child_label = child_name + '<br/><br/>' + root['children'][i]['node'].event_str
 
                 if weights:
                     child_label = name_weight_dict[child['label']]
@@ -1251,7 +1256,7 @@ class TSSB(object):
                 if color_by_weight or gene is not None:
                     fillcolor = name_color_dict[str(child_name)]
                     style = 'filled'
-                g.node(str(child_name), str(child_label), fillcolor=fillcolor, style=style)
+                g.node(str(child_name), '<' + str(child_label) + '>', fillcolor=fillcolor, style=style)
 
                 edge_color = 'black'
 
