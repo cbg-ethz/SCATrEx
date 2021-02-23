@@ -2,6 +2,6 @@
 Usage
 =====
 
-To use SCITraM in a project::
+To use SCATrEx in a project::
 
-    import scitram
+    import scatrex

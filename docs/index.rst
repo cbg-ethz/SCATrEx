@@ -1,4 +1,4 @@
-Welcome to SCITraM's documentation!
+Welcome to SCATrEx's documentation!
 ======================================
 
 .. toctree::
@@ -9,9 +9,7 @@ Welcome to SCITraM's documentation!
    installation
    usage
    modules
-   contributing
    authors
-   history
 
 Indices and tables
 ==================
