@@ -174,7 +174,7 @@ class SCATrEx(object):
                                     line_width=lw, head_width=hw, s=s, fc=fc, ec=ec, fontsize=fs,
                                     legend_fontsize=lfs, figsize=figsize, save=save)
 
-    def plot_unobserved_parameters(self, figsize=(4,4), lw=4, alpha=0.7, title='', fontsize=18, step=4, estimated=False, save=None):
+    def plot_unobserved_parameters(self, figsize=(4,4), lw=4, alpha=0.7, title='', fontsize=18, step=4, estimated=False, name='unobserved_factors', save=None):
         nodes, _ = self.ntssb.get_node_mixture()
         plt.figure(figsize=figsize)
         ticklabs = []
@@ -183,9 +183,16 @@ class SCATrEx(object):
             ls = '-'
             tickpos.append(- step*i)
             ticklabs.append(fr"{node.label.replace('-', '')}")
-            unobs_factors = node.unobserved_factors
+            unobs_factors = node.__getattribute__(name)
             if estimated:
-                unobs_factors = node.variational_parameters['locals']['unobserved_factors_mean']
+                try:
+                    unobs_factors = node.variational_parameters['locals'][name]
+                except KeyError:
+                    try:
+                        unobs_factors = node.variational_parameters['locals'][name + '_mean']
+                    except KeyError:
+                        unobs_factors = node.variational_parameters['locals'][name + '_log_mean']
+
             plt.plot(unobs_factors - step*i, label=node.label, color=node.tssb.color, lw=4, alpha=0.7, ls=ls)
         plt.yticks(tickpos, labels=ticklabs, fontsize=fontsize)
         plt.xticks([])
