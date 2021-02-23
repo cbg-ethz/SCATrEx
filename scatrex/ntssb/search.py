@@ -205,37 +205,13 @@ class StructureSearch(object):
         # data_indices = np.where(root['node'].data_probs > 1/np.sqrt(len(nodes)))[0]
         new_node = self.tree.add_node_to(node, optimal_init=True)
 
-        # new_tree.update_ass_logits(variational=True)
-        # root['children'][-1]['node'].unobserved_factors[root['children'][-1]['node'].unobserved_factors <= 0.] = 1e-100
-        # root['children'][-1]['node'].set_mean()
-
-        # new_tree.assign_to_best()
-        # new_tree.resample_sticks(super=False)
-        # new_tree = self.compute_expected_score(new_tree, n_burnin=n_burnin, n_samples=n_samples, thin=thin, top_node=root['children'][-1], global_params=global_params, parent=True, random_init=True, compound=compound)
-        # self.tree.reset_variational_parameters(variances_only=True)
-        # init_baseline = jnp.mean(self.tree.data, axis=0)
-        # init_log_baseline = jnp.log(init_baseline / init_baseline[0])[1:]
-        # self.tree.root['node'].root['node'].log_baseline_mean = init_log_baseline + np.random.normal(0, .5, size=self.tree.data.shape[1]-1)
         local_node = None
         if local:
             local_node = new_node
         self.tree.optimize_elbo(local_node=new_node, root_node=None, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
         if verbose:
             print(f"{init_elbo} -> {self.tree.elbo}")
-        # if verbose:
-        #     print(f"{self.tree.elbo} -> {new_tree.elbo}")
-        # accept_prob = np.exp(np.min([0., new_tree.elbo - init_elbo]))
-        # if (np.random.rand() <= accept_prob):
-        #     self.tree = new_tree
-        #     accepted = True
-        #     print(f"Added {root['children'][-1]['node'].label}")
-        # else:
-        #     # Rejected; remove the node and restore parameters
-        #     self.tree.remove_last_leaf_node(root['node'].label)
-        #     self.tree.elbo = init_elbo
-        #     self.tree.set_node_means(init_params)
-        #     self.tree.update_ass_logits(variational=True)
-        #     self.tree.assign_to_best()
+
         return init_root, init_elbo
 
     def merge_nodes(self, local=False, num_samples=1, n_iters=100, thin=10, tol=1e-7, step_size=0.05, mb_size=100, max_nodes=5, verbose=True, debug=False, opt=None, callback=None):
@@ -288,18 +264,7 @@ class StructureSearch(object):
                                 print(f"Trying to merge {nodeA.label} to {nodeB.label}...")
 
                             ntree.merge_nodes(nodeA, nodeB)
-                            # child['node'].tssb.cull_tree()
-                            # ntree.plot_tree(super_only=False)
-                            # print(f"{self.tree.unnormalized_posterior(verbose=True)}\n")
-                            # print(f"{ntree.unnormalized_posterior(verbose=True)}\n")
-                            # Evaluate ELBO, no need to reconverge
-                            # ntree.evaluate_elbo(root_node=None, num_samples=num_samples, max_nodes=max_nodes)
-                            # ntree.reset_variational_parameters(variances_only=True)
-                            # # init_baseline = jnp.mean(ntree.data, axis=0)
-                            # # init_log_baseline = jnp.log(init_baseline / init_baseline[0])[1:]
-                            # # ntree.root['node'].root['node'].log_baseline_mean = init_log_baseline + np.random.normal(0, .5, size=ntree.data.shape[1]-1)
                             ntree.optimize_elbo(unique_node=None, root_node=nodeB, run=True, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
-                            # ntree = self.compute_expected_score(ntree, n_burnin=n_burnin, n_samples=n_samples, thin=thin, top_node=nodeB_root, global_params=global_params, compound=compound)
                             if verbose:
                                 print(f"{init_elbo} -> {ntree.elbo}")
 
@@ -308,71 +273,6 @@ class StructureSearch(object):
             descend(subtree.root, False, self.tree)
 
         return init_root, init_elbo
-    #
-    # def pivot_reattach(self, num_samples=1, n_iters=100, thin=10, tol=1e-7, step_size=0.05, mb_size=100, max_nodes=5, verbose=True, debug=False, callback=None):
-    #     """
-    #     Propose a pivot change. Uniformely choose a subtree, choose the pivot
-    #     according to eta, run until convergence and accept with MH ratio.
-    #     Only need to score the affected subtree and its children.
-    #     """
-    #     init_root = deepcopy(self.tree.root)
-    #     init_elbo = self.tree.elbo
-    #     init_params = self.tree.get_node_params()
-    #
-    #     # Uniformly pick a subtree
-    #     subtrees = self.tree.get_mixture()[1][1:] # without the root
-    #     subtree = np.random.choice(subtrees, p=[1./len(subtrees)]*len(subtrees))
-    #
-    #     init_pivot = subtree.root['node'].parent().label
-    #     prev_unobserved_factors = subtree.root['node'].unobserved_factors_mean
-    #     # prev_inherited_factors = subtree.root['node'].inherited_factors
-    #     # subtree = subtrees[1]
-    #     def descend(super_tree, ntree):
-    #         for child in super_tree['children']:
-    #             if child['node'].label != subtree.label:
-    #                 descend(child, ntree)
-    #             else:
-    #                 # Choose a pivot node from the parent subtree that isn't the current one
-    #                 weights, nodes = super_tree['node'].get_fixed_weights()
-    #                 # Only proceed if parent subtree has more than 1 node
-    #                 if len(nodes) > 1:
-    #                     parent_node = subtree.root['node'].parent()
-    #                     weights = [weight for i, weight in enumerate(weights) if nodes[i] != subtree.root['node'].parent()]
-    #                     weights = np.array(weights) / np.sum(weights)
-    #                     nodes = [node for node in nodes if node != subtree.root['node'].parent()] # remove the current pivot
-    #                     node = np.random.choice(nodes, p=weights)
-    #                     # node = [node for node in nodes if node.label == 'A-0'][0]
-    #                     child['pivot_node'] = node
-    #                     subtree.root['node'].set_parent(node, reset=True)
-    #                     subtree.root['node'].unobserved_factors_mean = prev_unobserved_factors
-    #                     subtree.root['node'].set_mean(variational=True)
-    #                     # new_tree.update_ass_logits(variational=True)
-    #                     # new_tree.assign_to_best()
-    #                     if verbose:
-    #                         print(f"Trying to attach {subtree.root['node'].label} to {node.label}...")
-    #
-    #                     # ntree = self.compute_expected_score(ntree, n_burnin=n_burnin, n_samples=n_samples, thin=thin, top_node=subtree.root, global_params=global_params, random_init=False, compound=compound)
-    #                     ntree.reset_variational_parameters(variances_only=True)
-    #                     init_baseline = jnp.mean(ntree.data, axis=0)
-    #                     init_log_baseline = jnp.log(init_baseline / init_baseline[0])[1:]
-    #                     ntree.root['node'].root['node'].log_baseline_mean = init_log_baseline + np.random.normal(0, .5, size=ntree.data.shape[1]-1)
-    #                     ntree.optimize_elbo(root_node=None, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, callback=callback)
-    #                     # self.tree.unnormalized_posterior(verbose=True)
-    #                     # print('')
-    #                     # ntree.unnormalized_posterior(verbose=True)
-    #                     # if verbose:
-    #                     #     print(f"{init_elbo} -> {ntree.elbo}")
-    #                     # accept_prob = np.exp(np.min([0., ntree.elbo - init_elbo]))
-    #                     # accepted = False
-    #                     # if (np.random.rand() <= accept_prob):
-    #                     #     self.tree = new_tree
-    #                     #     accepted = True
-    #                     #     print(f"Pivot of {subtree.root['node'].label}: {parent_node.label}->{node.label}")
-    #
-    #                     return True
-    #
-    #     accepted = descend(self.tree.root, self.tree)
-    #     return init_root, init_elbo
 
     def pivot_reattach(self, local=False, num_samples=1, n_iters=100, thin=10, tol=1e-7, step_size=0.05, mb_size=100, max_nodes=5, verbose=True, debug=False, opt=None, callback=None):
         init_root = deepcopy(self.tree.root)
@@ -405,11 +305,6 @@ class StructureSearch(object):
             if verbose:
                 print(f"Trying to set {node.label} as pivot of {subtree.label}")
 
-            # Optimize
-            # self.tree.reset_variational_parameters(variances_only=True)
-            # init_baseline = jnp.mean(self.tree.data, axis=0)
-            # init_log_baseline = jnp.log(init_baseline / init_baseline[0])[1:]
-            # self.tree.root['node'].root['node'].log_baseline_mean = init_log_baseline + np.random.normal(0, .5, size=self.tree.data.shape[1]-1)
             root_node = None
             if local:
                 root_node = subtree.root['node']
@@ -446,34 +341,12 @@ class StructureSearch(object):
         if verbose:
             print(f"Trying to add node {pivot_node.label} and setting it as pivot of {subtree['node'].label}")
 
-        # Optimize
-        # self.tree.reset_variational_parameters(variances_only=True)
-        # init_baseline = jnp.mean(self.tree.data, axis=0)
-        # init_log_baseline = jnp.log(init_baseline / init_baseline[0])[1:]
-        # self.tree.root['node'].root['node'].log_baseline_mean = init_log_baseline + np.random.normal(0, .5, size=self.tree.data.shape[1]-1)
         root_node = None
         if local:
             root_node = pivot_node
         self.tree.optimize_elbo(root_node=root_node, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
         if verbose:
             print(f"{init_elbo} -> {self.tree.elbo}")
-        # if verbose:
-        #     print(f"{init_elbo} -> {new_tree.elbo}")
-        # accept_prob = np.exp(np.min([0., new_tree.elbo - init_elbo]))
-        # if (np.random.rand() <= accept_prob):
-        #     self.tree = new_tree
-        #     accepted = True
-        #     print(f"Added node {pivot_node.label} and set to pivot of {subtree['node'].label}")
-        # else:
-        #     # Reattach back to previous pivot
-        #     self.tree.pivot_reattach_to(subtree['node'].label, init_pivot)
-        #     # Remove added node
-        #     self.tree.remove_last_leaf_node(node.label)
-        #     self.tree.elbo = init_elbo
-        #     # # Restore parameters
-        #     # self.tree.set_node_means(init_params)
-        #     # self.tree.update_ass_logits(variational=True)
-        #     # self.tree.assign_to_best()
 
         return init_root, init_elbo
 
@@ -548,56 +421,6 @@ class StructureSearch(object):
                 print(f"{init_elbo} -> {self.tree.elbo}")
 
         return init_root, init_elbo
-
-    # def subtree_reattach(self, num_samples=1, n_iters=100, thin=10, tol=1e-7, step_size=0.05, mb_size=100, max_nodes=5, verbose=True, debug=False, callback=None):
-    #     """
-    #     Propose a change in the parent observed node of an unobserved node (as well as its children)
-    #     """
-    #     init_root = deepcopy(self.tree.root)
-    #     init_elbo = self.tree.elbo
-    #     init_params = self.tree.get_node_params()
-    #
-    #     # Uniformly pick a subtree with children from the leaves of the super tree (leaves have less issues)
-    #     subtrees = self.tree.get_subtree_leaves()
-    #     subtrees = [subtree['node'] for subtree in subtrees if len(subtree['node'].root['children']) > 0]
-    #     if len(subtrees) > 0:
-    #         subtree = np.random.choice(subtrees, p=[1./len(subtrees)]*len(subtrees))
-    #         # Choose one of its direct children uniformly
-    #         child_idx = np.random.choice(len(subtree.root['children']), p=[1./len(subtree.root['children'])]*len(subtree.root['children']))
-    #         child = subtree.root['children'][child_idx]
-    #
-    #         # Choose another subtree uniformly
-    #         subtrees = self.tree.get_mixture()[1]
-    #         rem_subtrees = [s for s in subtrees if s != subtree]
-    #         new_subtree = np.random.choice(rem_subtrees, p=[1./len(rem_subtrees)]*len(rem_subtrees))
-    #
-    #         # Set child as child of new subtree's root
-    #         stick_length = boundbeta(1, self.tree.dp_gamma)
-    #         new_subtree.root['sticks'] = np.vstack([ new_subtree.root['sticks'], stick_length ])
-    #         new_subtree.root['children'].append(child)
-    #         child['node'].set_parent(new_subtree.root['node'], reset=False)
-    #
-    #         # Remove child from previous subtree without deleting node objects
-    #         subtree.root['children'][child_idx:child_idx+1] = []
-    #         subtree.root['sticks'] = np.delete(subtree.root['sticks'], child_idx).reshape(-1,1)
-    #
-    #         # Update unobserved factors to keep node in same place in feature space
-    #         # child['node'].unobserved_factors = np.log(subtree.root['node'].cnvs/new_subtree.root['node'].cnvs) + prev_unobserved_factors + prev_inherited_factors - child['node'].inherited_factors
-    #
-    #         if verbose:
-    #             print(f"Trying to put {child['node'].label} under {new_subtree.label}...")
-    #
-    #         # new_tree = self.compute_expected_score(new_tree, n_burnin=n_burnin, n_samples=n_samples, thin=thin, top_node=new_subtree.root, global_params=global_params, random_init=False, compound=compound)
-    #         # self.tree.reset_variational_parameters(variances_only=True)
-    #         # init_baseline = jnp.mean(self.tree.data, axis=0)
-    #         # init_log_baseline = jnp.log(init_baseline / init_baseline[0])[1:]
-    #         # self.tree.root['node'].root['node'].log_baseline_mean = init_log_baseline + np.random.normal(0, .5, size=self.tree.data.shape[1]-1)
-    #         self.tree.optimize_elbo(root_node=None, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, callback=callback)
-    #
-    #         if verbose:
-    #             print(f"{init_elbo.elbo} -> {self.tree.elbo}")
-    #
-    #     return init_root, init_elbo
 
     def swap_nodes(self, local=False, num_samples=1, n_iters=100, thin=10, tol=1e-7, step_size=0.05, mb_size=100, max_nodes=5, verbose=True, debug=False, opt=None, callback=None):
         init_root = deepcopy(self.tree.root)
