@@ -4,7 +4,7 @@ import sys
 
 
 def main():
-    """Console script for scitram."""
+    """Console script for scatrex."""
     parser = argparse.ArgumentParser()
     parser.add_argument('_', nargs='*')
     args = parser.parse_args()
