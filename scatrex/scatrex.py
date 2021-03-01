@@ -23,9 +23,6 @@ class SCATrEx(object):
         self.projector = None
         self.verbose = verbose
         self.search = None
-        # self.data = None
-        # self.normalized_data = None
-        # self.labels = None
         self.adata = None
 
     def add_data(self, data):
