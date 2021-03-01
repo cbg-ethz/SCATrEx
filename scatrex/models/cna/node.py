@@ -86,7 +86,6 @@ class Node(AbstractNode):
         self.variational_parameters['locals']['unobserved_factors_kernel_log_std'] = -np.ones((self.n_genes,))
 
         self.set_mean(self.get_mean(baseline=np.append(1, np.exp(self.log_baseline_caller())), unobserved_factors=self.variational_parameters['locals']['unobserved_factors_mean']))
-        # self.set_mean(self.get_mean(baseline=np.exp(self.log_baseline_caller()), unobserved_factors=self.unobserved_factors_mean))
 
     # ========= Functions to initialize node. =========
     def reset_data_parameters(self):
@@ -167,7 +166,6 @@ class Node(AbstractNode):
 
     def get_mean(self, baseline=None, unobserved_factors=None, noise=None, cell_factors=None, global_factors=None, cnvs=None, norm=True):
         baseline = np.append(1, np.exp(self.log_baseline_caller())) if baseline is None else baseline
-        # baseline = np.exp(self.log_baseline_caller()) if baseline is None else baseline
         unobserved_factors = self.variational_parameters['locals']['unobserved_factors_mean'] if unobserved_factors is None else unobserved_factors
         cnvs = self.cnvs if cnvs is None else cnvs
         node_mean = None
@@ -189,7 +187,6 @@ class Node(AbstractNode):
     def sample_observation(self, n):
         noise = self.cell_global_noise_factors_weights_caller()[n].dot(self.global_noise_factors_caller())
         node_mean = self.get_mean(unobserved_factors=self.unobserved_factors, baseline=self.baseline_caller(), noise=noise)
-        # s = negative_binomial_sample(self.lib_sizes_caller()[n] * self.node_mean, np.exp(self.log_overdispersion_caller()))
         s = multinomial_sample(self.lib_sizes_caller()[n], node_mean)
         return s
 
@@ -230,15 +227,12 @@ class Node(AbstractNode):
         if self.parent() is None:
             llp = llp + self.global_noise_factors_logprior() + self.cell_global_noise_factors_logprior()
             llp = llp + self.log_baseline_logprior()
-            # llp = llp + self.log_overdispersion_logprior()
 
         return llp
 
     def loglh(self, n, variational=False, axis=None):
         noise = self.cell_global_noise_factors_weights_caller()[n].dot(self.global_noise_factors_caller())
         node_mean = self.get_mean(baseline=np.append(1, np.exp(self.log_baseline_caller())), unobserved_factors=self.variational_parameters['locals']['unobserved_factors_mean'], noise=noise)
-        # node_mean = self.node_mean #* np.exp(noise)
-        # llh = negative_binomial_lpmf(self.tssb.ntssb.data[n], node_mean * self.lib_sizes_caller(), np.exp(self.log_overdispersion_caller()))
         llh = poisson_lpmf(self.tssb.ntssb.data[n],  self.lib_sizes_caller()[n] * node_mean, axis=axis)
         return llh
 
@@ -271,7 +265,7 @@ class Node(AbstractNode):
                 psi_sticks_log_alphas, psi_sticks_log_betas, unobserved_means, unobserved_log_stds, log_unobserved_factors_kernel_means, log_unobserved_factors_kernel_log_stds,
                 log_baseline_mean, log_baseline_log_std, cell_noise_mean, cell_noise_log_std, noise_factors_mean, noise_factors_log_std):
 
-        # Single-sample Monte Carlo estimate of the variational lower bound.
+        # single-sample Monte Carlo estimate of the variational lower bound
         mb_size = len(indices)
 
         def stop_global(globals):
@@ -339,7 +333,7 @@ class Node(AbstractNode):
 
         log_baseline = diag_gaussian_sample(rng, log_baseline_mean, log_baseline_log_std)
 
-        # Noise
+        # noise
         noise_factors = diag_gaussian_sample(rng, noise_factors_mean, noise_factors_log_std)
         cell_noise = diag_gaussian_sample(rng, cell_noise_mean[indices], cell_noise_log_std[indices])
         noise = jnp.dot(cell_noise, noise_factors)
@@ -405,14 +399,8 @@ class Node(AbstractNode):
         l = jnp.sum(jnn.logsumexp(out, axis=0) * data_mask_subset)
 
         def compute_node_kl(i):
-            # Node params
-            # unobserved_factors = nodes_unobserved_factors[i]
-            # beta = jnp.clip(jnp.exp(.1*jnp.abs(nodes_unobserved_factors[parent_vector[i]])), 1e-5, 1e5)
-            # pl = diag_laplace_logpdf(unobserved_factors, (parent_vector[i] != -1) * nodes_unobserved_factors[parent_vector[i]],
-            #                             jnp.log(0.001*beta)*(parent_vector[i] != -1) + jnp.log(self.root['node'].root['node'].unobserved_factors_root_kernel*jnp.ones(cnvs[i].shape))*(parent_vector[i] == -1))
-
             # unobserved_factors_kernel
-            pl = diag_gamma_logpdf(jnp.exp(nodes_log_unobserved_factors_kernels[i]), jnp.log(0.1) * jnp.ones(cnvs[i].shape), (parent_vector[i] != -1)*jnp.abs(nodes_unobserved_factors[parent_vector[i]]))
+            pl = diag_gamma_logpdf(jnp.exp(nodes_log_unobserved_factors_kernels[i]), jnp.log(self.unobserved_factors_kernel_concentration) * jnp.ones(cnvs[i].shape), (parent_vector[i] != -1)*jnp.abs(nodes_unobserved_factors[parent_vector[i]]))
             ent = - diag_gaussian_logpdf(nodes_log_unobserved_factors_kernels[i], log_unobserved_factors_kernel_means[i], log_unobserved_factors_kernel_log_stds[i])
             kl = (parent_vector[i] != -1) * (pl + ent)
 
@@ -423,19 +411,11 @@ class Node(AbstractNode):
             ent = - diag_gaussian_logpdf(nodes_unobserved_factors[i], unobserved_means[i], unobserved_log_stds[i])
             kl = kl + pl + ent
 
-            # Sticks
-            # nu_sticks_alpha = jnp.exp(nu_sticks_log_alphas[i])
-            # nu_sticks_beta = jnp.exp(nu_sticks_log_betas[i])
-            # nu_pl = self.Eq_log_p_nu(dp_alphas[i], nu_sticks_alpha, nu_sticks_beta)
-            # nu_ent = - self.Eq_log_q_nu(nu_sticks_alpha, nu_sticks_beta)
+            # sticks
             nu_pl = beta_logpdf(nu_sticks[i], jnp.log(jnp.array([1.])), jnp.log(jnp.array([dp_alphas[i]])))
             nu_ent = - beta_logpdf(nu_sticks[i], nu_sticks_log_alphas[i], nu_sticks_log_betas[i])
             kl = kl + nu_pl + nu_ent
 
-            # psi_sticks_alpha = jnp.exp(psi_sticks_log_alphas[i])
-            # psi_sticks_beta = jnp.exp(psi_sticks_log_alphas[i])
-            # psi_pl = self.Eq_log_p_psi(dp_gammas[i], psi_sticks_alpha, psi_sticks_beta)
-            # psi_ent = - self.Eq_log_q_psi(psi_sticks_alpha, psi_sticks_beta)
             psi_pl = beta_logpdf(psi_sticks[i], jnp.log(jnp.array([1.])), jnp.log(jnp.array([dp_gammas[i]])))
             psi_ent = - beta_logpdf(psi_sticks[i], psi_sticks_log_alphas[i], psi_sticks_log_betas[i])
             kl = kl + psi_pl + psi_ent
