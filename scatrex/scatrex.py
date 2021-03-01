@@ -39,7 +39,7 @@ class SCATrEx(object):
         if self.adata is not None:
             self.adata.uns['obs_node_colors'] = [self.observed_tree.tree_dict[node]['color'] for node in self.observed_tree.tree_dict]
 
-    def simulate_tree(self, observed_tree=None, observed_tree_args=dict(), model_args=None, n_extra_per_observed=1, seed=None, copy=False):
+    def simulate_tree(self, observed_tree=None, observed_tree_args=dict(), model_args=None, n_genes=50, n_extra_per_observed=1, seed=None, copy=False):
         np.random.seed(seed)
 
         self.observed_tree = observed_tree
@@ -53,7 +53,7 @@ class SCATrEx(object):
 
             self.observed_tree = self.model.ObservedTree(**observed_tree_args)
             self.observed_tree.generate_tree()
-            self.observed_tree.add_node_params()
+            self.observed_tree.add_node_params(n_genes=n_genes)
 
         if self.verbose:
             print(f"Generating an augmented {self.model.__name__.split('.')[-1].upper()} tree")
