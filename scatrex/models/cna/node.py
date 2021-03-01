@@ -20,7 +20,7 @@ class Node(AbstractNode):
                         num_global_noise_factors=4, global_noise_factors_scale=1.,
                         cell_global_noise_factors_weights_scale=1.,
                         unobserved_factors_root_kernel=0.1, unobserved_factors_kernel=1.,
-                        unobserved_factors_damp=1., **kwargs):
+                        unobserved_factors_kernel_concentration=0.1, **kwargs):
         super(Node, self).__init__(is_observed, observed_parameters, **kwargs)
 
         # The observed parameters are the CNVs of all genes
@@ -36,7 +36,7 @@ class Node(AbstractNode):
                 cell_global_noise_factors_weights_scale=cell_global_noise_factors_weights_scale,
                 unobserved_factors_root_kernel=unobserved_factors_root_kernel,
                 unobserved_factors_kernel=unobserved_factors_kernel,
-                unobserved_factors_damp=unobserved_factors_damp,
+                unobserved_factors_kernel_concentration=unobserved_factors_kernel_concentration,
             )
         else:
             self.node_hyperparams = self.node_hyperparams_caller()
@@ -106,7 +106,7 @@ class Node(AbstractNode):
                         num_global_noise_factors=4, global_noise_factors_scale=1.,
                         cell_global_noise_factors_weights_scale=1.,
                         unobserved_factors_root_kernel=0.1, unobserved_factors_kernel=1.,
-                        unobserved_factors_damp=1.):
+                        unobserved_factors_kernel_concentration=.1):
         parent = self.parent()
 
         if parent is None: # this is the root
@@ -117,7 +117,7 @@ class Node(AbstractNode):
                 cell_global_noise_factors_weights_scale=cell_global_noise_factors_weights_scale,
                 unobserved_factors_root_kernel=unobserved_factors_root_kernel,
                 unobserved_factors_kernel=unobserved_factors_kernel,
-                unobserved_factors_damp=unobserved_factors_damp,
+                unobserved_factors_kernel_concentration=unobserved_factors_kernel_concentration,
             )
 
             if root_params:
@@ -133,13 +133,10 @@ class Node(AbstractNode):
                 self.global_noise_factors_scale = global_noise_factors_scale
                 self.cell_global_noise_factors_weights_scale = cell_global_noise_factors_weights_scale
 
-                # Kernel
-                # self.kernel = np.random.gamma(0.1, 1., size=self.n_genes)
-
                 self.global_noise_factors = normal_sample(0, self.global_noise_factors_scale, size=[self.num_global_noise_factors, self.n_genes])
 
                 self.unobserved_factors_root_kernel = unobserved_factors_root_kernel
-                self.unobserved_factors_damp = unobserved_factors_damp
+                self.unobserved_factors_kernel_concentration = unobserved_factors_kernel_concentration
 
             self.unobserved_factors_kernel = np.array([self.unobserved_factors_root_kernel] * self.n_genes)
             self.unobserved_factors = normal_sample(0., self.unobserved_factors_kernel)
@@ -150,22 +147,7 @@ class Node(AbstractNode):
         else: # Non-root node: inherits everything from upstream node
             self.node_hyperparams = self.node_hyperparams_caller()
             if down_params:
-                # self.unobserved_factors_root_kernel = self.unobserved_factors_root_kernel_caller()
-                # self.unobserved_factors_kernel = self.unobserved_factors_kernel_caller()
-                # self.unobserved_factors_damp = self.unobserved_factors_damp_caller()
-                # beta = np.exp(np.abs(parent.unobserved_factors))
-                # self.unobserved_factors = laplace_sample(parent.unobserved_factors, 0.01 * beta)
-                #
-                self.unobserved_factors_kernel = gamma_sample(0.1, np.exp(1*np.abs(parent.unobserved_factors)), size=self.n_genes)
-                # Select some % of genes to have an event
-                # if self.is_observed:
-                #     self.affected_genes = np.random.choice(self.n_genes, size=int(0.01*self.n_genes), replace=False)
-                # else:
-                #     self.affected_genes = np.random.choice(self.n_genes, size=int(0.05*self.n_genes), replace=False)
-                # self.unobserved_factors = normal_sample(parent.unobserved_factors, 0.01)
-                # self.unobserved_factors[self.affected_genes] *= 100.
-                # self.unobserved_factors[self.unobserved_factors > 3.] = 3.
-                # self.unobserved_factors[self.unobserved_factors < -3.] = -3.
+                self.unobserved_factors_kernel = gamma_sample(self.unobserved_factors_kernel_concentration_caller(), np.exp(1*np.abs(parent.unobserved_factors)), size=self.n_genes)
                 self.unobserved_factors = normal_sample(parent.unobserved_factors, self.unobserved_factors_kernel)
 
             # Observation mean
@@ -542,6 +524,12 @@ class Node(AbstractNode):
             return self.unobserved_factors_damp
         else:
             return self.parent().unobserved_factors_damp_caller()
+
+    def unobserved_factors_kernel_concentration_caller(self):
+        if self.parent() is None:
+            return self.unobserved_factors_kernel_concentration
+        else:
+            return self.parent().unobserved_factors_kernel_concentration_caller()
 
     def unobserved_factors_root_kernel_caller(self):
         if self.parent() is None:
