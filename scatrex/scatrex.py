@@ -163,8 +163,9 @@ class SCATrEx(object):
         """
         The nodes will be coloured according to the average normalized counts of the feature indicated in `color`
         """
-        kwargs.setdefault('var_names', self.adata.var_names)
-        self.n_tssb.plot_tree(**kwargs)
+        if self.adata is not None:
+            kwargs.setdefault('var_names', self.adata.var_names)
+        self.ntssb.plot_tree(**kwargs)
 
     def plot_tree_proj(self, figsize=(4,4), title='', lw=0.001, hw=0.003, s=10, fc='k', ec='k', fs=22, lfs=16, save=None):
         scatterplot.plot_tree_proj(self.pca, self.ntssb, pca_obj=self.pca_obj, title=title,
