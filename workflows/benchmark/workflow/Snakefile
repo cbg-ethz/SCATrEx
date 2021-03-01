@@ -1,0 +1,74 @@
+"""
+For CNV trees of size 3 generate trees with 1, 2, and 4 extra nodes per CNV clone with 0, 2 and 4 noise factors.
+Vary the number of genes between 200 and 800 and fix the number of cells at 500.
+"""
+import os
+
+N_EXTRAS = [1, 2, 5]
+N_FACTORS = [0, 2, 6]
+N_CLONES = config["n_clones"]
+N_GENES = config["n_genes"]
+N_CELLS = config["n_cells"]
+N_REPS = config["n_reps"]
+
+METHOD_LIST = config["methods"]
+
+DATA_PATH = f'results/data/c{N_CLONES}_g{N_GENES}_n{N_CELLS}'
+
+rule all:
+    input:
+        fname = f'results/c{N_CLONES}_g{N_GENES}_n{N_CELLS}_benchmark_figure.pdf'
+
+rule generate_data:
+    params:
+        seed = "{rep_id}",
+        n_clones = N_CLONES,
+        n_genes = N_GENES,
+        n_cells = N_CELLS,
+        n_extras = "{n_extras}",
+        n_factors = "{n_factors}"
+    output:
+        simulated_data = f'{DATA_PATH}/' + 'e{n_extras}_f{n_factors}/r{rep_id}_data.csv',
+        simulated_labels = f'{DATA_PATH}/' + 'e{n_extras}_f{n_factors}/r{rep_id}_labels.csv',
+        simulated_clones = f'{DATA_PATH}/' + 'e{n_extras}_f{n_factors}/r{rep_id}_clones.csv',
+        simulated_clones_labels = f'{DATA_PATH}/' + 'e{n_extras}_f{n_factors}/r{rep_id}_obsnodes.csv',
+    script:
+        "scripts/generate_data.py"
+
+rule run_method:
+    input:
+        simulated_data = f'{DATA_PATH}/' + 'e{n_extras}_f{n_factors}/r{rep_id}_data.csv',
+        simulated_clones = f'{DATA_PATH}/' + 'e{n_extras}_f{n_factors}/r{rep_id}_clones.csv',
+        simulated_clones_labels = f'{DATA_PATH}/' + 'e{n_extras}_f{n_factors}/r{rep_id}_obsnodes.csv',
+    output:
+        fname = 'results/methods/{method}/' + f'c{N_CLONES}_g{N_GENES}_n{N_CELLS}/' + 'e{n_extras}_f{n_factors}/r{rep_id}_labels.csv'
+    script:
+        "scripts/{wildcards.method}.py"
+
+rule compute_scores:
+    input:
+        simulated_labels = f'{DATA_PATH}/' + 'e{n_extras}_f{n_factors}/r{rep_id}_labels.csv',
+        estimated_labels = 'results/methods/{method}/' + f'c{N_CLONES}_g{N_GENES}_n{N_CELLS}/' + 'e{n_extras}_f{n_factors}/r{rep_id}_labels.csv',
+    output:
+        fname = 'results/methods/{method}/' + f'c{N_CLONES}_g{N_GENES}_n{N_CELLS}/' + 'e{n_extras}_f{n_factors}/r{rep_id}_scores.csv',
+    script:
+        "scripts/compute_scores.py"
+
+rule gather_scores:
+    input:
+        fname_list = expand(
+            'results/methods/{method}/' + f'c{N_CLONES}_g{N_GENES}_n{N_CELLS}/' + 'e{n_extras}_f{n_factors}/r{rep_id}_scores.csv',
+            method=[m for m in METHOD_LIST], n_extras=[e for e in N_EXTRAS],
+            n_factors=[f for f in N_FACTORS], rep_id=[r for r in range(N_REPS)])
+    output:
+        fname = 'results/scores.csv'
+    script:
+        'scripts/gather_scores.py'
+
+rule plot_benchmark:
+    input:
+        fname = 'results/scores.csv'
+    output:
+        fname = f'results/c{N_CLONES}_g{N_GENES}_n{N_CELLS}_benchmark_figure.pdf'
+    script:
+        "scripts/plot_benchmark.R"

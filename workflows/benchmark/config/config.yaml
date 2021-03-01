@@ -1,0 +1,11 @@
+output_path: /Users/pedrof/projects/SCATrEx/workflows/benchmark/results
+scripts_path: /Users/pedrof/projects/SCATrEx/scripts
+n_clones: 3
+n_genes: 200
+n_cells: 200
+n_reps: 2
+methods:
+ - correlation
+ #- clonealign
+ - leiden
+ #- scatrex

@@ -107,3 +107,5 @@ ENV/
 data/
 figures/
 default.profraw
+workflows/*/.snakemake
+workflows/*/results
