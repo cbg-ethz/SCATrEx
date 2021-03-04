@@ -137,6 +137,40 @@ class SCATrEx(object):
         self.adata.obs['node'] = np.array([assignment['node'].label for assignment in self.ntssb.assignments])
         self.adata.obs['obs_node'] = np.array([assignment['subtree'].label for assignment in self.ntssb.assignments])
 
+    def learn_clonemap(self, observed_tree=None, **optimize_kwargs):
+        """Provides an equivalent of clonealign (for CNV nodes) or cardelino (for SNV nodes)
+        """
+        if not self.observed_tree and observed_tree is None:
+            raise ValueError("No observed tree available. Please pass an observed tree object.")
+
+        if self.adata is None:
+            raise ValueError("No data available. Please add data to the SCATrEx object via `self.add_data()`")
+
+        if observed_tree:
+            self.observed_tree = observed_tree
+
+        if self.verbose:
+            print(f"Updating `unobserved_factors_root_kernel` to 1e-6")
+            print(f"Updating `unobserved_factors_kernel_concentration` to 1e-6")
+
+        self.model_args['unobserved_factors_root_kernel'] = 1e-6
+        self.model_args['unobserved_factors_kernel_concentration'] = 1e-6
+
+        self.ntssb = NTSSB(self.observed_tree, self.model.Node, node_hyperparams=self.model_args)
+        self.ntssb.add_data(self.adata.raw.X, to_root=True)
+        self.ntssb.root['node'].root['node'].reset_data_parameters()
+        self.ntssb.reset_variational_parameters()
+        self.ntssb.update_ass_logits(variational=True)
+        self.ntssb.assign_to_best()
+        optimize_kwargs.setdefault('sticks_only', True) # ignore other node-specific parameters
+        elbos = self.ntssb.optimize_elbo(**optimize_kwargs)
+        self.ntssb.plot_tree()
+
+        self.adata.obs['node'] = np.array([assignment['node'].label for assignment in self.ntssb.assignments])
+        self.adata.obs['obs_node'] = np.array([assignment['subtree'].label for assignment in self.ntssb.assignments])
+
+        return elbos
+
     def normalize_data(self, target_sum=1e4, log=True, copy=False):
         sc.pp.normalize_total(self.adata, target_sum=target_sum)
         if log:
