@@ -6,6 +6,7 @@ from .plotting import scatterplot
 import numpy as np
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
+import pickle
 
 import scanpy as sc
 from anndata import AnnData
@@ -35,7 +36,12 @@ class SCATrEx(object):
             self.adata.uns['obs_node_colors'] = [self.observed_tree.tree_dict[node]['color'] for node in self.observed_tree.tree_dict]
 
     def set_observed_tree(self, observed_tree):
-        self.observed_tree = observed_tree
+        if isinstance(observed_tree, str):
+            with open(observed_tree, 'rb') as f:
+                self.observed_tree = pickle.load(f)
+        else:
+            self.observed_tree = observed_tree
+
         if self.adata is not None:
             self.adata.uns['obs_node_colors'] = [self.observed_tree.tree_dict[node]['color'] for node in self.observed_tree.tree_dict]
 
