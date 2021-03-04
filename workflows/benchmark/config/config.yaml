@@ -6,6 +6,6 @@ n_cells: 200
 n_reps: 2
 methods:
  - correlation
- #- clonealign
+ - clonealign
  - leiden
- #- scatrex
+ - scatrex
