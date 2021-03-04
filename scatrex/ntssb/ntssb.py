@@ -877,7 +877,7 @@ class NTSSB(object):
         opt_state = self.opt_update(i, gradient, opt_state)
         return opt_state, gradient, params
 
-    def optimize_elbo(self, root_node=None, local_node=None, global_only=False, unique_node=None, num_samples=10, n_iters=100, thin=10, step_size=0.05, debug=False, tol=1e-5, run=True, max_nodes=5, init=False, opt=None, mb_size=100, callback=None, **callback_kwargs):
+    def optimize_elbo(self, root_node=None, local_node=None, global_only=False, sticks_only=False, unique_node=None, num_samples=10, n_iters=100, thin=10, step_size=0.05, debug=False, tol=1e-5, run=True, max_nodes=5, init=False, opt=None, mb_size=100, callback=None, **callback_kwargs):
         self.max_nodes = len(self.input_tree_dict.keys()) * max_nodes # upper bound on number of nodes
         self.data = jnp.array(self.data, dtype='float32')
 
@@ -932,7 +932,6 @@ class NTSSB(object):
             local_node_idx = np.where(np.array(nodes)==local_node)[0][0]
             node_mask_idx = np.array([node_idx, local_node_idx])
 
-        sticks_only = False
         if unique_node is not None:
             node_idx = np.where(np.array(nodes)==unique_node)[0][0]
             node_mask_idx = node_idx
