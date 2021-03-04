@@ -16,11 +16,11 @@ from ...ntssb.node import *
 from ...ntssb.tree import *
 
 class Node(AbstractNode):
-    def __init__(self, is_observed, observed_parameters, log_lib_size_mean=2, log_lib_size_std=1,
+    def __init__(self, is_observed, observed_parameters, log_lib_size_mean=10, log_lib_size_std=1,
                         num_global_noise_factors=4, global_noise_factors_scale=1.,
                         cell_global_noise_factors_weights_scale=1.,
                         unobserved_factors_root_kernel=0.1, unobserved_factors_kernel=1.,
-                        unobserved_factors_kernel_concentration=0.1, **kwargs):
+                        unobserved_factors_kernel_concentration=0.01, **kwargs):
         super(Node, self).__init__(is_observed, observed_parameters, **kwargs)
 
         # The observed parameters are the CNVs of all genes
@@ -149,8 +149,9 @@ class Node(AbstractNode):
         else: # Non-root node: inherits everything from upstream node
             self.node_hyperparams = self.node_hyperparams_caller()
             if down_params:
-                self.unobserved_factors_kernel = gamma_sample(self.unobserved_factors_kernel_concentration_caller(), np.exp(1*np.abs(parent.unobserved_factors)), size=self.n_genes)
+                self.unobserved_factors_kernel = gamma_sample(self.unobserved_factors_kernel_concentration_caller(), 0.3 * np.exp(np.abs(parent.unobserved_factors)), size=self.n_genes)
                 self.unobserved_factors = normal_sample(parent.unobserved_factors, self.unobserved_factors_kernel)
+                self.unobserved_factors = np.clip(self.unobserved_factors, -4, 4)
 
             # Observation mean
             self.set_mean()
@@ -404,7 +405,7 @@ class Node(AbstractNode):
 
         def compute_node_kl(i):
             # unobserved_factors_kernel
-            pl = diag_gamma_logpdf(jnp.exp(nodes_log_unobserved_factors_kernels[i]), jnp.log(self.unobserved_factors_kernel_concentration) * jnp.ones(cnvs[i].shape), (parent_vector[i] != -1)*jnp.abs(nodes_unobserved_factors[parent_vector[i]]))
+            pl = diag_gamma_logpdf(jnp.exp(nodes_log_unobserved_factors_kernels[i]), jnp.log(self.unobserved_factors_kernel_concentration) * jnp.ones(cnvs[i].shape), (parent_vector[i] != -1)*jnp.log(self.unobserved_factors_kernel_concentration)*jnp.abs(nodes_unobserved_factors[parent_vector[i]]))
             ent = - diag_gaussian_logpdf(nodes_log_unobserved_factors_kernels[i], log_unobserved_factors_kernel_means[i], log_unobserved_factors_kernel_log_stds[i])
             kl = (parent_vector[i] != -1) * (pl + ent)
 
