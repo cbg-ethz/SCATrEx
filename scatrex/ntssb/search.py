@@ -188,6 +188,7 @@ class StructureSearch(object):
             if np.random.rand() > 0.67:
                 self.tree.cull_subtrees()
 
+        self.best_tree.plot_tree(super_only=False)
         return self.best_tree
 
     def add_node(self, local=False, num_samples=1, n_iters=100, thin=10, tol=1e-7, step_size=0.05, mb_size=100, max_nodes=5, verbose=True, debug=False, opt=None, callback=None):
