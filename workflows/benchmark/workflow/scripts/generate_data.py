@@ -8,6 +8,7 @@ simulated_data = snakemake.output['simulated_data']
 simulated_labels = snakemake.output['simulated_labels']
 simulated_clones = snakemake.output['simulated_clones']
 simulated_clones_labels = snakemake.output['simulated_clones_labels']
+simulated_observed_tree = snakemake.output['simulated_observed_tree']
 
 import scatrex
 from scatrex import models
@@ -24,3 +25,7 @@ np.savetxt(simulated_data, data, delimiter=',')
 np.savetxt(simulated_labels, labels, delimiter=',', fmt="%s")
 np.savetxt(simulated_clones, sim_sca.observed_tree.adata.X, delimiter=',')
 np.savetxt(simulated_clones_labels, np.array(sim_sca.observed_tree.adata.obs['node']), delimiter=',', fmt="%s")
+
+import pickle
+with open(simulated_observed_tree, 'wb') as f:
+    pickle.dump(sim_sca.observed_tree, f)
