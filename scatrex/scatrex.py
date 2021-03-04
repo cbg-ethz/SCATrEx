@@ -239,22 +239,39 @@ class SCATrEx(object):
             plt.savefig(save, bbox_inches='tight')
         plt.show()
 
-    def compute_smoothed_expression(self, var_names=None, copy=False):
-        smoothed_mat = []
-        if isinstance(var_names, dict):
-            self.var_names = var_names
-            for region in var_names:
-                smoothed_mat.append(self.__smooth_expression(self.adata, var_names[region]))
+    def compute_smoothed_expression(self, var_names=None, window_size=10, clip=3, copy=False):
+        mat = sc.pp.scale(self.adata.X, copy=True)
 
-        self.adata.obsm["smoothed"] = np.concatenate(smoothed_mat, axis=1)
+        if isinstance(var_names, dict):
+            smoothed_mat = []
+            for region in var_names:
+                smoothed_mat.append(self.__smooth_expression(mat=mat, var_names=var_names[region], window_size=window_size, clip=clip))
+            self.adata.layers["smoothed"] = np.concatenate(smoothed_mat, axis=1)
+        else:
+            self.adata.layers["smoothed"] = self.__smooth_expression(mat=mat, window_size=window_size, clip=clip)
 
         if self.verbose:
-            print(f'Smoothed gene expression is stored in `self.adata.obsm[\"smoothed\"]`')
+            print(f'Smoothed gene expression is stored in `self.adata.layers[\"smoothed\"]`')
 
         return self.adata.obsm["smoothed"] if copy else None
 
-    def __smooth_expression(self, var_names=None):
-        pass
+    def __smooth_expression(self, mat=None, var_names=None, window_size=10, clip=3):
+        if mat is None:
+            if var_names is None:
+                var_names = np.arange(self.adata.shape[1])
+            mat = self.adata[:,var_names].X
+
+        mat = np.clip(mat, -np.abs(clip), np.abs(clip))
+
+        half_window = int(window_size/2)
+        smoothed = np.zeros(mat.shape)
+        for ii in range(mat.shape[1]):
+            left = max(0, ii - half_window)
+            right = min(ii + half_window, mat.shape[1]-1)
+            if left != right:
+                smoothed[:,ii] = np.mean(mat[:, left:right], axis=1)
+
+        return smoothed
 
     def compute_pathway_enrichments(self, db='kegg', method='gsva'):
         pass
