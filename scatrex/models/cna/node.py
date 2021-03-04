@@ -70,6 +70,8 @@ class Node(AbstractNode):
                 self.variational_parameters['globals']['cell_noise_log_std'] = np.zeros((self.tssb.ntssb.num_data, self.num_global_noise_factors))
                 self.variational_parameters['globals']['noise_factors_mean'] = np.zeros((self.num_global_noise_factors, self.n_genes))
                 self.variational_parameters['globals']['noise_factors_log_std'] = np.zeros((self.num_global_noise_factors, self.n_genes))
+                self.variational_parameters['globals']['factor_precision_log_means'] = np.zeros((self.num_global_noise_factors))
+                self.variational_parameters['globals']['factor_precision_log_stds'] = np.zeros((self.num_global_noise_factors))
 
         self.data_ass_logits = np.zeros((self.tssb.ntssb.num_data))
 
@@ -132,7 +134,8 @@ class Node(AbstractNode):
                 self.global_noise_factors_scale = global_noise_factors_scale
                 self.cell_global_noise_factors_weights_scale = cell_global_noise_factors_weights_scale
 
-                self.global_noise_factors = normal_sample(0, self.global_noise_factors_scale, size=[self.num_global_noise_factors, self.n_genes])
+                self.global_noise_factors_precisions = gamma_sample(5., 1., size=self.num_global_noise_factors)
+                self.global_noise_factors = normal_sample(0, 1./np.sqrt(self.global_noise_factors_precisions), size=[self.n_genes, self.num_global_noise_factors]).T # K x P
 
                 self.unobserved_factors_root_kernel = unobserved_factors_root_kernel
                 self.unobserved_factors_kernel_concentration = unobserved_factors_kernel_concentration
@@ -202,7 +205,7 @@ class Node(AbstractNode):
         return normal_lpdf(x, 0, 1)
 
     def global_noise_factors_logprior(self):
-        return normal_lpdf(self.global_noise_factors, 0., self.global_noise_factors_scale)
+        return normal_lpdf(self.global_noise_factors, 0., 1./np.sqrt(self.global_noise_factors_precisions))
 
     def cell_global_noise_factors_logprior(self):
         return normal_lpdf(self.cell_global_noise_factors_weights, 0., self.cell_global_noise_factors_weights_scale)
@@ -263,24 +266,26 @@ class Node(AbstractNode):
     def compute_elbo(self, rng, cnvs, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, node_mask, data_mask_subset, indices, do_global, global_only, sticks_only,
                 nu_sticks_log_alphas, nu_sticks_log_betas,
                 psi_sticks_log_alphas, psi_sticks_log_betas, unobserved_means, unobserved_log_stds, log_unobserved_factors_kernel_means, log_unobserved_factors_kernel_log_stds,
-                log_baseline_mean, log_baseline_log_std, cell_noise_mean, cell_noise_log_std, noise_factors_mean, noise_factors_log_std):
+                log_baseline_mean, log_baseline_log_std, cell_noise_mean, cell_noise_log_std, noise_factors_mean, noise_factors_log_std, factor_precision_log_means, factor_precision_log_stds):
 
         # single-sample Monte Carlo estimate of the variational lower bound
         mb_size = len(indices)
 
         def stop_global(globals):
-            log_baseline_mean, log_baseline_log_std, noise_factors_mean, noise_factors_log_std = globals[0], globals[1], globals[2], globals[3]
+            log_baseline_mean, log_baseline_log_std, noise_factors_mean, noise_factors_log_std, factor_precision_log_means, factor_precision_log_stds = globals[0], globals[1], globals[2], globals[3], globals[4], globals[5]
             log_baseline_mean = jax.lax.stop_gradient(log_baseline_mean)
             log_baseline_log_std = jax.lax.stop_gradient(log_baseline_log_std)
             noise_factors_mean = jax.lax.stop_gradient(noise_factors_mean)
             noise_factors_log_std = jax.lax.stop_gradient(noise_factors_log_std)
-            return log_baseline_mean, log_baseline_log_std, noise_factors_mean, noise_factors_log_std
+            factor_precision_log_means = jax.lax.stop_gradient(factor_precision_log_means)
+            factor_precision_log_stds = jax.lax.stop_gradient(factor_precision_log_stds)
+            return log_baseline_mean, log_baseline_log_std, noise_factors_mean, noise_factors_log_std, factor_precision_log_means, factor_precision_log_stds
 
         def alt_global(globals):
-            log_baseline_mean, log_baseline_log_std, noise_factors_mean, noise_factors_log_std = globals[0], globals[1], globals[2], globals[3]
-            return log_baseline_mean, log_baseline_log_std, noise_factors_mean, noise_factors_log_std
+            log_baseline_mean, log_baseline_log_std, noise_factors_mean, noise_factors_log_std, factor_precision_log_means, factor_precision_log_stds = globals[0], globals[1], globals[2], globals[3], globals[4], globals[5]
+            return log_baseline_mean, log_baseline_log_std, noise_factors_mean, noise_factors_log_std, factor_precision_log_means, factor_precision_log_stds
 
-        log_baseline_mean, log_baseline_log_std, noise_factors_mean, noise_factors_log_std = jax.lax.cond(do_global, alt_global, stop_global, (log_baseline_mean, log_baseline_log_std, noise_factors_mean, noise_factors_log_std))
+        log_baseline_mean, log_baseline_log_std, noise_factors_mean, noise_factors_log_std, factor_precision_log_means, factor_precision_log_stds = jax.lax.cond(do_global, alt_global, stop_global, (log_baseline_mean, log_baseline_log_std, noise_factors_mean, noise_factors_log_std, factor_precision_log_means, factor_precision_log_stds))
 
         def stop_node_grad(i):
             return (jax.lax.stop_gradient(nu_sticks_log_alphas[i]), jax.lax.stop_gradient(nu_sticks_log_betas[i]),
@@ -321,7 +326,6 @@ class Node(AbstractNode):
         log_unobserved_factors_kernel_log_stds, log_unobserved_factors_kernel_means, unobserved_log_stds, unobserved_means, psi_sticks_log_betas, psi_sticks_log_alphas, nu_sticks_log_betas, nu_sticks_log_alphas = jax.lax.cond(global_only, stop_non_global, alt_non_global,
             (log_unobserved_factors_kernel_log_stds, log_unobserved_factors_kernel_means, unobserved_log_stds, unobserved_means, psi_sticks_log_betas, psi_sticks_log_alphas, nu_sticks_log_betas, nu_sticks_log_alphas))
 
-
         def keep_cell_grad(i):
             return cell_noise_mean[indices][i], cell_noise_log_std[indices][i]
         def stop_cell_grad(i):
@@ -330,10 +334,10 @@ class Node(AbstractNode):
             return jax.lax.cond(data_mask_subset[i] == 1, stop_cell_grad, keep_cell_grad, i)
         cell_noise_mean, cell_noise_log_std = vmap(stop_cell_grads)(jnp.arange(mb_size))
 
-
         log_baseline = diag_gaussian_sample(rng, log_baseline_mean, log_baseline_log_std)
 
         # noise
+        log_factors_precisions = diag_gaussian_sample(rng, factor_precision_log_means, factor_precision_log_stds)
         noise_factors = diag_gaussian_sample(rng, noise_factors_mean, noise_factors_log_std)
         cell_noise = diag_gaussian_sample(rng, cell_noise_mean[indices], cell_noise_log_std[indices])
         noise = jnp.dot(cell_noise, noise_factors)
@@ -428,8 +432,9 @@ class Node(AbstractNode):
 
         # Global vars KL
         baseline_kl = diag_gaussian_logpdf(log_baseline, jnp.zeros(log_baseline.shape), jnp.log(0.5)*jnp.ones(log_baseline.shape)) - diag_gaussian_logpdf(log_baseline, log_baseline_mean, log_baseline_log_std)
-        noise_factors_kl = diag_gaussian_logpdf(noise_factors, jnp.zeros(noise_factors.shape), jnp.zeros(noise_factors.shape)) - diag_gaussian_logpdf(noise_factors, noise_factors_mean, noise_factors_log_std)
-        total_kl = node_kl + baseline_kl + noise_factors_kl
+        factor_precision_kl = diag_gamma_logpdf(jnp.exp(log_factors_precisions), 2*jnp.ones(log_factors_precisions.shape), jnp.ones(log_factors_precisions.shape)) - diag_gaussian_logpdf(log_factors_precisions, factor_precision_log_means, factor_precision_log_stds)
+        noise_factors_kl = diag_gaussian_logpdf(noise_factors, jnp.zeros(noise_factors.shape), jnp.sqrt(jnp.exp(-log_factors_precisions)).reshape(-1,1) * jnp.ones(noise_factors.shape)) - diag_gaussian_logpdf(noise_factors, noise_factors_mean, noise_factors_log_std)
+        total_kl = node_kl + baseline_kl + factor_precision_kl + noise_factors_kl
 
         # Scale the KL by the data size
         total_kl = total_kl * jnp.sum(data_mask_subset != 0) / self.tssb.ntssb.num_data
