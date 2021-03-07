@@ -3,3 +3,4 @@ anndata
 jax
 scipy
 tqdm
+scikit-learn
