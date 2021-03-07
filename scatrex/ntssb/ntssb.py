@@ -1123,7 +1123,7 @@ class NTSSB(object):
     def assign_to_best(self):
         nodes = self.get_nodes()
         assignment_logits = np.array([node.data_ass_logits for node in nodes]).T
-        assignment_probs = jnn.softmax(assignment_logits, axis=1)
+        assignment_probs = np.array(jnn.softmax(assignment_logits, axis=1))
 
         # Clear all
         for node in nodes:
