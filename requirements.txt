@@ -4,3 +4,4 @@ jax
 scipy
 tqdm
 scikit-learn
+graphviz
