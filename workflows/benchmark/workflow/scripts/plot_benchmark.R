@@ -25,10 +25,12 @@ method_params <- list(correlation=list(name='Correlation', color=c("#ffd8a3", "#
                       scatrex=list(name='SCATrEx', color=c("#bfced8", "#A7BBC9", "#8fa8ba")))
 get_colors <- function(method_list, method_params_list) {
   colors <- list()
-  for (method in method_params_list){
+  i = 1
+  for (method in names(method_params_list)){
     if (method %in% method_list) {
-      colors <- append(colors, method$color)
+      colors <- append(colors, method_params_list[[method]]$color)
     }
+    i <- i + 1
   }
   colors <- unlist(colors)
   colors
@@ -40,6 +42,7 @@ methods = c('correlation', 'clonealign', 'scatrex')
 colors <- get_colors(methods, method_params)
 benchmark_df_subset <- benchmark_df[benchmark_df$score == score,]
 benchmark_df_subset <- benchmark_df_subset[benchmark_df_subset$method %in% methods,]
+benchmark_df_subset$method <- factor(benchmark_df_subset$method , levels=methods)
 p1 <- ggplot(benchmark_df_subset, aes(x = method, y = value, color = interaction(n_extras, method), fill = interaction(n_extras, method))) +
   geom_boxplot(outlier.shape = NA) +
   geom_jitter(shape=16, position=position_jitterdodge(), alpha=0.5) +
@@ -57,6 +60,7 @@ methods = c('leiden', 'scatrex')
 colors <- get_colors(methods, method_params)
 benchmark_df_subset <- benchmark_df[benchmark_df$score == score,]
 benchmark_df_subset <- benchmark_df_subset[benchmark_df_subset$method %in% methods,]
+benchmark_df_subset$method <- factor(benchmark_df_subset$method , levels=methods)
 p2 <- ggplot(benchmark_df_subset, aes(x = method, y = value, color = interaction(n_extras, method), fill = interaction(n_extras, method))) +
   geom_boxplot(outlier.shape = NA) +
   geom_jitter(shape=16, position=position_jitterdodge(), alpha=0.5) +
@@ -74,6 +78,7 @@ methods = c('leiden', 'scatrex')
 colors <- get_colors(methods, method_params)
 benchmark_df_subset <- benchmark_df[benchmark_df$score == score,]
 benchmark_df_subset <- benchmark_df_subset[benchmark_df_subset$method %in% methods,]
+benchmark_df_subset$method <- factor(benchmark_df_subset$method , levels=methods)
 p3 <- ggplot(benchmark_df_subset, aes(x = method, y = value, color = interaction(n_extras, method), fill = interaction(n_extras, method))) +
   geom_boxplot(outlier.shape = NA) +
   geom_jitter(shape=16, position=position_jitterdodge(), alpha=0.5) +
@@ -91,6 +96,7 @@ methods = c('scatrex')
 colors <- get_colors(methods, method_params)
 benchmark_df_subset <- benchmark_df[benchmark_df$score == score,]
 benchmark_df_subset <- benchmark_df_subset[benchmark_df_subset$method %in% methods,]
+benchmark_df_subset$method <- factor(benchmark_df_subset$method , levels=methods)
 p4 <- ggplot(benchmark_df_subset, aes(x = method, y = value, color = interaction(n_extras, method), fill = interaction(n_extras, method))) +
   geom_boxplot(outlier.shape = NA) +
   geom_jitter(shape=16, position=position_jitterdodge(), alpha=0.5) +
