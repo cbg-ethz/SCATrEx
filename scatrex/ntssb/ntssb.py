@@ -1299,7 +1299,7 @@ class NTSSB(object):
                     unobserved_node = [nodeA, nodeB][unobserved_node_idx]
                     # if unobserved node is parent of more than one subtree, don't proceed with full swap
                     unobserved_node_children = unobserved_node.children()
-                    if not np.any(np.array([child.is_observed for child in unobserved_node_children])):
+                    if not (np.sum(np.array([child.is_observed for child in unobserved_node_children])) > 1):
                         observed_node = [nodeA, nodeB][1 - unobserved_node_idx]
                         parent_unobserved = unobserved_node.parent()
                         observed_node.set_parent(parent_unobserved)
