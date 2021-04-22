@@ -1,4 +1,4 @@
-from numpy        import *
+from numpy import *
 import numpy as np
 from numpy.random import *
 
@@ -10,6 +10,7 @@ from jax.experimental import optimizers
 from jax.scipy.stats import norm
 from jax.scipy.stats import gamma
 from jax.scipy.stats import poisson
+from jax.scipy.special import logit
 
 from ...util import *
 from ...ntssb.node import *
@@ -49,16 +50,21 @@ class Node(AbstractNode):
         node_mean = node_mean / sum
         return node_mean
 
-    def reset_variational_parameters(self):
+    def reset_variational_parameters(self, means=True, variances=True):
         if self.parent() is None:
             # Baseline: first value is 1
-            self.variational_parameters['globals']['log_baseline_mean'] = np.array(normal_sample(0, 1, self.n_genes-1)) #np.zeros((self.n_genes-1,))
-            if self.tssb.ntssb.data is not None:
-                self.full_data = jnp.array(self.tssb.ntssb.data)
-                init_baseline = np.mean(self.tssb.ntssb.data, axis=0)
-                init_log_baseline = np.log(init_baseline / init_baseline[0])[1:]
-                self.variational_parameters['globals']['log_baseline_mean'] = init_log_baseline
-            self.variational_parameters['globals']['log_baseline_log_std'] = np.array(np.zeros((self.n_genes-1,)))
+            if means:
+                self.variational_parameters['globals']['log_baseline_mean'] = np.array(normal_sample(0, 1, self.n_genes-1)) #np.zeros((self.n_genes-1,))
+                if self.tssb.ntssb.data is not None:
+                    self.full_data = jnp.array(self.tssb.ntssb.data)
+                    # init_baseline = np.mean(self.tssb.ntssb.data, axis=0)
+                    # init_log_baseline = np.log(init_baseline / init_baseline[0])[1:]
+                    init_baseline = np.mean(self.tssb.ntssb.data / np.sum(self.tssb.ntssb.data, axis=1).reshape(-1,1) * self.n_genes, axis=0)
+                    init_baseline = init_baseline / init_baseline[0]
+                    init_log_baseline = np.log(init_baseline[1:])
+                    self.variational_parameters['globals']['log_baseline_mean'] = np.clip(init_log_baseline, -1, 1)
+            if variances:
+                self.variational_parameters['globals']['log_baseline_log_std'] = np.array(np.zeros((self.n_genes-1,)))
 
             # Overdispersion
             # self.log_od_mean = np.zeros(1)
@@ -66,26 +72,44 @@ class Node(AbstractNode):
 
             if self.tssb.ntssb.num_data is not None:
                 # Noise
-                self.variational_parameters['globals']['cell_noise_mean'] = np.zeros((self.tssb.ntssb.num_data, self.num_global_noise_factors))
-                self.variational_parameters['globals']['cell_noise_log_std'] = np.zeros((self.tssb.ntssb.num_data, self.num_global_noise_factors))
-                self.variational_parameters['globals']['noise_factors_mean'] = np.zeros((self.num_global_noise_factors, self.n_genes))
-                self.variational_parameters['globals']['noise_factors_log_std'] = np.zeros((self.num_global_noise_factors, self.n_genes))
-                self.variational_parameters['globals']['factor_precision_log_means'] = np.zeros((self.num_global_noise_factors))
-                self.variational_parameters['globals']['factor_precision_log_stds'] = np.zeros((self.num_global_noise_factors))
+                if means:
+                    self.variational_parameters['globals']['cell_noise_mean'] = np.zeros((self.tssb.ntssb.num_data, self.num_global_noise_factors))
+                if variances:
+                    self.variational_parameters['globals']['cell_noise_log_std'] = np.zeros((self.tssb.ntssb.num_data, self.num_global_noise_factors))
+                if means:
+                    self.variational_parameters['globals']['noise_factors_mean'] = np.zeros((self.num_global_noise_factors, self.n_genes))
+                if variances:
+                    self.variational_parameters['globals']['noise_factors_log_std'] = np.zeros((self.num_global_noise_factors, self.n_genes))
+                if means:
+                    self.variational_parameters['globals']['factor_precision_log_means'] = np.zeros((self.num_global_noise_factors))
+                if variances:
+                    self.variational_parameters['globals']['factor_precision_log_stds'] = np.zeros((self.num_global_noise_factors))
+
 
         self.data_ass_logits = np.zeros((self.tssb.ntssb.num_data))
 
         # Sticks
-        self.variational_parameters['locals']['nu_log_alpha'] = np.array(-1.)
-        self.variational_parameters['locals']['nu_log_beta'] = np.array(np.log(1. * self.tssb.dp_alpha))
-        self.variational_parameters['locals']['psi_log_alpha'] = np.array(-1)
-        self.variational_parameters['locals']['psi_log_beta'] = np.array(np.log(1. * self.tssb.dp_alpha))
+        if means:
+            self.variational_parameters['locals']['nu_log_mean'] = np.array(np.log(1. * self.tssb.dp_alpha))
+        if variances:
+            self.variational_parameters['locals']['nu_log_std'] = np.array(np.log(1. * self.tssb.dp_alpha))
+        if means:
+            self.variational_parameters['locals']['psi_log_mean'] = np.array(np.log(1. * self.tssb.dp_gamma))
+        if variances:
+            self.variational_parameters['locals']['psi_log_std'] = np.array(np.log(1. * self.tssb.dp_gamma))
 
         # Unobserved factors
-        self.variational_parameters['locals']['unobserved_factors_mean'] = np.zeros((self.n_genes,))
-        self.variational_parameters['locals']['unobserved_factors_log_std'] = -2.*np.ones((self.n_genes,))
-        self.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = -1.*np.ones((self.n_genes,))
-        self.variational_parameters['locals']['unobserved_factors_kernel_log_std'] = -np.ones((self.n_genes,))
+        if means:
+            try:
+                self.variational_parameters['locals']['unobserved_factors_mean'] = self.parent().variational_parameters['locals']['unobserved_factors_mean']
+            except AttributeError:
+                self.variational_parameters['locals']['unobserved_factors_mean'] = np.zeros((self.n_genes,))
+        if variances:
+            self.variational_parameters['locals']['unobserved_factors_log_std'] = -2.*np.ones((self.n_genes,))
+        if means:
+            self.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.log(self.unobserved_factors_kernel_concentration_caller())*np.ones((self.n_genes,))
+        if variances:
+            self.variational_parameters['locals']['unobserved_factors_kernel_log_std'] = np.zeros((self.n_genes,))
 
         self.set_mean(self.get_mean(baseline=np.append(1, np.exp(self.log_baseline_caller())), unobserved_factors=self.variational_parameters['locals']['unobserved_factors_mean']))
 
@@ -123,7 +147,7 @@ class Node(AbstractNode):
 
             if root_params:
                 # The root is used to store global parameters:  mu
-                self.baseline = np.exp(normal_sample(0, .1, size=self.n_genes))
+                self.baseline = np.exp(normal_sample(0, 1., size=self.n_genes))
                 self.baseline[0] = 1.
                 self.overdispersion = np.exp(normal_sample(0, 1))
                 self.log_lib_size_mean = log_lib_size_mean
@@ -265,8 +289,8 @@ class Node(AbstractNode):
 
     # @partial(jit, static_argnums=(0,1,2,3,4,5))
     def compute_elbo(self, rng, cnvs, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, node_mask, data_mask_subset, indices, do_global, global_only, sticks_only,
-                nu_sticks_log_alphas, nu_sticks_log_betas,
-                psi_sticks_log_alphas, psi_sticks_log_betas, unobserved_means, unobserved_log_stds, log_unobserved_factors_kernel_means, log_unobserved_factors_kernel_log_stds,
+                nu_sticks_log_means, nu_sticks_log_stds,
+                psi_sticks_log_means, psi_sticks_log_stds, unobserved_means, unobserved_log_stds, log_unobserved_factors_kernel_means, log_unobserved_factors_kernel_log_stds,
                 log_baseline_mean, log_baseline_log_std, cell_noise_mean, cell_noise_log_std, noise_factors_mean, noise_factors_log_std, factor_precision_log_means, factor_precision_log_stds):
 
         # single-sample Monte Carlo estimate of the variational lower bound
@@ -289,16 +313,16 @@ class Node(AbstractNode):
         log_baseline_mean, log_baseline_log_std, noise_factors_mean, noise_factors_log_std, factor_precision_log_means, factor_precision_log_stds = jax.lax.cond(do_global, alt_global, stop_global, (log_baseline_mean, log_baseline_log_std, noise_factors_mean, noise_factors_log_std, factor_precision_log_means, factor_precision_log_stds))
 
         def stop_node_grad(i):
-            return (jax.lax.stop_gradient(nu_sticks_log_alphas[i]), jax.lax.stop_gradient(nu_sticks_log_betas[i]),
-                    jax.lax.stop_gradient(psi_sticks_log_alphas[i]), jax.lax.stop_gradient(psi_sticks_log_betas[i]),
+            return (jax.lax.stop_gradient(nu_sticks_log_means[i]), jax.lax.stop_gradient(nu_sticks_log_stds[i]),
+                    jax.lax.stop_gradient(psi_sticks_log_means[i]), jax.lax.stop_gradient(psi_sticks_log_stds[i]),
                     jax.lax.stop_gradient(log_unobserved_factors_kernel_log_stds[i]), jax.lax.stop_gradient(log_unobserved_factors_kernel_means[i]),
                     jax.lax.stop_gradient(unobserved_log_stds[i]), jax.lax.stop_gradient(unobserved_means[i]) )
         def stop_node_grads(i):
-            return jax.lax.cond(node_mask[i] != 1, stop_node_grad, lambda i: (nu_sticks_log_alphas[i], nu_sticks_log_betas[i],
-                                                                              psi_sticks_log_alphas[i], psi_sticks_log_betas[i],
+            return jax.lax.cond(node_mask[i] != 1, stop_node_grad, lambda i: (nu_sticks_log_means[i], nu_sticks_log_stds[i],
+                                                                              psi_sticks_log_means[i], psi_sticks_log_stds[i],
                                                                               log_unobserved_factors_kernel_log_stds[i], log_unobserved_factors_kernel_means[i],
                                                                               unobserved_log_stds[i], unobserved_means[i]), i) # Sample all
-        nu_sticks_log_alphas, nu_sticks_log_betas, psi_sticks_log_alphas, psi_sticks_log_betas, log_unobserved_factors_kernel_log_stds, log_unobserved_factors_kernel_means, unobserved_log_stds, unobserved_means = vmap(stop_node_grads)(jnp.arange(len(cnvs)))
+        nu_sticks_log_means, nu_sticks_log_stds, psi_sticks_log_means, psi_sticks_log_stds, log_unobserved_factors_kernel_log_stds, log_unobserved_factors_kernel_means, unobserved_log_stds, unobserved_means = vmap(stop_node_grads)(jnp.arange(len(cnvs)))
 
         def stop_node_params_grads(locals):
             return  (jax.lax.stop_gradient(log_unobserved_factors_kernel_log_stds), jax.lax.stop_gradient(log_unobserved_factors_kernel_means),
@@ -309,23 +333,23 @@ class Node(AbstractNode):
             (log_unobserved_factors_kernel_log_stds, log_unobserved_factors_kernel_means, unobserved_log_stds, unobserved_means))
 
         def stop_non_global(locals):
-            log_unobserved_factors_kernel_log_stds, log_unobserved_factors_kernel_means, unobserved_log_stds, unobserved_means, psi_sticks_log_betas, psi_sticks_log_alphas, nu_sticks_log_betas, nu_sticks_log_alphas = locals[0], locals[1], locals[2], locals[3], locals[4], locals[5], locals[6], locals[7]
+            log_unobserved_factors_kernel_log_stds, log_unobserved_factors_kernel_means, unobserved_log_stds, unobserved_means, psi_sticks_log_stds, psi_sticks_log_means, nu_sticks_log_stds, nu_sticks_log_means = locals[0], locals[1], locals[2], locals[3], locals[4], locals[5], locals[6], locals[7]
             log_unobserved_factors_kernel_log_stds = jax.lax.stop_gradient(log_unobserved_factors_kernel_log_stds)
             log_unobserved_factors_kernel_means = jax.lax.stop_gradient(log_unobserved_factors_kernel_means)
             unobserved_log_stds = jax.lax.stop_gradient(unobserved_log_stds)
             unobserved_means = jax.lax.stop_gradient(unobserved_means)
-            psi_sticks_log_betas = jax.lax.stop_gradient(psi_sticks_log_betas)
-            psi_sticks_log_alphas = jax.lax.stop_gradient(psi_sticks_log_alphas)
-            nu_sticks_log_betas = jax.lax.stop_gradient(nu_sticks_log_betas)
-            nu_sticks_log_alphas = jax.lax.stop_gradient(nu_sticks_log_alphas)
-            return log_unobserved_factors_kernel_log_stds, log_unobserved_factors_kernel_means, unobserved_log_stds, unobserved_means, psi_sticks_log_betas, psi_sticks_log_alphas, nu_sticks_log_betas, nu_sticks_log_alphas
+            psi_sticks_log_stds = jax.lax.stop_gradient(psi_sticks_log_stds)
+            psi_sticks_log_means = jax.lax.stop_gradient(psi_sticks_log_means)
+            nu_sticks_log_stds = jax.lax.stop_gradient(nu_sticks_log_stds)
+            nu_sticks_log_means = jax.lax.stop_gradient(nu_sticks_log_means)
+            return log_unobserved_factors_kernel_log_stds, log_unobserved_factors_kernel_means, unobserved_log_stds, unobserved_means, psi_sticks_log_stds, psi_sticks_log_means, nu_sticks_log_stds, nu_sticks_log_means
 
         def alt_non_global(locals):
-            log_unobserved_factors_kernel_log_stds, log_unobserved_factors_kernel_means, unobserved_log_stds, unobserved_means, psi_sticks_log_betas, psi_sticks_log_alphas, nu_sticks_log_betas, nu_sticks_log_alphas = locals[0], locals[1], locals[2], locals[3], locals[4], locals[5], locals[6], locals[7]
-            return log_unobserved_factors_kernel_log_stds, log_unobserved_factors_kernel_means, unobserved_log_stds, unobserved_means, psi_sticks_log_betas, psi_sticks_log_alphas, nu_sticks_log_betas, nu_sticks_log_alphas
+            log_unobserved_factors_kernel_log_stds, log_unobserved_factors_kernel_means, unobserved_log_stds, unobserved_means, psi_sticks_log_stds, psi_sticks_log_means, nu_sticks_log_stds, nu_sticks_log_means = locals[0], locals[1], locals[2], locals[3], locals[4], locals[5], locals[6], locals[7]
+            return log_unobserved_factors_kernel_log_stds, log_unobserved_factors_kernel_means, unobserved_log_stds, unobserved_means, psi_sticks_log_stds, psi_sticks_log_means, nu_sticks_log_stds, nu_sticks_log_means
 
-        log_unobserved_factors_kernel_log_stds, log_unobserved_factors_kernel_means, unobserved_log_stds, unobserved_means, psi_sticks_log_betas, psi_sticks_log_alphas, nu_sticks_log_betas, nu_sticks_log_alphas = jax.lax.cond(global_only, stop_non_global, alt_non_global,
-            (log_unobserved_factors_kernel_log_stds, log_unobserved_factors_kernel_means, unobserved_log_stds, unobserved_means, psi_sticks_log_betas, psi_sticks_log_alphas, nu_sticks_log_betas, nu_sticks_log_alphas))
+        log_unobserved_factors_kernel_log_stds, log_unobserved_factors_kernel_means, unobserved_log_stds, unobserved_means, psi_sticks_log_stds, psi_sticks_log_means, nu_sticks_log_stds, nu_sticks_log_means = jax.lax.cond(global_only, stop_non_global, alt_non_global,
+            (log_unobserved_factors_kernel_log_stds, log_unobserved_factors_kernel_means, unobserved_log_stds, unobserved_means, psi_sticks_log_stds, psi_sticks_log_means, nu_sticks_log_stds, nu_sticks_log_means))
 
         def keep_cell_grad(i):
             return cell_noise_mean[indices][i], cell_noise_log_std[indices][i]
@@ -338,38 +362,48 @@ class Node(AbstractNode):
         log_baseline = diag_gaussian_sample(rng, log_baseline_mean, log_baseline_log_std)
 
         # noise
-        log_factors_precisions = diag_gaussian_sample(rng, factor_precision_log_means, factor_precision_log_stds)
+        log_factors_precisions = jnp.clip(diag_gaussian_sample(rng, factor_precision_log_means, factor_precision_log_stds), jnp.log(1e-3), jnp.log(1e1))
         noise_factors = diag_gaussian_sample(rng, noise_factors_mean, noise_factors_log_std)
         cell_noise = diag_gaussian_sample(rng, cell_noise_mean[indices], cell_noise_log_std[indices])
         noise = jnp.dot(cell_noise, noise_factors)
 
+        log_unobserved_factors_kernel_means = jnp.clip(log_unobserved_factors_kernel_means, a_min=jnp.log(1e-2))
+        log_unobserved_factors_kernel_log_stds = jnp.clip(log_unobserved_factors_kernel_log_stds, a_min=jnp.log(1e-2))
         def sample_unobs_kernel(i):
-            return diag_gaussian_sample(rng, log_unobserved_factors_kernel_means[i], log_unobserved_factors_kernel_log_stds[i])
+            return jnp.clip(diag_gaussian_sample(rng, log_unobserved_factors_kernel_means[i], log_unobserved_factors_kernel_log_stds[i]), a_min=jnp.log(1e-2))
         def sample_all_unobs_kernel(i):
             return jax.lax.cond(node_mask[i] >= 0, sample_unobs_kernel, lambda i: jnp.zeros(cnvs[i].shape), i)
         nodes_log_unobserved_factors_kernels = vmap(sample_all_unobs_kernel)(jnp.arange(len(cnvs)))
 
+        unobserved_means = jnp.clip(unobserved_means, a_min=jnp.log(1e-3))
+        unobserved_log_stds = jnp.clip(unobserved_log_stds, a_min=jnp.log(1e-2))
         def sample_unobs(i):
             return diag_gaussian_sample(rng, unobserved_means[i], unobserved_log_stds[i])
         def sample_all_unobs(i):
             return jax.lax.cond(node_mask[i] >= 0, sample_unobs, lambda i: jnp.zeros(cnvs[i].shape), i)
         nodes_unobserved_factors = vmap(sample_all_unobs)(jnp.arange(len(cnvs)))
 
-        nu_sticks_log_alphas = jnp.clip(nu_sticks_log_alphas, a_min=-5., a_max=5.)
-        nu_sticks_log_betas = jnp.clip(nu_sticks_log_betas, a_min=-5, a_max=5.)
+        nu_sticks_log_means = jnp.clip(nu_sticks_log_means, -4., 4.)
+        nu_sticks_log_stds = jnp.clip(nu_sticks_log_stds, -4., 4.)
         def sample_nu(i):
-            return jnp.clip(beta_sample(rng, nu_sticks_log_alphas[i], nu_sticks_log_betas[i]), 1e-6, 1-1e-6)
+            return jnp.clip(diag_gaussian_sample(rng, nu_sticks_log_means[i], nu_sticks_log_stds[i]), -4., 4.)
         def sample_all_nus(i):
-            return jax.lax.cond(cnvs[i][0] >= 0, sample_nu, lambda i: jnp.array([1e-6]), i) # Sample all
-        nu_sticks = jnp.clip(vmap(sample_all_nus)(jnp.arange(len(cnvs))), 1e-6, 1-1e-6)
+            return jax.lax.cond(cnvs[i][0] >= 0, sample_nu, lambda i: jnp.array([logit(1e-6)]), i) # Sample all
+        log_nu_sticks = vmap(sample_all_nus)(jnp.arange(len(cnvs)))
+        def sigmoid_nus(i):
+            return jax.lax.cond(cnvs[i][0] >= 0, lambda i: jnn.sigmoid(log_nu_sticks[i]), lambda i: jnp.array([1e-6]), i) # Sample all
+        nu_sticks = jnp.clip(vmap(sigmoid_nus)(jnp.arange(len(cnvs))), 1e-6, 1-1e-6)
 
-        psi_sticks_log_alphas = jnp.clip(psi_sticks_log_alphas, a_min=-5., a_max=5.)
-        psi_sticks_log_betas = jnp.clip(psi_sticks_log_betas, a_min=-5., a_max=5.)
+        psi_sticks_log_means = jnp.clip(psi_sticks_log_means, -4., 4.)
+        psi_sticks_log_stds = jnp.clip(psi_sticks_log_stds, -4., 4.)
         def sample_psi(i):
-            return jnp.clip(beta_sample(rng, psi_sticks_log_alphas[i], psi_sticks_log_betas[i]), 1e-6, 1-1e-6)
+            return jnp.clip(diag_gaussian_sample(rng, psi_sticks_log_means[i], psi_sticks_log_stds[i]), -4., 4.)
         def sample_all_psis(i):
-            return jax.lax.cond(cnvs[i][0] >= 0, sample_psi, lambda i: jnp.array([1e-6]), i) # Sample all
-        psi_sticks = jnp.clip(vmap(sample_all_psis)(jnp.arange(len(cnvs))), 1e-6, 1-1e-6)
+            return jax.lax.cond(cnvs[i][0] >= 0, sample_psi, lambda i: jnp.array([logit(1e-6)]), i) # Sample all
+        log_psi_sticks = vmap(sample_all_psis)(jnp.arange(len(cnvs)))
+        def sigmoid_psis(i):
+            return jax.lax.cond(cnvs[i][0] >= 0, lambda i: jnn.sigmoid(log_psi_sticks[i]), lambda i: jnp.array([1e-6]), i) # Sample all
+        psi_sticks = jnp.clip(vmap(sigmoid_psis)(jnp.arange(len(cnvs))), 1e-6, 1-1e-6)
 
         def compute_node_ll(i):
             unobserved_factors = nodes_unobserved_factors[i]
@@ -378,7 +412,7 @@ class Node(AbstractNode):
             sum = jnp.sum(node_mean, axis=1).reshape(mb_size, 1)
             node_mean = node_mean / sum
             node_mean = node_mean * (jnp.array(self.lib_sizes)[indices])
-            pll = vmap(jax.scipy.stats.poisson.logpmf)(self.full_data[indices], node_mean)
+            pll = vmap(jax.scipy.stats.poisson.logpmf)(jnp.array(self.full_data)[indices], node_mean)
             ll = jnp.sum(pll, axis=1) # N-vector
 
             # TSSB prior
@@ -399,13 +433,14 @@ class Node(AbstractNode):
             return ll
 
         def get_node_ll(i):
-            return jax.lax.cond(node_mask[i] == 1, lambda _: compute_node_ll(i), lambda _: -jnp.inf*jnp.ones((mb_size)), operand=None)
+            return jax.lax.cond(node_mask[i] == 1, lambda _: compute_node_ll(jax.lax.cond(node_mask[i]==1, lambda _: i, lambda _: 0, operand=None)), lambda _: -1e10*jnp.ones((mb_size)), operand=None)
         out = jnp.array(vmap(get_node_ll)(jnp.arange(len(parent_vector))))
         l = jnp.sum(jnn.logsumexp(out, axis=0) * data_mask_subset)
 
         def compute_node_kl(i):
             # unobserved_factors_kernel
-            pl = diag_gamma_logpdf(jnp.exp(nodes_log_unobserved_factors_kernels[i]), jnp.log(self.unobserved_factors_kernel_concentration) * jnp.ones(cnvs[i].shape), (parent_vector[i] != -1)*jnp.log(self.unobserved_factors_kernel_concentration)*jnp.abs(nodes_unobserved_factors[parent_vector[i]]))
+            pl = diag_gamma_logpdf(jnp.exp(nodes_log_unobserved_factors_kernels[i]), jnp.log(self.unobserved_factors_kernel_concentration) * jnp.ones(cnvs[i].shape),
+                                                                                    (parent_vector[i] != -1)*jnp.log(self.unobserved_factors_kernel_concentration)*jnp.abs(nodes_unobserved_factors[parent_vector[i]]))
             ent = - diag_gaussian_logpdf(nodes_log_unobserved_factors_kernels[i], log_unobserved_factors_kernel_means[i], log_unobserved_factors_kernel_log_stds[i])
             kl = (parent_vector[i] != -1) * (pl + ent)
 
@@ -418,21 +453,21 @@ class Node(AbstractNode):
 
             # sticks
             nu_pl = beta_logpdf(nu_sticks[i], jnp.log(jnp.array([1.])), jnp.log(jnp.array([dp_alphas[i]])))
-            nu_ent = - beta_logpdf(nu_sticks[i], nu_sticks_log_alphas[i], nu_sticks_log_betas[i])
+            nu_ent = - diag_gaussian_logpdf(log_nu_sticks[i], nu_sticks_log_means[i], nu_sticks_log_stds[i])
             kl = kl + nu_pl + nu_ent
 
             psi_pl = beta_logpdf(psi_sticks[i], jnp.log(jnp.array([1.])), jnp.log(jnp.array([dp_gammas[i]])))
-            psi_ent = - beta_logpdf(psi_sticks[i], psi_sticks_log_alphas[i], psi_sticks_log_betas[i])
+            psi_ent = - diag_gaussian_logpdf(log_psi_sticks[i], psi_sticks_log_means[i], psi_sticks_log_stds[i])
             kl = kl + psi_pl + psi_ent
 
             return kl
 
         def get_node_kl(i):
-            return jax.lax.cond(node_mask[i] == 1, lambda _: compute_node_kl(i), lambda _: 0., operand=None)
+            return jax.lax.cond(node_mask[i] == 1, lambda _: compute_node_kl(jax.lax.cond(node_mask[i] == 1, lambda _: i, lambda _: 0, operand=None)), lambda _: 0., operand=None)
         node_kl = jnp.sum(vmap(get_node_kl)(jnp.arange(len(parent_vector))))
 
         # Global vars KL
-        baseline_kl = diag_gaussian_logpdf(log_baseline, jnp.zeros(log_baseline.shape), jnp.log(0.5)*jnp.ones(log_baseline.shape)) - diag_gaussian_logpdf(log_baseline, log_baseline_mean, log_baseline_log_std)
+        baseline_kl = diag_gaussian_logpdf(log_baseline, jnp.zeros(log_baseline.shape), jnp.log(1.)*jnp.ones(log_baseline.shape)) - diag_gaussian_logpdf(log_baseline, log_baseline_mean, log_baseline_log_std)
         factor_precision_kl = diag_gamma_logpdf(jnp.exp(log_factors_precisions), 2*jnp.ones(log_factors_precisions.shape), jnp.ones(log_factors_precisions.shape)) - diag_gaussian_logpdf(log_factors_precisions, factor_precision_log_means, factor_precision_log_stds)
         noise_factors_kl = diag_gaussian_logpdf(noise_factors, jnp.zeros(noise_factors.shape), jnp.sqrt(jnp.exp(-log_factors_precisions)).reshape(-1,1) * jnp.ones(noise_factors.shape)) - diag_gaussian_logpdf(noise_factors, noise_factors_mean, noise_factors_log_std)
         total_kl = node_kl + baseline_kl + factor_precision_kl + noise_factors_kl

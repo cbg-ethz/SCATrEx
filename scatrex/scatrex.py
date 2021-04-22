@@ -5,6 +5,7 @@ from .plotting import scatterplot
 
 import numpy as np
 from sklearn.decomposition import PCA
+from scipy.stats import spearmanr
 import matplotlib.pyplot as plt
 import pickle
 
@@ -30,7 +31,9 @@ class SCATrEx(object):
         """
         Load raw annotated data.
         """
-        self.adata = AnnData(data)
+        self.adata = data
+        if not isinstance(data, AnnData):
+            self.adata = AnnData(data)
         self.adata.raw = self.adata
         if self.observed_tree is not None:
             self.adata.uns['obs_node_colors'] = [self.observed_tree.tree_dict[node]['color'] for node in self.observed_tree.tree_dict]
@@ -44,8 +47,14 @@ class SCATrEx(object):
 
         if self.adata is not None:
             self.adata.uns['obs_node_colors'] = [self.observed_tree.tree_dict[node]['color'] for node in self.observed_tree.tree_dict]
+            try:
+                labels = [self.observed_tree.tree_dict[node]['label'] for node in self.observed_tree.tree_dict if self.observed_tree.tree_dict[node]['size'] > 0]
+                sizes = [self.observed_tree.tree_dict[node]['size'] for node in self.observed_tree.tree_dict if self.observed_tree.tree_dict[node]['size'] > 0]
+                self.adata.uns['observed_frequencies'] = dict(zip(labels,sizes))
+            except KeyError:
+                pass
 
-    def simulate_tree(self, observed_tree=None, observed_tree_args=dict(), model_args=None, n_genes=50, n_extra_per_observed=1, seed=None, copy=False):
+    def simulate_tree(self, observed_tree=None, observed_tree_args=dict(), observed_tree_params=dict(), model_args=None, n_genes=50, n_extra_per_observed=1, seed=None, copy=False):
         np.random.seed(seed)
 
         self.observed_tree = observed_tree
@@ -59,7 +68,7 @@ class SCATrEx(object):
 
             self.observed_tree = self.model.ObservedTree(**observed_tree_args)
             self.observed_tree.generate_tree()
-            self.observed_tree.add_node_params(n_genes=n_genes)
+            self.observed_tree.add_node_params(n_genes=n_genes, **observed_tree_params)
 
         if self.verbose:
             print(f"Generating an augmented {self.model.__name__.split('.')[-1].upper()} tree")
@@ -86,11 +95,11 @@ class SCATrEx(object):
         assignments_labels = []
         assignments_obs_labels = []
         for obs in range(len(self.ntssb.assignments)):
-            sample = self.ntssb.assignments[obs]['node'].sample_observation(obs).reshape(1, -1)
+            sample = self.ntssb.assignments[obs].sample_observation(obs).reshape(1, -1)
             observations.append(sample)
-            assignments.append(self.ntssb.assignments[obs]['node'])
-            assignments_labels.append(self.ntssb.assignments[obs]['node'].label)
-            assignments_obs_labels.append(self.ntssb.assignments[obs]['subtree'].label)
+            assignments.append(self.ntssb.assignments[obs])
+            assignments_labels.append(self.ntssb.assignments[obs].label)
+            assignments_obs_labels.append(self.ntssb.assignments[obs].tssb.label)
         assignments = np.array(assignments)
         assignments_labels = np.array(assignments_labels)
         assignments_obs_labels = np.array(assignments_obs_labels)
@@ -134,8 +143,61 @@ class SCATrEx(object):
 
         self.ntssb = self.search.run_search(**search_kwargs)
 
-        self.adata.obs['node'] = np.array([assignment['node'].label for assignment in self.ntssb.assignments])
-        self.adata.obs['obs_node'] = np.array([assignment['subtree'].label for assignment in self.ntssb.assignments])
+        self.adata.obs['node'] = np.array([assignment.label for assignment in self.ntssb.assignments])
+        self.adata.obs['obs_node'] = np.array([assignment.tssb.label for assignment in self.ntssb.assignments])
+
+        labels = [self.observed_tree.tree_dict[node]['label'] for node in self.observed_tree.tree_dict if self.observed_tree.tree_dict[node]['size'] > 0]
+        sizes = [np.count_nonzero(self.adata.obs['obs_node']==node) for node in self.observed_tree.tree_dict if self.observed_tree.tree_dict[node]['size'] > 0]
+        self.adata.uns['estimated_frequencies'] = dict(zip(labels,sizes))
+
+    def learn_clonemap_corr(self, observed_tree=None, cell_filter=None, layer='scaled'):
+        if not self.observed_tree and observed_tree is None:
+            raise ValueError("No observed tree available. Please pass an observed tree object.")
+
+        if self.adata is None:
+            raise ValueError("No data available. Please add data to the SCATrEx object via `self.add_data()`")
+
+        if observed_tree:
+            self.observed_tree = observed_tree
+
+        cell_idx = np.arange(self.adata.shape[0])
+        others_idx = np.array([])
+        if cell_filter:
+            cell_idx = np.where(self.adata.obs['celltype_major']==cell_filter)[0]
+            others_idx = np.where(self.adata.obs['celltype_major']!=cell_filter)[0]
+
+        labels = [self.observed_tree.tree_dict[clone]['label'] for clone in self.observed_tree.tree_dict if self.observed_tree.tree_dict[clone]['size'] > 0]
+        clones = [self.observed_tree.tree_dict[clone]['params'] for clone in self.observed_tree.tree_dict if self.observed_tree.tree_dict[clone]['size'] > 0]
+
+        # Diploid clone
+        diploid_clone_idx = np.where((clones==np.ones(clones[0].shape)*2).all(axis=1))[0][0]
+
+        assignments = [0] * self.adata.shape[0]
+        for cell in cell_idx:
+            corrs = []
+            for clone_idx in range(len(clones)):
+                    if clone_idx != diploid_clone_idx:
+                        correlation, _ = spearmanr(self.adata.layers[layer][cell], clones[clone_idx])
+                    else:
+                        correlation = -1.
+                    corrs.append(correlation)
+            assignments[cell] = labels[np.argmax(corrs)]
+        if len(others_idx) > 0:
+            assignments[others_idx] = labels[diploid_clone_idx]
+
+        assignments = np.array(assignments)
+        self.adata.obs['node'] = assignments
+        self.adata.obs['obs_node'] = assignments
+
+        labels = [self.observed_tree.tree_dict[node]['label'] for node in self.observed_tree.tree_dict if self.observed_tree.tree_dict[node]['size'] > 0]
+        sizes = [np.count_nonzero(self.adata.obs['obs_node']==node) for node in self.observed_tree.tree_dict if self.observed_tree.tree_dict[node]['size'] > 0]
+        self.adata.uns['estimated_frequencies'] = dict(zip(labels,sizes))
+
+        cnv_mat = np.ones(self.adata.shape)
+        for clone_id in np.unique(assignments[cell_idx]):
+            cells = np.where(assignments[cell_idx]==clone_id)[0]
+            cnv_mat[cells] = np.array(clones)[np.where(np.array(labels)==clone_id)[0]]
+        self.adata.layers['cnvs'] = cnv_mat
 
     def learn_clonemap(self, observed_tree=None, **optimize_kwargs):
         """Provides an equivalent of clonealign (for CNV nodes) or cardelino (for SNV nodes)
@@ -149,25 +211,26 @@ class SCATrEx(object):
         if observed_tree:
             self.observed_tree = observed_tree
 
-        if self.verbose:
-            print(f"Updating `unobserved_factors_root_kernel` to 1e-6")
-            print(f"Updating `unobserved_factors_kernel_concentration` to 1e-6")
-
-        self.model_args['unobserved_factors_root_kernel'] = 1e-6
-        self.model_args['unobserved_factors_kernel_concentration'] = 1e-6
-
         self.ntssb = NTSSB(self.observed_tree, self.model.Node, node_hyperparams=self.model_args)
         self.ntssb.add_data(self.adata.raw.X, to_root=True)
         self.ntssb.root['node'].root['node'].reset_data_parameters()
         self.ntssb.reset_variational_parameters()
-        self.ntssb.update_ass_logits(variational=True)
-        self.ntssb.assign_to_best()
+        init_baseline = np.mean(self.ntssb.data / np.sum(self.ntssb.data, axis=1).reshape(-1,1) * self.ntssb.data.shape[1], axis=0)
+        init_baseline = init_baseline / init_baseline[0]
+        init_log_baseline = np.log(init_baseline[1:])
+        self.ntssb.root['node'].root['node'].variational_parameters['globals']['log_baseline_mean'] = np.clip(init_log_baseline, -1, 1)
         optimize_kwargs.setdefault('sticks_only', True) # ignore other node-specific parameters
         elbos = self.ntssb.optimize_elbo(**optimize_kwargs)
         self.ntssb.plot_tree()
+        self.ntssb.update_ass_logits(variational=True)
+        self.ntssb.assign_to_best()
 
-        self.adata.obs['node'] = np.array([assignment['node'].label for assignment in self.ntssb.assignments])
-        self.adata.obs['obs_node'] = np.array([assignment['subtree'].label for assignment in self.ntssb.assignments])
+        self.adata.obs['node'] = np.array([assignment.label for assignment in self.ntssb.assignments])
+        self.adata.obs['obs_node'] = np.array([assignment.tssb.label for assignment in self.ntssb.assignments])
+
+        labels = [self.observed_tree.tree_dict[node]['label'] for node in self.observed_tree.tree_dict if self.observed_tree.tree_dict[node]['size'] > 0]
+        sizes = [np.count_nonzero(self.adata.obs['obs_node']==node) for node in self.observed_tree.tree_dict if self.observed_tree.tree_dict[node]['size'] > 0]
+        self.adata.uns['estimated_frequencies'] = dict(zip(labels,sizes))
 
         return elbos
 
@@ -175,6 +238,9 @@ class SCATrEx(object):
         sc.pp.normalize_total(self.adata, target_sum=target_sum)
         if log:
             sc.pp.log1p(self.adata)
+
+        mat = sc.pp.scale(self.adata.X, copy=True)
+        self.adata.layers["scaled"] = mat
 
         if self.verbose:
             print('Normalized data are stored in `self.adata`')
@@ -239,13 +305,25 @@ class SCATrEx(object):
             plt.savefig(save, bbox_inches='tight')
         plt.show()
 
+    def bulkify(self):
+        self.adata.var['raw_bulk'] = np.mean(self.adata.X, axis=0)
+        try:
+            self.adata.var['scaled_bulk'] = np.mean(self.adata.layers['scaled'], axis=0)
+        except KeyError:
+            pass
+        try:
+            self.adata.var['smoothed_bulk'] = np.mean(self.adata.layers['smoothed'], axis=0)
+        except KeyError:
+            pass
+
     def compute_smoothed_expression(self, var_names=None, window_size=10, clip=3, copy=False):
         mat = sc.pp.scale(self.adata.X, copy=True)
+        self.adata.layers["scaled"] = mat
 
         if isinstance(var_names, dict):
             smoothed_mat = []
             for region in var_names:
-                smoothed_mat.append(self.__smooth_expression(mat=mat, var_names=var_names[region], window_size=window_size, clip=clip))
+                smoothed_mat.append(self.__smooth_expression(mat=self.adata[:,var_names[region]].layers["scaled"], var_names=None, window_size=window_size, clip=clip))
             self.adata.layers["smoothed"] = np.concatenate(smoothed_mat, axis=1)
         else:
             self.adata.layers["smoothed"] = self.__smooth_expression(mat=mat, window_size=window_size, clip=clip)

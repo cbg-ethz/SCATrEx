@@ -12,7 +12,7 @@ def plot_tree_proj(proj, tree, pca_obj=None, title='Tree', ax=None,
     if ax is None:
         plt.figure(figsize=figsize)
         ax = plt.gca()
-    inf_node = np.array([assignment['node'].label for assignment in tree.assignments])
+    inf_node = np.array([assignment.label for assignment in tree.assignments])
 
     # Plot data points with estimated assignments
     # ass_logits = jnp.array([node.data_ass_logits for node in tree.get_nodes()]).reshape(tree.num_data, -1)

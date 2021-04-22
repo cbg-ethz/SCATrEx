@@ -8,7 +8,6 @@ import scanpy as sc
 import matplotlib.pyplot as plt
 from graphviz import Digraph
 
-
 from ..plotting import constants
 
 class Tree(ABC):
@@ -58,8 +57,10 @@ class Tree(ABC):
             self.tree_dict[node]['alpha_decay_parent_edge'] = self.alpha_decay_parent_edge
             self.tree_dict[node]['eta'] = self.eta
             self.tree_dict[node]['weight'] = 1.0/len(list(self.tree_dict.keys()))
+            self.tree_dict[node]['size'] = 1.0
             if sizes:
                 self.tree_dict[node]['weight'] = sizes[i]/sum(sizes)
+                self.tree_dict[node]['size'] = sizes[i]
             if change_name:
                 self.tree_dict[node]['parent'] = new_names[self.tree_dict[node]['parent']]
                 self.tree_dict[alphabet[i]] = self.tree_dict[node]
@@ -80,7 +81,9 @@ class Tree(ABC):
                             alpha_decay_parent_edge=self.alpha_decay_parent_edge,
                             eta=self.eta,
                             weight=1.0/self.n_nodes,
-                            color=constants.CLONES_PAL[0]))
+                            size=1.0,
+                            color=constants.CLONES_PAL[0],
+                            label='A'))
         for c in range(1, self.n_nodes):
             parent = alphabet[np.random.choice(np.arange(0, c))]
             self.tree_dict[alphabet[c]]= dict(parent=parent, children=[],
@@ -91,7 +94,9 @@ class Tree(ABC):
                             alpha_decay_parent_edge=self.alpha_decay_parent_edge,
                             eta=self.eta,
                             weight=1.0/self.n_nodes,
-                            color=constants.CLONES_PAL[c])
+                            size=1.0,
+                            color=constants.CLONES_PAL[c],
+                            label=alphabet[c])
 
         for i in self.tree_dict:
             for j in self.tree_dict:
@@ -170,6 +175,8 @@ class Tree(ABC):
         self.adata = AnnData(params)
         self.adata.obs['node'] = params.index
         self.adata.uns['node_colors'] = [self.tree_dict[node]['color'] for node in self.tree_dict]
+        self.adata.uns['node_sizes'] = np.array([self.tree_dict[node]['size'] for node in self.tree_dict])
+        self.adata.var['bulk'] = np.mean(self.adata.X * self.adata.uns['node_sizes'].reshape(-1,1), axis=0)
 
     def plot_heatmap(self, var_names=None, cmap=None, **kwds):
         if var_names is None:
@@ -185,6 +192,40 @@ class Tree(ABC):
         ax['groupby_ax'].set_yticklabels(['A', 'B', 'C'])
         ax['groupby_ax'].get_yticks()
         plt.show()
+
+    def read_tree_from_dict(self, tree_dict, input_params_key='params', input_label_key='label', input_parent_key='parent', input_sizes_key='size'):
+        self.tree_dict = dict()
+        alphabet = list(string.ascii_uppercase)
+
+        sizes = None
+        try:
+            sizes = [tree_dict[node][input_sizes_key] for node in tree_dict]
+        except KeyError:
+            pass
+
+        for node in tree_dict:
+            self.tree_dict[alphabet[int(tree_dict[node][input_label_key])]] = dict(
+                parent=tree_dict[node][input_parent_key],
+                children=[],
+                params=np.array(tree_dict[node][input_params_key]),
+                alpha_decay_subtree=self.alpha_decay_subtree,
+                dp_gamma_subtree=self.dp_gamma_subtree,
+                dp_alpha_parent_edge=self.dp_alpha_parent_edge,
+                alpha_decay_parent_edge=self.alpha_decay_parent_edge,
+                eta=self.eta,
+                weight=1.0/len(list(tree_dict.keys())),
+                size=1,
+                color=constants.CLONES_PAL[int(tree_dict[node][input_label_key])],
+                label=tree_dict[node][input_label_key],
+            )
+            if sizes:
+                self.tree_dict[alphabet[int(tree_dict[node][input_label_key])]]['size'] = tree_dict[node][input_sizes_key]
+                self.tree_dict[alphabet[int(tree_dict[node][input_label_key])]]['weight'] = tree_dict[node][input_sizes_key]/sum(sizes)
+
+        for i in self.tree_dict:
+            for j in self.tree_dict:
+                if self.tree_dict[j]['parent'] == i:
+                    self.tree_dict[i]['children'].append(j)
 
     @abstractmethod
     def add_node_params(self):

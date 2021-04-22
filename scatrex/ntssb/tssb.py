@@ -88,10 +88,10 @@ class TSSB(object):
                 descend(child)
         descend(self.root)
 
-    def reset_node_variational_parameters(self):
+    def reset_node_variational_parameters(self, **kwargs):
         # Reset node parameters
         def descend(root):
-            root['node'].reset_variational_parameters()
+            root['node'].reset_variational_parameters(**kwargs)
             for child in root['children']:
                 descend(child)
         descend(self.root)
@@ -896,23 +896,23 @@ class TSSB(object):
 
     def get_variational_mixture(self, get_roots=False, get_depths=False):
         def descend(root, mass, depth=0):
-            main    = 1. if len(root['children']) < 1 else beta_mean_oflog(root['node'].variational_parameters['locals']['nu_log_alpha'], root['node'].variational_parameters['locals']['nu_log_beta'])
+            main    = 1. if len(root['children']) < 1 else jnn.sigmoid(root['node'].variational_parameters['locals']['nu_log_mean'])
             weight  = [ mass * main ]
             node    = [ root['node'] ]
             roots   = [root]
             depths  = [depth]
-            sticks  = np.array([1. if i == len(root['children']) - 1 else beta_mean_oflog(root['children'][i]['node'].variational_parameters['locals']['psi_log_alpha'],root['children'][i]['node'].variational_parameters['locals']['psi_log_beta']) for i in range(len(root['children']))]).astype(float)
+            sticks  = np.array([1. if i == len(root['children']) - 1 else jnn.sigmoid(root['children'][i]['node'].variational_parameters['locals']['psi_log_mean']) for i in range(len(root['children']))]).astype(float)
             edges   = sticks_to_edges(sticks)
             weights = diff(hstack([0.0, edges]))
 
             for i, child in enumerate(root['children']):
                 if get_roots:
                     if get_depths:
-                        (child_weights, child_nodes, child_roots, child_depths) = descend(child, mass*(1.0-beta_mean_oflog(root['node'].variational_parameters['locals']['nu_log_alpha'], root['node'].variational_parameters['locals']['nu_log_beta']))*weights[i], depth=depth+1)
+                        (child_weights, child_nodes, child_roots, child_depths) = descend(child, mass*(1.0-jnn.sigmoid(root['node'].variational_parameters['locals']['nu_log_mean']))*weights[i], depth=depth+1)
                     else:
-                        (child_weights, child_nodes, child_roots) = descend(child, mass*(1.0-beta_mean_oflog(root['node'].variational_parameters['locals']['nu_log_alpha'], root['node'].variational_parameters['locals']['nu_log_beta']))*weights[i])
+                        (child_weights, child_nodes, child_roots) = descend(child, mass*(1.0-jnn.sigmoid(root['node'].variational_parameters['locals']['nu_log_mean']))*weights[i])
                 else:
-                    (child_weights, child_nodes) = descend(child, mass*(1.0-beta_mean_oflog(root['node'].variational_parameters['locals']['nu_log_alpha'], root['node'].variational_parameters['locals']['nu_log_beta']))*weights[i])
+                    (child_weights, child_nodes) = descend(child, mass*(1.0-jnn.sigmoid(root['node'].variational_parameters['locals']['nu_log_mean']))*weights[i])
                 weight.extend(child_weights)
                 node.extend(child_nodes)
                 if get_roots:
@@ -1277,33 +1277,3 @@ class TSSB(object):
                                             show_labels=show_labels, gene=gene, genemode=genemode, fontcolor=fontcolor, fontname=fontname)
 
         return g
-
-    # When subclustering, we usually start with
-    def label_assignments(self, root_name='X', reset_names=True):
-        if reset_names:
-            self.set_node_names(root_name=root_name)
-        else:
-            self.set_subcluster_node_names()
-
-        assignments = np.array([str(a)[-12:-1] for a in self.assignments])
-
-        # Change root
-        for n in range(len(assignments)):
-            if self.assignments[n].parent() is None:
-                assignments[n] = root_name
-
-        def descend(root, name):
-            for i, child in enumerate(root['children']):
-                child_name = child['label']
-
-                # Get occurrences of node in assignment list
-                idx = np.where(assignments == (str(child['node'])[-12:-1]))[0]
-
-                # and replace with name
-                if len(idx) > 0:
-                    assignments[idx] = child_name
-
-                descend(child, child_name)
-
-        descend(self.root, root_name)
-        return assignments

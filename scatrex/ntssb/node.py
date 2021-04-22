@@ -2,13 +2,13 @@ import numpy as np
 from numpy.random import *
 
 class AbstractNode(object):
-    def __init__(self, is_observed, observed_parameters, parent=None, tssb=None):
+    def __init__(self, is_observed, observed_parameters, parent=None, tssb=None, label=""):
         self.data         = set([])
         self._children    = set([])
         self.tssb         = tssb
         self.is_observed  = is_observed
         self.observed_parameters = observed_parameters
-        self.label        = ""
+        self.label        = label
         self.event_str    = ""
 
         self.params = dict()
@@ -18,7 +18,7 @@ class AbstractNode(object):
             parent.add_child(self)
             self._parent = parent
             n_siblings = len(list(parent.children()))
-            self.label = parent.label + '-' + str(n_siblings)
+            self.label = parent.label + '-' + str(n_siblings-1)
         else:
             self._parent = None
 

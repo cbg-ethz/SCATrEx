@@ -23,8 +23,8 @@ class StructureSearch(object):
         self.best_elbo = self.tree.elbo
         self.best_tree = deepcopy(self.tree)
 
-    def run_search(self, n_iters=1000, n_iters_elbo=1000, thin=10, local=True, num_samples=1, step_size=0.05, verbose=True, tol=1e-6, mb_size=100, max_nodes=5, debug=False, callback=None, alpha=0.01, Tmax=10, anneal=False, restart_step=10,
-                    moves=['add', 'merge', 'pivot_reattach', 'swap', 'subtree_reattach', 'globals', 'full'], merge_n_tries=5, opt=None, search_callback=None, add_rule='accept'):
+    def run_search(self, n_iters=1000, n_iters_elbo=1000, thin=10, local=True, num_samples=1, step_size=0.001, verbose=True, tol=1e-6, mb_size=100, max_nodes=5, debug=False, callback=None, alpha=0.01, Tmax=10, anneal=False, restart_step=10,
+                    moves=['add', 'merge', 'pivot_reattach', 'swap', 'subtree_reattach', 'globals', 'push_subtree', 'full'], merge_n_tries=5, opt=None, search_callback=None, add_rule='accept'):
         print(f'Will search for the maximum marginal likelihood tree with the following moves: {moves}\n')
         T = Tmax
         if not anneal:
@@ -33,18 +33,22 @@ class StructureSearch(object):
         if len(self.traces['score']) == 0:
             # Compute score of initial tree
             self.tree.reset_variational_parameters()
-            init_baseline = jnp.mean(self.tree.data, axis=0)
-            init_log_baseline = jnp.log(init_baseline / init_baseline[0])[1:]
-            self.tree.root['node'].root['node'].log_baseline_mean = init_log_baseline + np.random.normal(0, .5, size=self.tree.data.shape[1]-1)
-            self.tree.optimize_elbo(root_node=None, num_samples=num_samples, n_iters=n_iters_elbo*10, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
-            self.tree.update_ass_logits(variational=True)
-            self.tree.assign_to_best()
+            init_baseline = np.mean(self.tree.data / np.sum(self.tree.data, axis=1).reshape(-1,1) * self.tree.data.shape[1], axis=0)
+            init_baseline = init_baseline / init_baseline[0]
+            init_log_baseline = np.log(init_baseline[1:])
+            self.tree.root['node'].root['node'].variational_parameters['globals']['log_baseline_mean'] = np.clip(init_log_baseline, -1, 1)
+            self.tree.optimize_elbo(root_node=None, sticks_only=True, num_samples=num_samples, n_iters=n_iters_elbo*10, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
+
+            # full update
+            self.tree.optimize_elbo(root_node=None, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
             self.best_elbo = self.tree.elbo
             self.best_tree = deepcopy(self.tree)
+            self.tree.update_ass_logits(variational=True)
+            self.tree.assign_to_best()
 
         init_elbo = self.tree.elbo
         init_root = self.tree.root
-        move_id = 'add'
+        move_id = 'full'
         n_merge = 0
         # Search tree
         p = np.array([1.] * len(moves))
@@ -82,7 +86,10 @@ class StructureSearch(object):
             if move_id == 'merge':
                 if n_merge == merge_n_tries:
                     n_merge = 0
-                    move_id = 'full' # always update parameters after merging to rebase
+                    if not local:
+                        move_id = np.random.choice(moves, p=p)
+                    else:
+                        move_id = 'full' # always update parameters after merging to rebase
                     # move_id = np.random.choice(moves, p=p)
                 else:
                     n_merge += 1
@@ -102,6 +109,8 @@ class StructureSearch(object):
                 init_root, init_elbo = self.swap_nodes(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, debug=debug, mb_size=mb_size, max_nodes=max_nodes, opt=opt, callback=callback)
             elif move_id == 'subtree_reattach':
                 init_root, init_elbo = self.subtree_reattach(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, debug=debug, mb_size=mb_size, max_nodes=max_nodes, opt=opt, callback=callback)
+            elif move_id == 'push_subtree':
+                init_root, init_elbo = self.push_subtree(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, debug=debug, mb_size=mb_size, max_nodes=max_nodes, opt=opt, callback=callback)
             elif move_id == 'globals':
                 init_root = deepcopy(self.tree.root)
                 init_elbo = self.tree.elbo
@@ -112,15 +121,15 @@ class StructureSearch(object):
                 self.tree.optimize_elbo(root_node=None, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
 
 
-            if np.isnan(self.tree.elbo):
-                print("Got NaN!")
-                self.tree.root = deepcopy(init_root)
-                self.tree.elbo = init_elbo
-                print("Proceeding with previous tree and reducing step size.")
-                step_size = 1e-3
-                continue
-            else:
-                step_size = 1e-2
+            # if np.isnan(self.tree.elbo):
+            #     print("Got NaN!")
+            #     self.tree.root = deepcopy(init_root)
+            #     self.tree.elbo = init_elbo
+            #     print("Proceeding with previous tree and reducing step size.")
+            #     step_size = 1e-3
+            #     continue
+            # else:
+            #     step_size = 1e-3
 
 
             # if anneal:
@@ -209,15 +218,20 @@ class StructureSearch(object):
         local_node = None
         if local:
             local_node = new_node
-        self.tree.optimize_elbo(local_node=new_node, root_node=None, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
+        self.tree.optimize_elbo(local_node=local_node, root_node=None, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
         if verbose:
             print(f"{init_elbo} -> {self.tree.elbo}")
 
         return init_root, init_elbo
 
     def merge_nodes(self, local=False, num_samples=1, n_iters=100, thin=10, tol=1e-7, step_size=0.05, mb_size=100, max_nodes=5, verbose=True, debug=False, opt=None, callback=None):
+        # merge_paris = self.tree.get_merge_pairs()
+        # for pair in merge_pairs:
         init_root = deepcopy(self.tree.root)
         init_elbo = self.tree.elbo
+            # self.tree.merge_nodes(pair[0], pair[1])
+            # self.tree.optimize_elbo(unique_node=None, root_node=pair[1], run=True, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
+
 
         # Choose a subtree
         _, subtrees = self.tree.get_mixture()
@@ -265,7 +279,10 @@ class StructureSearch(object):
                                 print(f"Trying to merge {nodeA.label} to {nodeB.label}...")
 
                             ntree.merge_nodes(nodeA, nodeB)
-                            ntree.optimize_elbo(unique_node=None, root_node=nodeB, run=True, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
+                            local_node = None
+                            if local:
+                                local_node = nodeB
+                            ntree.optimize_elbo(unique_node=None, root_node=local_node, run=True, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
                             if verbose:
                                 print(f"{init_elbo} -> {ntree.elbo}")
 
@@ -326,10 +343,16 @@ class StructureSearch(object):
         parent_subtree = nonleaf_subtrees[np.random.choice(len(nonleaf_subtrees), p=[1./len(nonleaf_subtrees)]*len(nonleaf_subtrees))]
 
         # Pick a node in the parent subtree
-        _, nodes, roots = parent_subtree[0].get_mixture(get_roots=True)
-        node = np.random.choice(nodes, p=[1./len(nodes)]*len(nodes))
-        pivot_node = self.tree.add_node_to(node.label, optimal_init=False)
-        self.tree.plot_tree(super_only=False)
+        nodes, target_probs = self.tree.get_node_data_sizes(normalized=True)
+        target_probs = [prob for i, prob in enumerate(target_probs) if nodes[i].tssb == parent_subtree[0]]
+        nodes = [node for node in nodes if node.tssb == parent_subtree[0]]
+        target_probs /= np.sum(target_probs)
+        node = np.random.choice(nodes, p=np.array(target_probs))
+        pivot_node = self.tree.add_node_to(node.label, optimal_init=True)
+
+        # Assign data to it
+        self.tree.update_ass_logits(variational=True)
+        self.tree.assign_to_best()
 
         # Pick one of the children subtrees
         subtrees = [subtree for subtree in parent_subtree[1]['children']]
@@ -337,7 +360,7 @@ class StructureSearch(object):
         init_pivot = subtree['node'].root['node'].parent().label
 
         # Update pivot
-        self.tree.pivot_reattach_to(subtree['node'].label, pivot_node.label)
+        self.tree.pivot_reattach_to(subtree['node'], pivot_node)
 
         if verbose:
             print(f"Trying to add node {pivot_node.label} and setting it as pivot of {subtree['node'].label}")
@@ -350,6 +373,30 @@ class StructureSearch(object):
             print(f"{init_elbo} -> {self.tree.elbo}")
 
         return init_root, init_elbo
+
+    def push_subtree(self, local=False, num_samples=1, n_iters=100, thin=10, tol=1e-7, step_size=0.05, mb_size=100, max_nodes=5, verbose=True, debug=False, opt=None, callback=None):
+        init_root = deepcopy(self.tree.root)
+        init_elbo = self.tree.elbo
+
+        # Uniformly pick a subtree
+        subtrees = self.tree.get_mixture()[1][1:] # without the root
+        subtree = np.random.choice(subtrees, p=[1./len(subtrees)]*len(subtrees))
+
+        # Push subtree down
+        self.tree.push_subtree(subtree.root['node'])
+
+        if verbose:
+            print(f"Trying to push {subtree.label} down")
+
+        root_node = None
+        if local:
+            root_node = subtree.root['node']
+        self.tree.optimize_elbo(root_node=root_node, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
+        if verbose:
+            print(f"{init_elbo} -> {self.tree.elbo}")
+
+        return init_root, init_elbo
+
 
     def subtree_reattach(self, local=False, num_samples=1, n_iters=100, thin=10, tol=1e-7, step_size=0.05, mb_size=100, max_nodes=5, verbose=True, debug=False, opt=None, callback=None):
         """
@@ -416,7 +463,10 @@ class StructureSearch(object):
             # init_baseline = jnp.mean(self.tree.data, axis=0)
             # init_log_baseline = jnp.log(init_baseline / init_baseline[0])[1:]
             # self.tree.root['node'].root['node'].log_baseline_mean = init_log_baseline + np.random.normal(0, .5, size=self.tree.data.shape[1]-1)
-            self.tree.optimize_elbo(root_node=roots[nodeA_idx]['node'], num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
+            root_node = None
+            if local:
+                root_node = roots[nodeA_idx]['node']
+            self.tree.optimize_elbo(root_node=root_node, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
 
             if verbose:
                 print(f"{init_elbo} -> {self.tree.elbo}")
