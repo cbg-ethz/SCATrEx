@@ -164,8 +164,8 @@ class SCATrEx(object):
         cell_idx = np.arange(self.adata.shape[0])
         others_idx = np.array([])
         if cell_filter:
-            cell_idx = np.where(self.adata.obs['celltype_major']==cell_filter)[0]
-            others_idx = np.where(self.adata.obs['celltype_major']!=cell_filter)[0]
+            cell_idx = np.where(np.array([cell_filter in celltype for celltype in sca.adata.obs['celltype_major']]))[0]
+            others_idx = np.where(np.array([cell_filter not in celltype for celltype in sca.adata.obs['celltype_major']]))[0]
 
         labels = [self.observed_tree.tree_dict[clone]['label'] for clone in self.observed_tree.tree_dict if self.observed_tree.tree_dict[clone]['size'] > 0]
         clones = [self.observed_tree.tree_dict[clone]['params'] for clone in self.observed_tree.tree_dict if self.observed_tree.tree_dict[clone]['size'] > 0]
@@ -214,6 +214,11 @@ class SCATrEx(object):
 
         self.ntssb = NTSSB(self.observed_tree, self.model.Node, node_hyperparams=self.model_args)
         self.ntssb.add_data(self.adata.raw.X, to_root=True)
+        cell_idx = np.arange(self.adata.shape[0])
+        others_idx = np.array([])
+        if cell_filter:
+            cell_idx = np.where(np.array([cell_filter in celltype for celltype in sca.adata.obs['celltype_major']]))[0]
+            others_idx = np.where(np.array([cell_filter not in celltype for celltype in sca.adata.obs['celltype_major']]))[0]
         self.ntssb.root['node'].root['node'].reset_data_parameters()
         self.ntssb.reset_variational_parameters()
         init_baseline = np.mean(self.ntssb.data / np.sum(self.ntssb.data, axis=1).reshape(-1,1) * self.ntssb.data.shape[1], axis=0)
