@@ -8,6 +8,7 @@ from sklearn.decomposition import PCA
 from scipy.stats import spearmanr
 import matplotlib.pyplot as plt
 import pickle
+from copy import deepcopy
 
 import scanpy as sc
 from anndata import AnnData
@@ -31,7 +32,7 @@ class SCATrEx(object):
         """
         Load raw annotated data.
         """
-        self.adata = data
+        self.adata = deepcopy(data)
         if not isinstance(data, AnnData):
             self.adata = AnnData(data)
         self.adata.raw = self.adata
