@@ -36,6 +36,23 @@ class Tree(ABC):
             params.append(self.tree_dict[node]['params'])
         return np.array(params, dtype=np.float)
 
+    def change_names(self):
+        nodes = list(self.tree_dict.keys())
+        alphabet = list(string.ascii_uppercase)
+        new_names = dict(zip(nodes, alphabet[:len(nodes)]))
+        new_names['-1'] = '-1'
+
+        for i, node in enumerate(nodes):
+            self.tree_dict[node]['parent'] = new_names[self.tree_dict[node]['parent']]
+            self.tree_dict[node]['children'] = []
+            self.tree_dict[alphabet[i]] = self.tree_dict[node]
+            del self.tree_dict[node]
+
+        for i in self.tree_dict:
+            for j in self.tree_dict:
+                if self.tree_dict[j]['parent'] == i:
+                    self.tree_dict[i]['children'].append(j)
+
     def add_tree_parameters(self, change_name=True):
 
         nodes = list(self.tree_dict.keys())
@@ -166,17 +183,19 @@ class Tree(ABC):
 
     def create_adata(self, var_names=None):
         params = []
+        params_labels = []
         for node in self.tree_dict:
-            params.append(self.tree_dict[node]['params'])
-        params = pd.DataFrame(params)
-        params.index = pd.Series(list(self.tree_dict.keys()), dtype="category")
+            params_labels.append([self.tree_dict[node]['label']] * self.tree_dict[node]['size'])
+            params.append(np.vstack([self.tree_dict[node]['params']] * self.tree_dict[node]['size']))
+        params = pd.DataFrame(np.vstack(params))
+        params_labels = np.concatenate(params_labels).tolist()
         if var_names is not None:
             params.columns = var_names
         self.adata = AnnData(params)
-        self.adata.obs['node'] = params.index
+        self.adata.obs['node'] = params_labels
         self.adata.uns['node_colors'] = [self.tree_dict[node]['color'] for node in self.tree_dict]
         self.adata.uns['node_sizes'] = np.array([self.tree_dict[node]['size'] for node in self.tree_dict])
-        self.adata.var['bulk'] = np.mean(self.adata.X * self.adata.uns['node_sizes'].reshape(-1,1), axis=0)
+        self.adata.var['bulk'] = np.mean(self.adata.X, axis=0)
 
     def plot_heatmap(self, var_names=None, cmap=None, **kwds):
         if var_names is None:
@@ -189,11 +208,12 @@ class Tree(ABC):
         ax = sc.pl.heatmap(self.adata, var_names, groupby='node', cmap=cmap, show=False, **kwds)
         yticks = ax['groupby_ax'].get_yticks()
         ax['groupby_ax'].set_yticks(yticks - 0.5)
-        ax['groupby_ax'].set_yticklabels(['A', 'B', 'C'])
+        node_labels = self.adata.obs['node'].values.tolist()
+        ax['groupby_ax'].set_yticklabels(node_labels)
         ax['groupby_ax'].get_yticks()
         plt.show()
 
-    def read_tree_from_dict(self, tree_dict, input_params_key='params', input_label_key='label', input_parent_key='parent', input_sizes_key='size'):
+    def read_tree_from_dict(self, tree_dict, input_params_key='params', input_label_key='label', input_parent_key='parent', input_sizes_key='size', root_parent='NULL'):
         self.tree_dict = dict()
         alphabet = list(string.ascii_uppercase)
 
@@ -204,8 +224,11 @@ class Tree(ABC):
             pass
 
         for node in tree_dict:
-            self.tree_dict[alphabet[int(tree_dict[node][input_label_key])]] = dict(
-                parent=tree_dict[node][input_parent_key],
+            parent_id = tree_dict[node][input_parent_key]
+            if parent_id == root_parent:
+                parent_id = '-1'
+            self.tree_dict[node] = dict(
+                parent=parent_id,
                 children=[],
                 params=np.array(tree_dict[node][input_params_key]),
                 dp_alpha_subtree=self.dp_alpha_subtree,
@@ -217,16 +240,24 @@ class Tree(ABC):
                 weight=1.0/len(list(tree_dict.keys())),
                 size=1,
                 color=constants.CLONES_PAL[int(tree_dict[node][input_label_key])],
-                label=tree_dict[node][input_label_key],
+                label=alphabet[int(tree_dict[node][input_label_key])],
             )
             if sizes:
-                self.tree_dict[alphabet[int(tree_dict[node][input_label_key])]]['size'] = int(tree_dict[node][input_sizes_key])
-                self.tree_dict[alphabet[int(tree_dict[node][input_label_key])]]['weight'] = tree_dict[node][input_sizes_key]/sum(sizes)
+                self.tree_dict[node]['size'] = int(tree_dict[node][input_sizes_key])
+                self.tree_dict[node]['weight'] = tree_dict[node][input_sizes_key]/sum(sizes) + 1e-6
 
         for i in self.tree_dict:
             for j in self.tree_dict:
                 if self.tree_dict[j]['parent'] == i:
                     self.tree_dict[i]['children'].append(j)
+
+    def update_weights(self, uniform=False):
+        total = np.sum([self.tree_dict[node]['size'] for node in self.tree_dict])
+        for node in self.tree_dict:
+            self.tree_dict[node]['size'] = int(self.tree_dict[node]['size'])
+            self.tree_dict[node]['weight'] = self.tree_dict[node]['size']/total + 1e-6
+            if uniform:
+                self.tree_dict[node]['weight'] = 1.0/len(list(self.tree_dict.keys()))
 
     @abstractmethod
     def add_node_params(self):

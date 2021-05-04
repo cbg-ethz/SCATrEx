@@ -32,8 +32,9 @@ class SCATrEx(object):
         """
         Load raw annotated data.
         """
-        self.adata = deepcopy(data)
-        if not isinstance(data, AnnData):
+        if isinstance(data, AnnData):
+            self.adata = data.copy()
+        else:
             self.adata = AnnData(data)
         self.adata.raw = self.adata
         if self.observed_tree is not None:
@@ -148,10 +149,16 @@ class SCATrEx(object):
         self.adata.obs['obs_node'] = np.array([assignment.tssb.label for assignment in self.ntssb.assignments])
 
         labels = [self.observed_tree.tree_dict[node]['label'] for node in self.observed_tree.tree_dict if self.observed_tree.tree_dict[node]['size'] > 0]
-        sizes = [np.count_nonzero(self.adata.obs['obs_node']==node) for node in self.observed_tree.tree_dict if self.observed_tree.tree_dict[node]['size'] > 0]
+        sizes = [np.count_nonzero(self.adata.obs['obs_node']==label) for label in labels]
         self.adata.uns['estimated_frequencies'] = dict(zip(labels,sizes))
 
-    def learn_clonemap_corr(self, observed_tree=None, cell_filter=None, layer='scaled'):
+        cnv_mat = np.ones(self.adata.shape)
+        for clone_id in np.unique(assignments[cell_idx]):
+            cells = np.where(assignments[cell_idx]==clone_id)[0]
+            cnv_mat[cells] = np.array(clones)[np.where(np.array(labels)==clone_id)[0]]
+        self.adata.layers['cnvs'] = cnv_mat
+
+    def learn_clonemap_corr(self, observed_tree=None, cell_filter=None, layer='scaled', dna_diploid_threshold=0.95):
         if not self.observed_tree and observed_tree is None:
             raise ValueError("No observed tree available. Please pass an observed tree object.")
 
@@ -164,21 +171,43 @@ class SCATrEx(object):
         cell_idx = np.arange(self.adata.shape[0])
         others_idx = np.array([])
         if cell_filter:
-            cell_idx = np.where(np.array([cell_filter in celltype for celltype in sca.adata.obs['celltype_major']]))[0]
-            others_idx = np.where(np.array([cell_filter not in celltype for celltype in sca.adata.obs['celltype_major']]))[0]
+            cell_idx = np.where(np.array([cell_filter in celltype for celltype in self.adata.obs['celltype_major']]))[0]
+            others_idx = np.where(np.array([cell_filter not in celltype for celltype in self.adata.obs['celltype_major']]))[0]
 
         labels = [self.observed_tree.tree_dict[clone]['label'] for clone in self.observed_tree.tree_dict if self.observed_tree.tree_dict[clone]['size'] > 0]
         clones = [self.observed_tree.tree_dict[clone]['params'] for clone in self.observed_tree.tree_dict if self.observed_tree.tree_dict[clone]['size'] > 0]
+        clones = np.array(clones)
+
 
         # Diploid clone
-        diploid_clone_idx = np.where((clones==np.ones(clones[0].shape)*2).all(axis=1))[0][0]
+        dna_is_diploid = np.array((np.sum(clones == 2, axis=1) / clones.shape[1]) > dna_diploid_threshold)
+        diploid_clone_idx = np.where(dna_is_diploid)[0][0]
+        malignant_indices = np.arange(clones.shape[0])
+        malignant_indices_mask = np.ones(clones.shape[0], dtype=bool)
+        malignant_indices_mask[diploid_clone_idx] = 0
+        malignant_indices = malignant_indices[malignant_indices_mask]
+
+        # Subset the data to the highest variable genes
+        adata = deepcopy(self.adata)
+        adata = adata[cell_idx]
+        sc.pp.normalize_total(adata, target_sum=1e4)
+        sc.pp.log1p(adata)
+        sc.pp.highly_variable_genes(adata, n_top_genes=500)
+        hvgenes = np.where(np.array(adata.var.highly_variable).ravel())[0]
+        clones_filtered = clones[:,hvgenes]
+        rna_filtered = np.array(adata.raw.X[:,hvgenes])
+
+        # Subset the data to the genes with varying copy number across malignant clones
+        var_genes = np.where(np.var(clones_filtered[malignant_indices], axis=0) > 0)[0]
+        clones_filtered = clones_filtered[:, var_genes]
+        rna_filtered = rna_filtered[:, var_genes]
 
         assignments = [0] * self.adata.shape[0]
-        for cell in cell_idx:
+        for i, cell in enumerate(cell_idx):
             corrs = []
             for clone_idx in range(len(clones)):
                     if clone_idx != diploid_clone_idx:
-                        correlation, _ = spearmanr(self.adata.layers[layer][cell], clones[clone_idx])
+                        correlation, _ = spearmanr(rna_filtered[i], clones_filtered[clone_idx])
                     else:
                         correlation = -1.
                     corrs.append(correlation)
@@ -187,20 +216,21 @@ class SCATrEx(object):
             assignments[others_idx] = labels[diploid_clone_idx]
 
         assignments = np.array(assignments)
-        self.adata.obs['node'] = assignments
-        self.adata.obs['obs_node'] = assignments
+        self.adata.obs['node'] = assignments.astype(str)
+        self.adata.obs['obs_node'] = assignments.astype(str)
 
         labels = [self.observed_tree.tree_dict[node]['label'] for node in self.observed_tree.tree_dict if self.observed_tree.tree_dict[node]['size'] > 0]
-        sizes = [np.count_nonzero(self.adata.obs['obs_node']==node) for node in self.observed_tree.tree_dict if self.observed_tree.tree_dict[node]['size'] > 0]
-        self.adata.uns['estimated_frequencies'] = dict(zip(labels,sizes))
+        sizes = [np.count_nonzero(self.adata.obs['obs_node']==label) for label in labels]
+        self.adata.uns['corr_estimated_frequencies'] = dict(zip(labels,sizes))
 
-        cnv_mat = np.ones(self.adata.shape)
-        for clone_id in np.unique(assignments[cell_idx]):
-            cells = np.where(assignments[cell_idx]==clone_id)[0]
-            cnv_mat[cells] = np.array(clones)[np.where(np.array(labels)==clone_id)[0]]
-        self.adata.layers['cnvs'] = cnv_mat
+        cnv_mat = np.ones(self.adata.shape) * 2
+        for clone_id in np.unique(assignments):
+            cells = np.where(assignments==clone_id)[0]
+            clone_idx = np.where(np.array(labels).astype(str)==str(clone_id))[0]
+            cnv_mat[cells] = np.array(clones[clone_idx])
+        self.adata.layers['corr_cnvs'] = np.array(cnv_mat)
 
-    def learn_clonemap(self, observed_tree=None, **optimize_kwargs):
+    def learn_clonemap(self, observed_tree=None, cell_filter=None, dna_diploid_threshold=0.95, filter_genes=True, filter_diploid_cells=False, **optimize_kwargs):
         """Provides an equivalent of clonealign (for CNV nodes) or cardelino (for SNV nodes)
         """
         if not self.observed_tree and observed_tree is None:
@@ -212,13 +242,81 @@ class SCATrEx(object):
         if observed_tree:
             self.observed_tree = observed_tree
 
-        self.ntssb = NTSSB(self.observed_tree, self.model.Node, node_hyperparams=self.model_args)
-        self.ntssb.add_data(self.adata.raw.X, to_root=True)
+        # import numpy as np
+        # import scatrex
+        # from copy import deepcopy
+        # import scanpy as sc
+        # self = sca
+        # cell_filter='Melanoma'
+        # dna_diploid_threshold=0.95
+        # filter_genes=True
+        # filter_diploid_cells=True
+
         cell_idx = np.arange(self.adata.shape[0])
         others_idx = np.array([])
         if cell_filter:
-            cell_idx = np.where(np.array([cell_filter in celltype for celltype in sca.adata.obs['celltype_major']]))[0]
-            others_idx = np.where(np.array([cell_filter not in celltype for celltype in sca.adata.obs['celltype_major']]))[0]
+            print(f"Selecting {cell_filter} cells")
+            cell_idx = np.where(np.array([cell_filter in celltype for celltype in self.adata.obs['celltype_major']]))[0]
+            others_idx = np.where(np.array([cell_filter not in celltype for celltype in self.adata.obs['celltype_major']]))[0]
+
+        labels = [self.observed_tree.tree_dict[clone]['label'] for clone in self.observed_tree.tree_dict if self.observed_tree.tree_dict[clone]['size'] > 0]
+        clones = [self.observed_tree.tree_dict[clone]['params'] for clone in self.observed_tree.tree_dict if self.observed_tree.tree_dict[clone]['size'] > 0]
+        clones = np.array(clones)
+        print(clones.shape)
+
+        # Diploid clone
+        dna_is_diploid = np.array((np.sum(clones == 2, axis=1) / clones.shape[1]) > dna_diploid_threshold)
+        diploid_clone_idx = np.where(dna_is_diploid)[0][0]
+        malignant_indices = np.arange(clones.shape[0])
+        malignant_indices_mask = np.ones(clones.shape[0], dtype=bool)
+        malignant_indices_mask[diploid_clone_idx] = 0
+        malignant_indices = malignant_indices[malignant_indices_mask]
+        diploid_labels = np.array(labels)[diploid_clone_idx].tolist()
+        malignant_labels = np.array(labels)[malignant_indices].tolist()
+        print(f'Diploid clones: {diploid_labels}')
+        print(f'Malignant clones: {malignant_labels}')
+
+        adata = self.adata.raw.to_adata()
+        adata = adata[cell_idx]
+        clones_filtered = np.array(clones)
+        rna_filtered = np.array(adata.X)
+        observed_tree_filtered = deepcopy(self.observed_tree)
+
+        if filter_genes:
+            # Subset the data to the genes with varying copy number across malignant clones
+            # var_genes = np.where(np.var(clones_filtered[malignant_indices], axis=0) > 0)[0]
+            var_genes = np.where(np.any(clones[malignant_indices] != 2, axis=0))[0]
+
+            clones_filtered = clones[:, var_genes]
+            adata = adata[:, var_genes]
+            adata.raw = adata.copy()
+            rna_filtered = np.array(adata.X)
+            for node in observed_tree_filtered.tree_dict:
+                observed_tree_filtered.tree_dict[node]['params'] = observed_tree_filtered.tree_dict[node]['params'][var_genes]
+
+            # Subset the data to the highest variable genes
+            sc.pp.normalize_total(adata, target_sum=1e4)
+            sc.pp.log1p(adata)
+            sc.pp.highly_variable_genes(adata, n_top_genes=500)
+
+            hvgenes = np.where(np.array(adata.var.highly_variable).ravel())[0]
+            clones_filtered = clones_filtered[:,hvgenes]
+            rna_filtered = np.array(rna_filtered[:,hvgenes])
+
+            for node in observed_tree_filtered.tree_dict:
+                observed_tree_filtered.tree_dict[node]['params'] = observed_tree_filtered.tree_dict[node]['params'][hvgenes]
+
+        print(f"Filtered scRNA data for clonemap shape: {rna_filtered.shape}")
+
+        if filter_diploid_cells:
+            # Set weights -- no diploid cells allowed
+            for node in diploid_labels:
+                observed_tree_filtered.tree_dict[node]['size'] = 0
+            observed_tree_filtered.update_weights(uniform=False)
+            print(f'Assigning no weight to diploid clones: {diploid_labels}')
+
+        self.ntssb = NTSSB(observed_tree_filtered, self.model.Node, node_hyperparams=self.model_args)
+        self.ntssb.add_data(np.array(rna_filtered), to_root=True)
         self.ntssb.root['node'].root['node'].reset_data_parameters()
         self.ntssb.reset_variational_parameters()
         init_baseline = np.mean(self.ntssb.data / np.sum(self.ntssb.data, axis=1).reshape(-1,1) * self.ntssb.data.shape[1], axis=0)
@@ -227,16 +325,28 @@ class SCATrEx(object):
         self.ntssb.root['node'].root['node'].variational_parameters['globals']['log_baseline_mean'] = np.clip(init_log_baseline, -1, 1)
         optimize_kwargs.setdefault('sticks_only', True) # ignore other node-specific parameters
         elbos = self.ntssb.optimize_elbo(max_nodes=1, **optimize_kwargs)
-        self.ntssb.plot_tree()
+        self.ntssb.plot_tree(counts=True)
         self.ntssb.update_ass_logits(variational=True)
         self.ntssb.assign_to_best()
 
-        self.adata.obs['node'] = np.array([assignment.label for assignment in self.ntssb.assignments])
-        self.adata.obs['obs_node'] = np.array([assignment.tssb.label for assignment in self.ntssb.assignments])
+        assignments = np.array([labels[0]] * self.adata.shape[0])
+        assignments[cell_idx] = np.array([self.observed_tree.tree_dict[assignment.tssb.label]['label'] for assignment in self.ntssb.assignments])
+        if len(others_idx) > 0:
+            assignments[others_idx] = labels[diploid_clone_idx]
+
+        self.adata.obs['node'] = assignments.astype(str)
+        self.adata.obs['obs_node'] = assignments.astype(str)
 
         labels = [self.observed_tree.tree_dict[node]['label'] for node in self.observed_tree.tree_dict if self.observed_tree.tree_dict[node]['size'] > 0]
-        sizes = [np.count_nonzero(self.adata.obs['obs_node']==node) for node in self.observed_tree.tree_dict if self.observed_tree.tree_dict[node]['size'] > 0]
-        self.adata.uns['estimated_frequencies'] = dict(zip(labels,sizes))
+        sizes = [np.count_nonzero(self.adata.obs['obs_node']==label) for label in labels]
+        self.adata.uns['clonemap_estimated_frequencies'] = dict(zip(labels,sizes))
+
+        cnv_mat = np.ones(self.adata.shape) * 2
+        for clone_id in np.unique(assignments):
+            cells = np.where(assignments==clone_id)[0]
+            clone_idx = np.where(np.array(labels).astype(str)==str(clone_id))[0]
+            cnv_mat[cells] = np.array(clones[clone_idx])
+        self.adata.layers['clonemap_cnvs'] = np.array(cnv_mat)
 
         return elbos
 
