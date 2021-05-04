@@ -224,6 +224,7 @@ class NTSSB(object):
     def add_data(self, data, to_root=False):
         self.data        = data
         self.num_data    = 0 if data is None else data.shape[0]
+        print(f'Adding data of shape {data.shape} to NTSSB')
 
         self.assignments = []
 
