@@ -359,6 +359,9 @@ class Node(AbstractNode):
             return jax.lax.cond(data_mask_subset[i] == 1, stop_cell_grad, keep_cell_grad, i)
         cell_noise_mean, cell_noise_log_std = vmap(stop_cell_grads)(jnp.arange(mb_size))
 
+        ones_vec = jnp.ones(cnvs[0].shape)
+        zeros_vec = jnp.log(ones_vec)
+
         log_baseline = diag_gaussian_sample(rng, log_baseline_mean, log_baseline_log_std)
 
         # noise
@@ -372,7 +375,7 @@ class Node(AbstractNode):
         def sample_unobs_kernel(i):
             return jnp.clip(diag_gaussian_sample(rng, log_unobserved_factors_kernel_means[i], log_unobserved_factors_kernel_log_stds[i]), a_min=jnp.log(1e-2))
         def sample_all_unobs_kernel(i):
-            return jax.lax.cond(node_mask[i] >= 0, sample_unobs_kernel, lambda i: jnp.zeros(cnvs[i].shape), i)
+            return jax.lax.cond(node_mask[i] >= 0, sample_unobs_kernel, lambda i: zeros_vec, i)
         nodes_log_unobserved_factors_kernels = vmap(sample_all_unobs_kernel)(jnp.arange(len(cnvs)))
 
         unobserved_means = jnp.clip(unobserved_means, a_min=jnp.log(1e-3))
@@ -380,7 +383,7 @@ class Node(AbstractNode):
         def sample_unobs(i):
             return diag_gaussian_sample(rng, unobserved_means[i], unobserved_log_stds[i])
         def sample_all_unobs(i):
-            return jax.lax.cond(node_mask[i] >= 0, sample_unobs, lambda i: jnp.zeros(cnvs[i].shape), i)
+            return jax.lax.cond(node_mask[i] >= 0, sample_unobs, lambda i: zeros_vec, i)
         nodes_unobserved_factors = vmap(sample_all_unobs)(jnp.arange(len(cnvs)))
 
         nu_sticks_log_means = jnp.clip(nu_sticks_log_means, -4., 4.)
@@ -405,14 +408,17 @@ class Node(AbstractNode):
             return jax.lax.cond(cnvs[i][0] >= 0, lambda i: jnn.sigmoid(log_psi_sticks[i]), lambda i: jnp.array([1e-6]), i) # Sample all
         psi_sticks = jnp.clip(vmap(sigmoid_psis)(jnp.arange(len(cnvs))), 1e-6, 1-1e-6)
 
+        lib_sizes = jnp.array(self.lib_sizes)[indices]
+        data = jnp.array(self.full_data)[indices]
+        baseline = jnp.exp(jnp.append(0, log_baseline))
         def compute_node_ll(i):
             unobserved_factors = nodes_unobserved_factors[i]
 
-            node_mean = jnp.exp(jnp.append(0, log_baseline)) * cnvs[i]/2 * jnp.exp(unobserved_factors + noise)
+            node_mean = baseline * cnvs[i]/2 * jnp.exp(unobserved_factors + noise)
             sum = jnp.sum(node_mean, axis=1).reshape(mb_size, 1)
             node_mean = node_mean / sum
-            node_mean = node_mean * (jnp.array(self.lib_sizes)[indices])
-            pll = vmap(jax.scipy.stats.poisson.logpmf)(jnp.array(self.full_data)[indices], node_mean)
+            node_mean = node_mean * lib_sizes
+            pll = vmap(jax.scipy.stats.poisson.logpmf)(data, node_mean)
             ll = jnp.sum(pll, axis=1) # N-vector
 
             # TSSB prior
@@ -432,22 +438,27 @@ class Node(AbstractNode):
 
             return ll
 
+        small_ll = -1e10*jnp.ones((mb_size))
         def get_node_ll(i):
-            return jax.lax.cond(node_mask[i] == 1, lambda _: compute_node_ll(jax.lax.cond(node_mask[i]==1, lambda _: i, lambda _: 0, operand=None)), lambda _: -1e10*jnp.ones((mb_size)), operand=None)
+            return jnp.where(node_mask[i] == 1, compute_node_ll(jnp.where(node_mask[i] == 1, i, 0)), small_ll)
         out = jnp.array(vmap(get_node_ll)(jnp.arange(len(parent_vector))))
         l = jnp.sum(jnn.logsumexp(out, axis=0) * data_mask_subset)
 
+        log_concentration = jnp.log(self.unobserved_factors_kernel_concentration)
+        log_kernel = jnp.log(self.unobserved_factors_root_kernel)
+        broadcasted_concentration = log_concentration * ones_vec
+
         def compute_node_kl(i):
             # unobserved_factors_kernel
-            pl = diag_gamma_logpdf(jnp.exp(nodes_log_unobserved_factors_kernels[i]), jnp.log(self.unobserved_factors_kernel_concentration) * jnp.ones(cnvs[i].shape),
-                                                                                    (parent_vector[i] != -1)*jnp.log(self.unobserved_factors_kernel_concentration)*jnp.abs(nodes_unobserved_factors[parent_vector[i]]))
+            pl = diag_gamma_logpdf(jnp.exp(nodes_log_unobserved_factors_kernels[i]), broadcasted_concentration,
+                                    (parent_vector[i] != -1)*log_concentration*jnp.abs(nodes_unobserved_factors[parent_vector[i]]))
             ent = - diag_gaussian_logpdf(nodes_log_unobserved_factors_kernels[i], log_unobserved_factors_kernel_means[i], log_unobserved_factors_kernel_log_stds[i])
             kl = (parent_vector[i] != -1) * (pl + ent)
 
             # unobserved_factors
             pl = diag_gaussian_logpdf(nodes_unobserved_factors[i],
                         (parent_vector[i] != -1) * nodes_unobserved_factors[parent_vector[i]],
-                        nodes_log_unobserved_factors_kernels[i]*(parent_vector[i] != -1) + jnp.log(self.unobserved_factors_root_kernel*jnp.ones(cnvs[i].shape))*(parent_vector[i] == -1))
+                        nodes_log_unobserved_factors_kernels[i]*(parent_vector[i] != -1) + log_kernel*(parent_vector[i] == -1))
             ent = - diag_gaussian_logpdf(nodes_unobserved_factors[i], unobserved_means[i], unobserved_log_stds[i])
             kl = kl + pl + ent
 
@@ -463,19 +474,21 @@ class Node(AbstractNode):
             return kl
 
         def get_node_kl(i):
-            return jax.lax.cond(node_mask[i] == 1, lambda _: compute_node_kl(jax.lax.cond(node_mask[i] == 1, lambda _: i, lambda _: 0, operand=None)), lambda _: 0., operand=None)
+            return jnp.where(node_mask[i] == 1, compute_node_kl(jnp.where(node_mask[i] == 1, i, 0)), 0.)
         node_kl = jnp.sum(vmap(get_node_kl)(jnp.arange(len(parent_vector))))
 
         # Global vars KL
-        baseline_kl = diag_gaussian_logpdf(log_baseline, jnp.zeros(log_baseline.shape), jnp.log(1.)*jnp.ones(log_baseline.shape)) - diag_gaussian_logpdf(log_baseline, log_baseline_mean, log_baseline_log_std)
-        factor_precision_kl = diag_gamma_logpdf(jnp.exp(log_factors_precisions), 2*jnp.ones(log_factors_precisions.shape), jnp.ones(log_factors_precisions.shape)) - diag_gaussian_logpdf(log_factors_precisions, factor_precision_log_means, factor_precision_log_stds)
+        baseline_kl = diag_gaussian_logpdf(log_baseline, zeros_vec[1:], zeros_vec[1:]) - diag_gaussian_logpdf(log_baseline, log_baseline_mean, log_baseline_log_std)
+        ones_mat = jnp.ones(log_factors_precisions.shape)
+        factor_precision_kl = diag_gamma_logpdf(jnp.exp(log_factors_precisions), 2*ones_mat, ones_mat) - diag_gaussian_logpdf(log_factors_precisions, factor_precision_log_means, factor_precision_log_stds)
         noise_factors_kl = diag_gaussian_logpdf(noise_factors, jnp.zeros(noise_factors.shape), jnp.sqrt(jnp.exp(-log_factors_precisions)).reshape(-1,1) * jnp.ones(noise_factors.shape)) - diag_gaussian_logpdf(noise_factors, noise_factors_mean, noise_factors_log_std)
         total_kl = node_kl + baseline_kl + factor_precision_kl + noise_factors_kl
 
         # Scale the KL by the data size
         total_kl = total_kl * jnp.sum(data_mask_subset != 0) / self.tssb.ntssb.num_data
 
-        cell_noise_kl = diag_gaussian_logpdf(cell_noise, jnp.zeros(cell_noise.shape), jnp.zeros(cell_noise.shape), axis=1) - diag_gaussian_logpdf(cell_noise, cell_noise_mean, cell_noise_log_std, axis=1)
+        zeros_mat = jnp.zeros(cell_noise.shape)
+        cell_noise_kl = diag_gaussian_logpdf(cell_noise, zeros_mat, zeros_mat, axis=1) - diag_gaussian_logpdf(cell_noise, cell_noise_mean, cell_noise_log_std, axis=1)
         cell_noise_kl = jnp.sum(cell_noise_kl * data_mask_subset)
         total_kl = total_kl + cell_noise_kl
 
