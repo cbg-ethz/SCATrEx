@@ -226,7 +226,7 @@ class SCATrEx(object):
         init_log_baseline = np.log(init_baseline[1:])
         self.ntssb.root['node'].root['node'].variational_parameters['globals']['log_baseline_mean'] = np.clip(init_log_baseline, -1, 1)
         optimize_kwargs.setdefault('sticks_only', True) # ignore other node-specific parameters
-        elbos = self.ntssb.optimize_elbo(**optimize_kwargs)
+        elbos = self.ntssb.optimize_elbo(max_nodes=1, **optimize_kwargs)
         self.ntssb.plot_tree()
         self.ntssb.update_ass_logits(variational=True)
         self.ntssb.assign_to_best()
