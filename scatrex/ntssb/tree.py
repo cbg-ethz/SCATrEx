@@ -81,7 +81,7 @@ class Tree(ABC):
                             alpha_decay_parent_edge=self.alpha_decay_parent_edge,
                             eta=self.eta,
                             weight=1.0/self.n_nodes,
-                            size=1.0,
+                            size=1,
                             color=constants.CLONES_PAL[0],
                             label='A'))
         for c in range(1, self.n_nodes):
@@ -94,7 +94,7 @@ class Tree(ABC):
                             alpha_decay_parent_edge=self.alpha_decay_parent_edge,
                             eta=self.eta,
                             weight=1.0/self.n_nodes,
-                            size=1.0,
+                            size=1,
                             color=constants.CLONES_PAL[c],
                             label=alphabet[c])
 
@@ -208,6 +208,7 @@ class Tree(ABC):
                 parent=tree_dict[node][input_parent_key],
                 children=[],
                 params=np.array(tree_dict[node][input_params_key]),
+                dp_alpha_subtree=self.dp_alpha_subtree,
                 alpha_decay_subtree=self.alpha_decay_subtree,
                 dp_gamma_subtree=self.dp_gamma_subtree,
                 dp_alpha_parent_edge=self.dp_alpha_parent_edge,
@@ -219,7 +220,7 @@ class Tree(ABC):
                 label=tree_dict[node][input_label_key],
             )
             if sizes:
-                self.tree_dict[alphabet[int(tree_dict[node][input_label_key])]]['size'] = tree_dict[node][input_sizes_key]
+                self.tree_dict[alphabet[int(tree_dict[node][input_label_key])]]['size'] = int(tree_dict[node][input_sizes_key])
                 self.tree_dict[alphabet[int(tree_dict[node][input_label_key])]]['weight'] = tree_dict[node][input_sizes_key]/sum(sizes)
 
         for i in self.tree_dict:
