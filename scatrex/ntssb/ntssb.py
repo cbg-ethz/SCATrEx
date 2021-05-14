@@ -1067,7 +1067,8 @@ class NTSSB(object):
                 #         print(f'Convergence achieved at iteration {t}.')
                 #         break
 
-            self.elbo = np.mean(elbos[t-int(.25 * t):])
+            self.elbo = np.array(-self.batch_objective(obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, all_nodes_mask,
+                                    do_global, global_only, sticks_only, num_samples, self.get_params(opt_state), 10))
 
             # Weigh by tree prior
             subtrees = self.get_mixture()[1][1:] # without the root
