@@ -32,12 +32,16 @@ class AbstractNode(object):
         if not self.is_observed:
             # Make sure we use the right observed parameters
             self.observed_parameters = parent.observed_parameters
+            self.inherit_parameters()
 
         self.unobserved_factors = parent.unobserved_factors + self.unobserved_factors
         self.set_mean()
 
         if reset:
             self.reset_variational_parameters()
+
+    def inherit_parameters(self):
+        pass
 
     def reset_parameters(self):
         pass

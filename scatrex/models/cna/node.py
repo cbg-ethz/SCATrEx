@@ -44,6 +44,11 @@ class Node(AbstractNode):
 
         self.reset_parameters(**self.node_hyperparams)
 
+    def inherit_parameters(self):
+        if not self.is_observed:
+            # Make sure we use the right observed parameters
+            self.cnvs = self.parent().cnvs
+
     def get_node_mean(self, log_baseline, unobserved_factors, noise, cnvs):
         node_mean = jnp.exp(log_baseline + unobserved_factors + noise + jnp.log(cnvs/2))
         sum = jnp.sum(node_mean, axis=1).reshape(self.tssb.ntssb.num_data, 1)
