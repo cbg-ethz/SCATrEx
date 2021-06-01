@@ -185,16 +185,17 @@ class Tree(ABC):
         params = []
         params_labels = []
         for node in self.tree_dict:
-            params_labels.append([self.tree_dict[node]['label']] * self.tree_dict[node]['size'])
-            params.append(np.vstack([self.tree_dict[node]['params']] * self.tree_dict[node]['size']))
+            if self.tree_dict[node]['label'] != '':
+                params_labels.append([self.tree_dict[node]['label']] * self.tree_dict[node]['size'])
+                params.append(np.vstack([self.tree_dict[node]['params']] * self.tree_dict[node]['size']))
         params = pd.DataFrame(np.vstack(params))
         params_labels = np.concatenate(params_labels).tolist()
         if var_names is not None:
             params.columns = var_names
         self.adata = AnnData(params)
         self.adata.obs['node'] = params_labels
-        self.adata.uns['node_colors'] = [self.tree_dict[node]['color'] for node in self.tree_dict]
-        self.adata.uns['node_sizes'] = np.array([self.tree_dict[node]['size'] for node in self.tree_dict])
+        self.adata.uns['node_colors'] = [self.tree_dict[node]['color'] for node in self.tree_dict if self.tree_dict[node]['label'] != '']
+        self.adata.uns['node_sizes'] = np.array([self.tree_dict[node]['size'] for node in self.tree_dict if self.tree_dict[node]['label'] != ''])
         self.adata.var['bulk'] = np.mean(self.adata.X, axis=0)
 
     def plot_heatmap(self, var_names=None, cmap=None, **kwds):
@@ -227,6 +228,15 @@ class Tree(ABC):
             parent_id = tree_dict[node][input_parent_key]
             if parent_id == root_parent:
                 parent_id = '-1'
+            color = ''
+            label = ''
+            size = 0
+            weight = 0.
+            if tree_dict[node]['label'] != '':
+                color = constants.CLONES_PAL[int(tree_dict[node][input_label_key])]
+                label = alphabet[int(tree_dict[node][input_label_key])]
+                weight = 1.0/len(list(tree_dict.keys()))
+                size = 1
             self.tree_dict[node] = dict(
                 parent=parent_id,
                 children=[],
@@ -237,10 +247,10 @@ class Tree(ABC):
                 dp_alpha_parent_edge=self.dp_alpha_parent_edge,
                 alpha_decay_parent_edge=self.alpha_decay_parent_edge,
                 eta=self.eta,
-                weight=1.0/len(list(tree_dict.keys())),
-                size=1,
-                color=constants.CLONES_PAL[int(tree_dict[node][input_label_key])],
-                label=alphabet[int(tree_dict[node][input_label_key])],
+                weight=weight,
+                size=size,
+                color=color,
+                label=label,
             )
             if sizes:
                 self.tree_dict[node]['size'] = int(tree_dict[node][input_sizes_key])
