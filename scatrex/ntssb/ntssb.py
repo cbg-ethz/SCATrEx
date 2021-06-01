@@ -1248,9 +1248,11 @@ class NTSSB(object):
 
         parent_node = node.parent()
         children = list(node.children())
+        if len(children) > 0:
+            children = [n for n in children if not n.is_observed]
         child_node = None
         if len(children) > 0:
-            child_node = list(node.children())[0]
+            child_node = children[0]
 
         # Add node below parent
         new_node = self.add_node_to(parent_node)
