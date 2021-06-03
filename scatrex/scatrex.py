@@ -121,7 +121,7 @@ class SCATrEx(object):
 
         return (observations, assignments_labels) if copy else None
 
-    def learn_tree(self, observed_tree=None, reset=True, search_kwargs=dict()):
+    def learn_tree(self, observed_tree=None, reset=True, cell_filter=None, search_kwargs=dict()):
         if not self.observed_tree and observed_tree is None:
             raise ValueError("No observed tree available. Please pass an observed tree object.")
 
@@ -130,6 +130,14 @@ class SCATrEx(object):
 
         if observed_tree:
             self.observed_tree = observed_tree
+
+        clones = np.array([self.observed_tree.tree_dict[clone]['params'] for clone in self.observed_tree.tree_dict if self.observed_tree.tree_dict[clone]['size'] > 0])
+
+        cell_idx = np.arange(self.adata.shape[0])
+        others_idx = np.array([])
+        if cell_filter:
+            cell_idx = np.where(np.array([cell_filter in celltype for celltype in self.adata.obs['celltype_major']]))[0]
+            others_idx = np.where(np.array([cell_filter not in celltype for celltype in self.adata.obs['celltype_major']]))[0]
 
         if reset:
             self.ntssb = NTSSB(self.observed_tree, self.model.Node, node_hyperparams=self.model_args)
@@ -153,8 +161,8 @@ class SCATrEx(object):
         self.adata.uns['estimated_frequencies'] = dict(zip(labels,sizes))
 
         cnv_mat = np.ones(self.adata.shape)
-        for clone_id in np.unique(assignments[cell_idx]):
-            cells = np.where(assignments[cell_idx]==clone_id)[0]
+        for clone_id in np.unique(self.adata.obs['node'][cell_idx]):
+            cells = np.where(self.adata.obs['node'][cell_idx]==clone_id)[0]
             cnv_mat[cells] = np.array(clones)[np.where(np.array(labels)==clone_id)[0]]
         self.adata.layers['cnvs'] = cnv_mat
 
