@@ -161,7 +161,7 @@ class SCATrEx(object):
         self.adata.uns['estimated_frequencies'] = dict(zip(labels,sizes))
 
         cnv_mat = np.ones(self.adata.shape)
-        for clone_id in np.unique(self.adata.obs['node'][cell_idx]):
+        for clone_id in np.unique(self.adata.obs['obs_node'][cell_idx]):
             cells = np.where(self.adata.obs['node'][cell_idx]==clone_id)[0]
             cnv_mat[cells] = np.array(clones)[np.where(np.array(labels)==clone_id)[0]]
         self.adata.layers['cnvs'] = cnv_mat
