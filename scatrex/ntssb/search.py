@@ -26,6 +26,7 @@ class StructureSearch(object):
     def run_search(self, n_iters=1000, n_iters_elbo=1000, thin=10, local=True, num_samples=1, step_size=0.001, verbose=True, tol=1e-6, mb_size=100, max_nodes=5, debug=False, callback=None, alpha=0.01, Tmax=10, anneal=False, restart_step=10,
                     moves=['add', 'merge', 'pivot_reattach', 'swap', 'subtree_reattach', 'globals', 'push_subtree', 'full'], merge_n_tries=5, opt=None, search_callback=None, add_rule='accept'):
         print(f'Will search for the maximum marginal likelihood tree with the following moves: {moves}\n')
+        main_step_size = step_size
         T = Tmax
         if not anneal:
             T = 1.
@@ -121,15 +122,17 @@ class StructureSearch(object):
                 self.tree.optimize_elbo(root_node=None, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
 
 
-            # if np.isnan(self.tree.elbo):
-            #     print("Got NaN!")
-            #     self.tree.root = deepcopy(init_root)
-            #     self.tree.elbo = init_elbo
-            #     print("Proceeding with previous tree and reducing step size.")
-            #     step_size = 1e-3
-            #     continue
-            # else:
-            #     step_size = 1e-3
+            if np.isnan(self.tree.elbo):
+                print("Got NaN!")
+                self.tree.root = deepcopy(init_root)
+                self.tree.elbo = init_elbo
+                print("Proceeding with previous tree and reducing step size.")
+                step_size = step_size * 0.1
+                if step_size < 1e-6:
+                    raise ValueError("Step size became too small due to too many NaNs!")
+                continue
+            else:
+                step_size = main_step_size
 
 
             # if anneal:
