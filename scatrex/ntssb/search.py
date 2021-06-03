@@ -195,11 +195,6 @@ class StructureSearch(object):
             if T == 0:
                 break
 
-
-            # Cull tree
-            if np.random.rand() > 0.67:
-                self.tree.cull_subtrees()
-
         self.best_tree.plot_tree(super_only=False)
         return self.best_tree
 
