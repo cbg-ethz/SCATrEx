@@ -76,27 +76,12 @@ class StructureSearch(object):
                         add_rule = 'accept'
             except:
                 pass
-            try:
-                if i < int(0.5 * n_iters):
-                    p[np.where(np.array(moves)=='subtree_reattach')[0][0]] *= 0.2
-            except:
-                pass
+
             p = p / np.sum(p)
             if move_id == 'add':
-                move_id = 'merge' # always try to merge after adding
-            if move_id == 'merge':
-                if n_merge == merge_n_tries:
-                    n_merge = 0
-                    if not local:
-                        move_id = np.random.choice(moves, p=p)
-                    else:
-                        move_id = 'full' # always update parameters after merging to rebase
-                    # move_id = np.random.choice(moves, p=p)
-                else:
-                    n_merge += 1
-                    move_id = 'merge'
+               move_id = 'merge' # always try to merge after adding
             else:
-                move_id = np.random.choice(moves, p=p)
+               move_id = np.random.choice(moves, p=p)
 
             if move_id == 'add':
                 init_root, init_elbo = self.add_node(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, mb_size=mb_size, max_nodes=max_nodes, debug=debug, opt=opt, callback=callback)
