@@ -20,6 +20,7 @@ import jax.numpy as jnp
 import jax.nn as jnn
 
 from ..util import *
+from ..callbacks import elbos_callback
 from .tssb import TSSB
 
 
@@ -1026,8 +1027,7 @@ class NTSSB(object):
         self.n_nodes = n_nodes
         # print(n_nodes)
         if callback is None:
-            def callback(params, t, tree, elbos, tol):
-                pass
+            callback = elbos_callback
                 # print("Iteration {} lower bound {}".format(t, self.batch_objective(cnvs, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, params, t)))
 
         print(data_mask)
@@ -1057,16 +1057,14 @@ class NTSSB(object):
                 # data_mask_subset = data_mask
                 opt_state, g, params, elbo = self.update(obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, node_mask, data_mask_subset, minibatch_idx, do_global, global_only, sticks_only, num_samples, t, opt_state)
                 elbos.append(-elbo)
-                # if t/thin >= 0 and np.mod(t, thin) == 0:
-                #     idx = int(t/thin)
-                #     params = self.get_params(opt_state)
-                #     elbos.append(-self.batch_objective(obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, all_nodes_mask, do_global, global_only, sticks_only, num_samples, params, idx))
-                #     try:
-                #         callback(params, idx, self, elbos, tol)
-                #     except StopIteration:
-                #         print(f'Convergence achieved at iteration {t}.')
-                #         break
+                try:
+                    callback(elbos, **callback_kwargs)
+                except StopIteration as e:
+                    print(e)
+                    break
 
+
+            # Without node mask
             self.elbo = np.array(-self.batch_objective(obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, all_nodes_mask,
                                     do_global, global_only, sticks_only, num_samples, self.get_params(opt_state), 10))
 
