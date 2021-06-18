@@ -18,7 +18,7 @@ from ...ntssb.tree import *
 
 class Node(AbstractNode):
     def __init__(self, is_observed, observed_parameters, log_lib_size_mean=10, log_lib_size_std=1,
-                        num_global_noise_factors=4, global_noise_factors_scale=1.,
+                        num_global_noise_factors=4, global_noise_factors_precisions_shape=2.,
                         cell_global_noise_factors_weights_scale=1.,
                         unobserved_factors_root_kernel=0.1, unobserved_factors_kernel=1.,
                         unobserved_factors_kernel_concentration=0.01, **kwargs):
@@ -33,7 +33,7 @@ class Node(AbstractNode):
             self.node_hyperparams = dict(
                 log_lib_size_mean=log_lib_size_mean, log_lib_size_std=log_lib_size_std,
                 num_global_noise_factors=num_global_noise_factors,
-                global_noise_factors_scale=global_noise_factors_scale,
+                global_noise_factors_precisions_shape=global_noise_factors_precisions_shape,
                 cell_global_noise_factors_weights_scale=cell_global_noise_factors_weights_scale,
                 unobserved_factors_root_kernel=unobserved_factors_root_kernel,
                 unobserved_factors_kernel=unobserved_factors_kernel,
@@ -84,11 +84,11 @@ class Node(AbstractNode):
                 if means:
                     self.variational_parameters['globals']['noise_factors_mean'] = np.zeros((self.num_global_noise_factors, self.n_genes))
                 if variances:
-                    self.variational_parameters['globals']['noise_factors_log_std'] = np.zeros((self.num_global_noise_factors, self.n_genes))
+                    self.variational_parameters['globals']['noise_factors_log_std'] = -np.ones((self.num_global_noise_factors, self.n_genes))
                 if means:
-                    self.variational_parameters['globals']['factor_precision_log_means'] = np.zeros((self.num_global_noise_factors))
+                    self.variational_parameters['globals']['factor_precision_log_means'] = np.log(self.global_noise_factors_precisions_shape)*np.ones((self.num_global_noise_factors))
                 if variances:
-                    self.variational_parameters['globals']['factor_precision_log_stds'] = np.zeros((self.num_global_noise_factors))
+                    self.variational_parameters['globals']['factor_precision_log_stds'] = -np.ones((self.num_global_noise_factors))
 
 
         self.data_ass_logits = np.zeros((self.tssb.ntssb.num_data))
@@ -133,7 +133,7 @@ class Node(AbstractNode):
 
     def reset_parameters(self, root_params=True, down_params=True,
                         log_lib_size_mean=2, log_lib_size_std=1,
-                        num_global_noise_factors=4, global_noise_factors_scale=1.,
+                        num_global_noise_factors=4, global_noise_factors_precisions_shape=1.,
                         cell_global_noise_factors_weights_scale=1.,
                         unobserved_factors_root_kernel=0.1, unobserved_factors_kernel=1.,
                         unobserved_factors_kernel_concentration=.1):
@@ -143,7 +143,7 @@ class Node(AbstractNode):
             self.node_hyperparams = dict(
                 log_lib_size_mean=log_lib_size_mean, log_lib_size_std=log_lib_size_std,
                 num_global_noise_factors=num_global_noise_factors,
-                global_noise_factors_scale=global_noise_factors_scale,
+                global_noise_factors_precisions_shape=global_noise_factors_precisions_shape,
                 cell_global_noise_factors_weights_scale=cell_global_noise_factors_weights_scale,
                 unobserved_factors_root_kernel=unobserved_factors_root_kernel,
                 unobserved_factors_kernel=unobserved_factors_kernel,
@@ -160,10 +160,10 @@ class Node(AbstractNode):
 
                 # Structured noise: keep all cells' noise factors at the root
                 self.num_global_noise_factors = num_global_noise_factors
-                self.global_noise_factors_scale = global_noise_factors_scale
+                self.global_noise_factors_precisions_shape = global_noise_factors_precisions_shape
                 self.cell_global_noise_factors_weights_scale = cell_global_noise_factors_weights_scale
 
-                self.global_noise_factors_precisions = gamma_sample(5., 1., size=self.num_global_noise_factors)
+                self.global_noise_factors_precisions = gamma_sample(global_noise_factors_precisions_shape, 1., size=self.num_global_noise_factors)
                 self.global_noise_factors = normal_sample(0, 1./np.sqrt(self.global_noise_factors_precisions), size=[self.n_genes, self.num_global_noise_factors]).T # K x P
 
                 self.unobserved_factors_root_kernel = unobserved_factors_root_kernel
@@ -216,6 +216,9 @@ class Node(AbstractNode):
             node_mean = node_mean / sum
         return node_mean
 
+    def get_noise(self, variational=False):
+        return self.cell_global_noise_factors_weights_caller(variational=variational).dot(self.global_noise_factors_caller(variational=variational))
+
     # ========= Functions to take samples from node. =========
     def sample_observation(self, n):
         noise = self.cell_global_noise_factors_weights_caller()[n].dot(self.global_noise_factors_caller())
@@ -264,7 +267,7 @@ class Node(AbstractNode):
         return llp
 
     def loglh(self, n, variational=False, axis=None):
-        noise = self.cell_global_noise_factors_weights_caller()[n].dot(self.global_noise_factors_caller())
+        noise = self.get_noise(variational=variational)[n]
         node_mean = self.get_mean(baseline=np.append(1, np.exp(self.log_baseline_caller())), unobserved_factors=self.variational_parameters['locals']['unobserved_factors_mean'], noise=noise)
         llh = poisson_lpmf(self.tssb.ntssb.data[n],  self.lib_sizes_caller()[n] * node_mean, axis=axis)
         return llh
@@ -361,7 +364,7 @@ class Node(AbstractNode):
         def stop_cell_grad(i):
             return jax.lax.stop_gradient(cell_noise_mean[indices][i]), jax.lax.stop_gradient(cell_noise_log_std[indices][i])
         def stop_cell_grads(i):
-            return jax.lax.cond(data_mask_subset[i] == 1, stop_cell_grad, keep_cell_grad, i)
+            return jax.lax.cond(data_mask_subset[i] != 1, stop_cell_grad, keep_cell_grad, i)
         cell_noise_mean, cell_noise_log_std = vmap(stop_cell_grads)(jnp.arange(mb_size))
 
         ones_vec = jnp.ones(cnvs[0].shape)
@@ -370,21 +373,22 @@ class Node(AbstractNode):
         log_baseline = diag_gaussian_sample(rng, log_baseline_mean, log_baseline_log_std)
 
         # noise
-        log_factors_precisions = jnp.clip(diag_gaussian_sample(rng, factor_precision_log_means, factor_precision_log_stds), jnp.log(1e-3), jnp.log(1e1))
+        factor_precision_log_means = jnp.clip(factor_precision_log_means, a_min=jnp.log(1e-3), a_max=jnp.log(1e2))
+        log_factors_precisions = diag_gaussian_sample(rng, factor_precision_log_means, factor_precision_log_stds)
         noise_factors = diag_gaussian_sample(rng, noise_factors_mean, noise_factors_log_std)
         cell_noise = diag_gaussian_sample(rng, cell_noise_mean[indices], cell_noise_log_std[indices])
         noise = jnp.dot(cell_noise, noise_factors)
 
-        log_unobserved_factors_kernel_means = jnp.clip(log_unobserved_factors_kernel_means, a_min=jnp.log(1e-2))
-        log_unobserved_factors_kernel_log_stds = jnp.clip(log_unobserved_factors_kernel_log_stds, a_min=jnp.log(1e-2))
+        log_unobserved_factors_kernel_means = jnp.clip(log_unobserved_factors_kernel_means, a_min=jnp.log(1e-2), a_max=jnp.log(1e2))
+        log_unobserved_factors_kernel_log_stds = jnp.clip(log_unobserved_factors_kernel_log_stds, a_min=jnp.log(1e-2), a_max=jnp.log(1e2))
         def sample_unobs_kernel(i):
             return jnp.clip(diag_gaussian_sample(rng, log_unobserved_factors_kernel_means[i], log_unobserved_factors_kernel_log_stds[i]), a_min=jnp.log(1e-2))
         def sample_all_unobs_kernel(i):
             return jax.lax.cond(node_mask[i] >= 0, sample_unobs_kernel, lambda i: zeros_vec, i)
         nodes_log_unobserved_factors_kernels = vmap(sample_all_unobs_kernel)(jnp.arange(len(cnvs)))
 
-        unobserved_means = jnp.clip(unobserved_means, a_min=jnp.log(1e-3))
-        unobserved_log_stds = jnp.clip(unobserved_log_stds, a_min=jnp.log(1e-2))
+        unobserved_means = jnp.clip(unobserved_means, a_min=jnp.log(1e-3), a_max=jnp.log(1e2))
+        unobserved_log_stds = jnp.clip(unobserved_log_stds, a_min=jnp.log(1e-2), a_max=jnp.log(1e2))
         def sample_unobs(i):
             return diag_gaussian_sample(rng, unobserved_means[i], unobserved_log_stds[i])
         def sample_all_unobs(i):
@@ -454,7 +458,7 @@ class Node(AbstractNode):
         broadcasted_concentration = log_concentration * ones_vec
 
         def compute_node_kl(i):
-            # unobserved_factors_kernel
+            # # unobserved_factors_kernel -- USING JUST A SPARSE GAMMA DOES NOT PENALIZE KERNELS EQUAL TO ZERO
             pl = diag_gamma_logpdf(jnp.exp(nodes_log_unobserved_factors_kernels[i]), broadcasted_concentration,
                                     (parent_vector[i] != -1)*log_concentration*jnp.abs(nodes_unobserved_factors[parent_vector[i]]))
             ent = - diag_gaussian_logpdf(nodes_log_unobserved_factors_kernels[i], log_unobserved_factors_kernel_means[i], log_unobserved_factors_kernel_log_stds[i])
@@ -485,8 +489,9 @@ class Node(AbstractNode):
         # Global vars KL
         baseline_kl = diag_gaussian_logpdf(log_baseline, zeros_vec[1:], zeros_vec[1:]) - diag_gaussian_logpdf(log_baseline, log_baseline_mean, log_baseline_log_std)
         ones_mat = jnp.ones(log_factors_precisions.shape)
-        factor_precision_kl = diag_gamma_logpdf(jnp.exp(log_factors_precisions), 2*ones_mat, ones_mat) - diag_gaussian_logpdf(log_factors_precisions, factor_precision_log_means, factor_precision_log_stds)
-        noise_factors_kl = diag_gaussian_logpdf(noise_factors, jnp.zeros(noise_factors.shape), jnp.sqrt(jnp.exp(-log_factors_precisions)).reshape(-1,1) * jnp.ones(noise_factors.shape)) - diag_gaussian_logpdf(noise_factors, noise_factors_mean, noise_factors_log_std)
+        zeros_mat = jnp.zeros(log_factors_precisions.shape)
+        factor_precision_kl = diag_gamma_logpdf(jnp.exp(log_factors_precisions), jnp.log(self.global_noise_factors_precisions_shape)*ones_mat, zeros_mat) - diag_gaussian_logpdf(log_factors_precisions, factor_precision_log_means, factor_precision_log_stds)
+        noise_factors_kl = diag_gaussian_logpdf(noise_factors, jnp.zeros(noise_factors.shape), jnp.log(jnp.sqrt(1./jnp.exp(log_factors_precisions)).reshape(-1,1)) * jnp.ones(noise_factors.shape)) - diag_gaussian_logpdf(noise_factors, noise_factors_mean, noise_factors_log_std)
         total_kl = node_kl + baseline_kl + factor_precision_kl + noise_factors_kl
 
         # Scale the KL by the data size
@@ -499,8 +504,6 @@ class Node(AbstractNode):
 
         elbo_val = l + total_kl
 
-        # Scale by minibatch
-        elbo_val = elbo_val # * self.tssb.ntssb.num_data / jnp.sum(data_mask_subset != 0)
         return elbo_val
 
     # ========= Functions to acess root's parameters. =========
@@ -582,17 +585,23 @@ class Node(AbstractNode):
         else:
             return self.parent().unobserved_factors_kernel_caller()
 
-    def cell_global_noise_factors_weights_caller(self):
+    def cell_global_noise_factors_weights_caller(self, variational=False):
         if self.parent() is None:
-            return self.cell_global_noise_factors_weights
+            if variational:
+                return self.variational_parameters['globals']['cell_noise_mean']
+            else:
+                return self.cell_global_noise_factors_weights
         else:
-            return self.parent().cell_global_noise_factors_weights_caller()
+            return self.parent().cell_global_noise_factors_weights_caller(variational=variational)
 
-    def global_noise_factors_caller(self):
+    def global_noise_factors_caller(self, variational=False):
         if self.parent() is None:
-            return self.global_noise_factors
+            if variational:
+                return self.variational_parameters['globals']['noise_factors_mean']
+            else:
+                return self.global_noise_factors
         else:
-            return self.parent().global_noise_factors_caller()
+            return self.parent().global_noise_factors_caller(variational=variational)
 
     def set_event_string(self, var_names=None, estimated=True, unobs_threshold=1., kernel_threshold=1., max_len=5, event_fontsize=14):
         if var_names is None:
