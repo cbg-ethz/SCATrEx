@@ -1359,6 +1359,21 @@ class NTSSB(object):
                             observed_node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.log(observed_node.unobserved_factors_kernel_concentration_caller())*np.ones((observed_node.n_genes,))
                             unobserved_node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.log(unobserved_node.unobserved_factors_kernel_concentration_caller())*np.ones((unobserved_node.n_genes,))
 
+                            # Put same-subtree children of unobserved node in its parent in order to not move a whole subtree
+                            nodes = self._get_nodes(get_roots=True)
+                            unobserved_node_tssb_root = [node[1] for node in nodes if node[0] == unobserved_node][0]
+                            parent_unobserved_node_tssb_root = [node[1] for node in nodes if node[0] == parent_unobserved][0]
+                            for i, unobs_child in enumerate(unobserved_node_tssb_root['children']):
+                                unobs_child['node'].set_parent(unobserved_node.parent())
+                                # Add children from unobserved to the parent dict
+                                parent_unobserved_node_tssb_root['children'].append(unobs_child)
+                                parent_unobserved_node_tssb_root['sticks'] = np.vstack([ parent_unobserved_node_tssb_root['sticks'], unobserved_node_tssb_root['sticks'][i] ])
+                            if len(unobserved_node_tssb_root['children']) > 0:
+                                # Remove children from unobserved
+                                unobserved_node_tssb_root['sticks']   = np.array([]).reshape(0,1)
+                                unobserved_node_tssb_root['children'] = []
+
+                            # Now move the unobserved node to below the observed one
                             observed_node.set_parent(parent_unobserved)
                             unobserved_node.set_parent(observed_node)
                             unobserved_node.tssb = observed_node.tssb
@@ -1376,11 +1391,9 @@ class NTSSB(object):
                             tokeep = np.where(childnodes != unobserved_node_tssb_root['node'])[0].astype(int).ravel()
                             parent_unobserved_node_tssb_root['sticks']   = parent_unobserved_node_tssb_root['sticks'][tokeep]
                             parent_unobserved_node_tssb_root['children'] = list(np.array(parent_unobserved_node_tssb_root['children'])[tokeep])
-
                             # Update observed_node's pivot_node to unobserved_node's parent
                             observed_node_ntssb_root = observed_node.tssb.get_ntssb_root()
                             observed_node_ntssb_root['pivot_node'] = parent_unobserved
-
                             # Add unobserved_node to observed_node's dict
                             observed_node_tssb_root = observed_node_ntssb_root['node'].root
                             observed_node_tssb_root['children'].append(unobserved_node_tssb_root)
