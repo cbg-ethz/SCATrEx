@@ -1184,6 +1184,29 @@ class NTSSB(object):
 
         return root['children'][-1]['node']
 
+    def perturb_node(self, node, target):
+        # Perturb parameters of node to become closer to data explained by target
+        if isinstance(node, str) and isinstance(target, str):
+            self.plot_tree(super_only=False);
+            nodes_list = np.array(self.get_nodes())
+            node_labels = np.array([node[0].label for node in nodes_list])
+            node = nodes_list[np.where(node_labels == node)[0][0]]
+            target = nodes_list[np.where(node_labels == target)[0][0]]
+
+        data_indices = list(target.data.copy())
+
+        if len(data_indices) > 0:
+            index = np.random.choice(np.array(data_indices))
+            # worst_index = np.argmin(root['node'].data_ass_logits[data_indices])
+            # worst_index = np.random.choice(np.array(data_indices)[np.array([np.argsort(target.data_ass_logits[data_indices])[:5]])].ravel())
+            print(f'Setting node to explain datum {index}')
+            worst_datum = self.data[index]
+            baseline = np.append(1, np.exp(self.root['node'].root['node'].log_baseline_caller()))
+            noise = self.root['node'].root['node'].variational_parameters['globals']['cell_noise_mean'][index].dot(self.root['node'].root['node'].variational_parameters['globals']['noise_factors_mean'])
+            total_rna = np.sum(baseline * node.cnvs/2 * np.exp(node.variational_parameters['locals']['unobserved_factors_mean'] + noise))
+            node.variational_parameters['locals']['unobserved_factors_mean'] = np.log((worst_datum+1) * total_rna/(self.root['node'].root['node'].lib_sizes[index]*baseline * node.cnvs/2 * np.exp(noise)))
+            node.set_mean(node.get_mean(unobserved_factors=node.variational_parameters['locals']['unobserved_factors_mean'], baseline=baseline))
+
     def remove_last_leaf_node(self, parent_label):
         nodes = self._get_nodes(get_roots=True)
         node_labels = np.array([node[0].label for node in nodes])

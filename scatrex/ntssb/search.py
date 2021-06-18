@@ -24,7 +24,7 @@ class StructureSearch(object):
         self.best_tree = deepcopy(self.tree)
 
     def run_search(self, n_iters=1000, n_iters_elbo=1000, thin=10, local=True, num_samples=1, step_size=0.001, verbose=True, tol=1e-6, mb_size=100, max_nodes=5, debug=False, callback=None, alpha=0.01, Tmax=10, anneal=False, restart_step=10,
-                    moves=['add', 'merge', 'pivot_reattach', 'swap', 'subtree_reattach', 'globals', 'push_subtree', 'full'], merge_n_tries=5, opt=None, search_callback=None, add_rule='accept'):
+                    moves=['add', 'merge', 'pivot_reattach', 'swap', 'subtree_reattach', 'push_subtree', 'perturb_node', 'globals', 'full'], merge_n_tries=5, opt=None, search_callback=None, add_rule='accept', **callback_kwargs):
         print(f'Will search for the maximum marginal likelihood tree with the following moves: {moves}\n')
         main_step_size = step_size
         T = Tmax
@@ -97,6 +97,8 @@ class StructureSearch(object):
                 init_root, init_elbo = self.subtree_reattach(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, debug=debug, mb_size=mb_size, max_nodes=max_nodes, opt=opt, callback=callback)
             elif move_id == 'push_subtree':
                 init_root, init_elbo = self.push_subtree(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, debug=debug, mb_size=mb_size, max_nodes=max_nodes, opt=opt, callback=callback)
+            elif move_id == 'perturb_node':
+                init_root, init_elbo = self.perturb_node(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, debug=debug, mb_size=mb_size, max_nodes=max_nodes, opt=opt, callback=callback)
             elif move_id == 'globals':
                 init_root = deepcopy(self.tree.root)
                 init_elbo = self.tree.elbo
@@ -284,6 +286,7 @@ class StructureSearch(object):
         subtree = np.random.choice(subtrees, p=[1./len(subtrees)]*len(subtrees))
         init_pivot_node = subtree.root['node'].parent()
         init_pivot = init_pivot_node.label
+        init_pivot_node_parent = init_pivot_node.parent()
 
         # Choose a pivot node from the parent subtree that isn't the current one
         weights, nodes = init_pivot_node.tssb.get_fixed_weights()
@@ -305,6 +308,10 @@ class StructureSearch(object):
 
             if verbose:
                 print(f"Trying to set {node.label} as pivot of {subtree.label}")
+
+            if len(init_pivot_node.data) == 0 and init_pivot_node_parent is not None and len(init_pivot_node.children()) == 0:
+                print(f"Also removing initial pivot ({init_pivot_node.label}) from tree")
+                self.tree.merge_nodes(init_pivot_node, init_pivot_node_parent)
 
             root_node = None
             if local:
@@ -552,5 +559,44 @@ class StructureSearch(object):
                 self.tree.optimize_elbo(root_node=root_node, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
                 if verbose:
                     print(f"{init_elbo} -> {self.tree.elbo}")
+
+        return init_root, init_elbo
+
+    def perturb_node(self, local=False, num_samples=1, n_iters=100, thin=10, tol=1e-7, step_size=0.05, mb_size=100, max_nodes=5, verbose=True, debug=False, opt=None, callback=None):
+        # Move node towards the data in its neighborhood that is currently explained by nodes in its neighborhood
+        init_root = deepcopy(self.tree.root)
+        init_elbo = self.tree.elbo
+
+        nodes = self.tree.get_nodes()
+        node = np.random.choice(nodes)
+
+        # Decide wether to move closer to parent, sibling or child
+        parent = node.parent()
+        if parent is not None:
+            siblings = np.array([n for n in list(parent.children()) if n != node])
+            parent = np.array([parent])
+        else:
+            parent = np.array([])
+            siblings = np.array([])
+        children = np.array(list(node.children()))
+        if len(children) == 0:
+            children = np.array([])
+        possibilities = np.concatenate([parent, siblings, children])
+        probs = np.array([1+node.num_local_data() for node in possibilities]) # the more data they have, the more likely it is that we decide to move towards them
+        probs = probs / np.sum(probs)
+
+        target = np.random.choice(possibilities, p=probs)
+
+        if verbose:
+            print(f"Trying to move {node.label} close to {target.label}...")
+
+        self.tree.perturb_node(node, target)
+        root_node = node
+        if not local:
+            root_node = None
+        self.tree.optimize_elbo(root_node=root_node, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
+
+        if verbose:
+            print(f"{init_elbo} -> {self.tree.elbo}")
 
         return init_root, init_elbo
