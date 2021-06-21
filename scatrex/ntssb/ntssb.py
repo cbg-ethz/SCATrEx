@@ -1990,3 +1990,72 @@ class NTSSB(object):
             for child in list(node.children()):
                 descend(child)
         descend(self.root['node'].root['node'])
+
+
+    # ========= Methods to compute cell-cell distances in the tree. =========
+
+    def create_augmented_tree_dict(self):
+        self.node_dict = dict()
+        def descend(node):
+            self.node_dict[node.label] = dict()
+            self.node_dict[node.label]['node'] = node
+            if node.parent() is not None:
+                self.node_dict[node.label]['parent'] = node.parent().label
+            else:
+                self.node_dict[node.label]['parent'] = 'NULL'
+            for child in list(node.children()):
+                descend(child)
+        descend(self.root['node'].root['node'])
+
+    def path_to_node(self, node_id):
+        path = []
+        path.append(node_id)
+        parent_id = self.node_dict[node_id]['parent']
+        while parent_id != 'NULL':
+            path.append(parent_id)
+            parent_id = self.node_dict[parent_id]['parent']
+        return path[::-1][:]
+
+    def path_between_nodes(self, nodeA, nodeB):
+        pathA = np.array(self.path_to_node(nodeA))
+        pathB = np.array(self.path_to_node(nodeB))
+        path = []
+        # Get MRCA
+        i = -1
+        for node in pathA:
+            if node in pathB:
+                i += 1
+            else:
+                break
+        mrca = pathA[i]
+        pathA = np.array(pathA[::-1])
+        # Get path from A to MRCA
+        path = path + list(pathA[:np.where(pathA == mrca)[0][0]])
+        # Get path from MRCA to B
+        path = path + list(pathB[np.where(pathB == mrca)[0][0]:])
+        return path
+
+    # TODO: Should have a distance that counts the number of changed genes while going through the path
+    def get_distance(self, id1, id2, distance='n_nodes'):
+        path = self.path_between_nodes(id1, id2)
+
+        dist = 0
+        if distance == 'n_nodes':
+            dist = len(path)
+        else:
+            for node in path:
+                dist += self.node_dict[node][distance]
+
+        return dist
+
+    def get_pairwise_cell_distances(self, distance='n_nodes'):
+        n_cells = len(self.assignments)
+        mat = np.zeros((n_cells, n_cells))
+
+        for i in range(1, n_cells):
+            id1 = self.assignments[i].label
+            for j in range(i):
+                id2 = self.assignments[j].label
+                mat[i][j] = self.get_distance(str(id1), str(id2), distance=distance)
+
+        return mat
