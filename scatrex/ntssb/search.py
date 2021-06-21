@@ -24,7 +24,8 @@ class StructureSearch(object):
         self.best_tree = deepcopy(self.tree)
 
     def run_search(self, n_iters=1000, n_iters_elbo=1000, thin=10, local=True, num_samples=1, step_size=0.001, verbose=True, tol=1e-6, mb_size=100, max_nodes=5, debug=False, callback=None, alpha=0.01, Tmax=10, anneal=False, restart_step=10,
-                    moves=['add', 'merge', 'pivot_reattach', 'swap', 'subtree_reattach', 'push_subtree', 'perturb_node', 'globals', 'full'], merge_n_tries=5, opt=None, search_callback=None, add_rule='accept', **callback_kwargs):
+                    moves=['add', 'merge', 'pivot_reattach', 'swap', 'subtree_reattach', 'push_subtree', 'perturb_node', 'globals', 'full'],
+                    move_weights=[1, 1, 1, 1, 1, 1, 1, 1, 1], merge_n_tries=5, opt=None, search_callback=None, add_rule='accept', **callback_kwargs):
         print(f'Will search for the maximum marginal likelihood tree with the following moves: {moves}\n')
         main_step_size = step_size
         T = Tmax
@@ -52,12 +53,7 @@ class StructureSearch(object):
         move_id = 'full'
         n_merge = 0
         # Search tree
-        p = np.array([1.] * len(moves))
-        try:
-            # p[np.where(np.array(moves)=='add')[0][0]] = 1.5
-            p[np.where(np.array(moves)=='globals')[0][0]] = 0.5
-        except:
-            pass
+        p = np.array(move_weights)
         p = p / np.sum(p)
         for i in tqdm(range(n_iters)):
             start = time()
@@ -67,21 +63,21 @@ class StructureSearch(object):
                 if np.mod(i, 5) == 0:
                     if np.sum(mixture < 0.1*1./n_nodes) > .3*n_nodes:
                         # Reduce probability of adding, and only add if score improves
-                        p = np.array([1.] * len(moves))
+                        p = np.array(move_weights)
                         p[np.where(np.array(moves)=='add')[0][0]] = 0.25 * 1/len(moves)
                         add_rule = 'improve'
                     else:
                         # Keep uniform move probability and always accept adds
-                        p = np.array([1.] * len(moves))
+                        p = np.array(move_weights)
                         add_rule = 'accept'
             except:
                 pass
 
             p = p / np.sum(p)
-            if move_id == 'add':
-               move_id = 'merge' # always try to merge after adding
-            else:
-               move_id = np.random.choice(moves, p=p)
+            # if move_id == 'add':
+            #    move_id = 'merge' # always try to merge after adding # not -- must give a chance for the noise factors to be updated too
+            # else:
+            move_id = np.random.choice(moves, p=p)
 
             if move_id == 'add':
                 init_root, init_elbo = self.add_node(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, mb_size=mb_size, max_nodes=max_nodes, debug=debug, opt=opt, callback=callback)
