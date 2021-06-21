@@ -1187,7 +1187,7 @@ class NTSSB(object):
         if isinstance(node, str) and isinstance(target, str):
             self.plot_tree(super_only=False);
             nodes_list = np.array(self.get_nodes())
-            node_labels = np.array([node[0].label for node in nodes_list])
+            node_labels = np.array([node.label for node in nodes_list])
             node = nodes_list[np.where(node_labels == node)[0][0]]
             target = nodes_list[np.where(node_labels == target)[0][0]]
 
