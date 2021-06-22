@@ -24,8 +24,8 @@ class StructureSearch(object):
         self.best_tree = deepcopy(self.tree)
 
     def run_search(self, n_iters=1000, n_iters_elbo=1000, thin=10, local=True, num_samples=1, step_size=0.001, verbose=True, tol=1e-6, mb_size=100, max_nodes=5, debug=False, callback=None, alpha=0.01, Tmax=10, anneal=False, restart_step=10,
-                    moves=['add', 'merge', 'pivot_reattach', 'swap', 'subtree_reattach', 'push_subtree', 'perturb_node', 'globals', 'full'],
-                    move_weights=[1, 1, 1, 1, 1, 1, 1, 1, 1], merge_n_tries=5, opt=None, search_callback=None, add_rule='accept', **callback_kwargs):
+                    moves=['add', 'merge', 'pivot_reattach', 'swap', 'subtree_reattach', 'push_subtree', 'perturb_node', 'perturb_globals'],
+                    move_weights=[1, 3, 1, 1, 1, 1, 1, 1], merge_n_tries=5, opt=None, search_callback=None, add_rule='accept', **callback_kwargs):
         print(f'Will search for the maximum marginal likelihood tree with the following moves: {moves}\n')
         main_step_size = step_size
         T = Tmax
@@ -95,10 +95,6 @@ class StructureSearch(object):
                 init_root, init_elbo = self.push_subtree(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, debug=debug, mb_size=mb_size, max_nodes=max_nodes, opt=opt, callback=callback)
             elif move_id == 'perturb_node':
                 init_root, init_elbo = self.perturb_node(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, debug=debug, mb_size=mb_size, max_nodes=max_nodes, opt=opt, callback=callback)
-            elif move_id == 'globals':
-                init_root = deepcopy(self.tree.root)
-                init_elbo = self.tree.elbo
-                self.tree.optimize_elbo(root_node=None, global_only=True, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
             elif move_id == 'perturb_globals':
                 init_root = deepcopy(self.tree.root)
                 init_elbo = self.tree.elbo
@@ -106,6 +102,10 @@ class StructureSearch(object):
                 self.tree.root['node'].root['node'].variational_parameters['globals']['noise_factors_log_std'] *= 0. # allow more variation
                 self.tree.root['node'].root['node'].variational_parameters['globals']['log_baseline_mean'] *= 0.5 # shrink
                 # self.tree.root['node'].root['node'].variational_parameters['globals']['log_baseline_log_std'] *= 0. # allow more variation
+                self.tree.optimize_elbo(root_node=None, global_only=True, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
+            elif move_id == 'globals':
+                init_root = deepcopy(self.tree.root)
+                init_elbo = self.tree.elbo
                 self.tree.optimize_elbo(root_node=None, global_only=True, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
             elif move_id == 'full':
                 init_root = deepcopy(self.tree.root)
