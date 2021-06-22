@@ -27,7 +27,7 @@ for i in range(n_tries):
 
     # Learn SCATrEx tree
     search_kwargs = {'n_iters': 500, 'n_iters_elbo': 2000,
-                    'local': True}
+                    'local': True, 'mb_size': adata.shape[0]}
     sca.learn_tree(reset=True, search_kwargs=search_kwargs)
     sca_list.append(sca)
 
