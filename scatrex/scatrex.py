@@ -397,8 +397,12 @@ class SCATrEx(object):
             kwargs.setdefault('var_names', self.adata.var_names)
         self.ntssb.plot_tree(**kwargs)
 
-    def plot_tree_proj(self, figsize=(4,4), title='', lw=0.001, hw=0.003, s=10, fc='k', ec='k', fs=22, lfs=16, save=None):
-        scatterplot.plot_tree_proj(self.pca, self.ntssb, pca_obj=self.pca_obj, title=title,
+    def plot_tree_proj(self, project=True, figsize=(4,4), title='', lw=0.001, hw=0.003, s=10, fc='k', ec='k', fs=22, lfs=16, save=None):
+        if project:
+            pca_obj = self.pca_obj
+        else:
+            pca_obj = None
+        scatterplot.plot_tree_proj(self.pca, self.ntssb, pca_obj=pca_obj, title=title,
                                     line_width=lw, head_width=hw, s=s, fc=fc, ec=ec, fontsize=fs,
                                     legend_fontsize=lfs, figsize=figsize, save=save)
 
