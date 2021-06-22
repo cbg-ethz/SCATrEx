@@ -21,7 +21,7 @@ class Node(AbstractNode):
                         num_global_noise_factors=4, global_noise_factors_precisions_shape=2.,
                         cell_global_noise_factors_weights_scale=1.,
                         unobserved_factors_root_kernel=0.1, unobserved_factors_kernel=1.,
-                        unobserved_factors_kernel_concentration=0.01, **kwargs):
+                        unobserved_factors_kernel_concentration=.01, **kwargs):
         super(Node, self).__init__(is_observed, observed_parameters, **kwargs)
 
         # The observed parameters are the CNVs of all genes
@@ -132,11 +132,11 @@ class Node(AbstractNode):
                                                     size=[self.tssb.ntssb.num_data, self.num_global_noise_factors])
 
     def reset_parameters(self, root_params=True, down_params=True,
-                        log_lib_size_mean=2, log_lib_size_std=1,
-                        num_global_noise_factors=4, global_noise_factors_precisions_shape=1.,
+                        log_lib_size_mean=10, log_lib_size_std=1,
+                        num_global_noise_factors=4, global_noise_factors_precisions_shape=2.,
                         cell_global_noise_factors_weights_scale=1.,
                         unobserved_factors_root_kernel=0.1, unobserved_factors_kernel=1.,
-                        unobserved_factors_kernel_concentration=.1):
+                        unobserved_factors_kernel_concentration=.01):
         parent = self.parent()
 
         if parent is None: # this is the root
