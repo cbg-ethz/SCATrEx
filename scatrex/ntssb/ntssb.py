@@ -2048,7 +2048,15 @@ class NTSSB(object):
         if distance == 'n_nodes':
             dist = len(path)
         else:
+            prev_node = path[0]
             for node in path:
+                if node != prev_node:
+                    dist += np.sqrt(np.sum(
+                                        (self.node_dict[node]['node'].variational_parameters['locals']['unobserved_factors_mean'] -
+                                            self.node_dict[prev_node]['node'].variational_parameters['locals']['unobserved_factors_mean'])**2
+                                            )
+                                    )
+                    prev_node = node
                 dist += self.node_dict[node][distance]
 
         return dist
