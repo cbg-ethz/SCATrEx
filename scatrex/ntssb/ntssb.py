@@ -1037,6 +1037,7 @@ class NTSSB(object):
         full_data_indices = jnp.array(np.arange(self.num_data))
         data_mask_subset = jnp.array(data_mask)
         current_elbo = self.elbo
+
         if run:
             # Main loop.
             current_elbo = self.elbo
@@ -1118,7 +1119,7 @@ class NTSSB(object):
 
         for i, node in enumerate(nodes):
             node_lls = node.loglh(np.array(indices), variational=variational, axis=1)
-            node_lls = node_lls + np.log(weights[i]) if prior else node_lls
+            node_lls = node_lls + np.log(weights[i] + 1e-6) if prior else node_lls
             node.data_ass_logits[indices] = node_lls
 
     def assign_to_best(self):
