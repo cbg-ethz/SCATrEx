@@ -1141,7 +1141,7 @@ class NTSSB(object):
 
     # ========= Functions to update tree structure. =========
 
-    def add_node_to(self, node, optimal_init=True):
+    def add_node_to(self, node, optimal_init=True, factor_idx=None):
         nodes = self._get_nodes(get_roots=True)
         nodes_list = np.array([node[0] for node in nodes])
         roots_list = np.array([node[1] for node in nodes])
@@ -1166,20 +1166,24 @@ class NTSSB(object):
             root['node'].variational_parameters['locals']['nu_log_mean'] = np.array(0.)
             root['node'].variational_parameters['locals']['nu_log_std'] = np.array(0.)
             root['children'][-1]['node'].data_ass_logits = -np.inf * np.ones((self.num_data))
+            baseline = np.append(1, np.exp(self.root['node'].root['node'].log_baseline_caller()))
 
-            # Initialize the mean
-            # if len(root['children']) == 1: # Worst explained by parent
-            data_indices = list(root['node'].data.copy())
-            if len(data_indices) > 0:
-                # worst_index = np.argmin(root['node'].data_ass_logits[data_indices])
-                worst_index = np.random.choice(np.array(data_indices)[np.array([np.argsort(root['node'].data_ass_logits[data_indices])[:5]])].ravel())
-                print(f'Setting new node to explain datum {worst_index}')
-                worst_datum = self.data[worst_index]
-                baseline = np.append(1, np.exp(self.root['node'].root['node'].log_baseline_caller()))
-                noise = self.root['node'].root['node'].variational_parameters['globals']['cell_noise_mean'][worst_index].dot(self.root['node'].root['node'].variational_parameters['globals']['noise_factors_mean'])
-                total_rna = np.sum(baseline * root['node'].cnvs/2 * np.exp(root['node'].variational_parameters['locals']['unobserved_factors_mean'] + noise))
-                root['children'][-1]['node'].variational_parameters['locals']['unobserved_factors_mean'] = np.log((worst_datum+1) * total_rna/(self.root['node'].root['node'].lib_sizes[worst_index]*baseline * root['node'].cnvs/2 * np.exp(noise)))
+            if factor_idx is not None:
+                root['children'][-1]['node'].variational_parameters['locals']['unobserved_factors_mean'] = self.root['node'].root['node'].variational_parameters['globals']['noise_factors_mean'][factor_idx]
                 root['children'][-1]['node'].set_mean(root['children'][-1]['node'].get_mean(unobserved_factors=root['children'][-1]['node'].variational_parameters['locals']['unobserved_factors_mean'], baseline=baseline))
+            else:
+                # Initialize the mean
+                # if len(root['children']) == 1: # Worst explained by parent
+                data_indices = list(root['node'].data.copy())
+                if len(data_indices) > 0:
+                    # worst_index = np.argmin(root['node'].data_ass_logits[data_indices])
+                    worst_index = np.random.choice(np.array(data_indices)[np.array([np.argsort(root['node'].data_ass_logits[data_indices])[:5]])].ravel())
+                    print(f'Setting new node to explain datum {worst_index}')
+                    worst_datum = self.data[worst_index]
+                    noise = self.root['node'].root['node'].variational_parameters['globals']['cell_noise_mean'][worst_index].dot(self.root['node'].root['node'].variational_parameters['globals']['noise_factors_mean'])
+                    total_rna = np.sum(baseline * root['node'].cnvs/2 * np.exp(root['node'].variational_parameters['locals']['unobserved_factors_mean'] + noise))
+                    root['children'][-1]['node'].variational_parameters['locals']['unobserved_factors_mean'] = np.log((worst_datum+1) * total_rna/(self.root['node'].root['node'].lib_sizes[worst_index]*baseline * root['node'].cnvs/2 * np.exp(noise)))
+                    root['children'][-1]['node'].set_mean(root['children'][-1]['node'].get_mean(unobserved_factors=root['children'][-1]['node'].variational_parameters['locals']['unobserved_factors_mean'], baseline=baseline))
 
         return root['children'][-1]['node']
 

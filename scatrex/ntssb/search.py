@@ -98,7 +98,7 @@ class StructureSearch(object):
             elif move_id == 'perturb_globals':
                 init_root = deepcopy(self.tree.root)
                 init_elbo = self.tree.elbo
-                self.tree.root['node'].root['node'].variational_parameters['globals']['noise_factors_mean'] *= 0.1 # shrink
+                self.tree.root['node'].root['node'].variational_parameters['globals']['noise_factors_mean'] *= 0. # shrink
                 self.tree.root['node'].root['node'].variational_parameters['globals']['noise_factors_log_std'] *= 0. # allow more variation
                 self.tree.root['node'].root['node'].variational_parameters['globals']['log_baseline_mean'] *= 0.5 # shrink
                 # self.tree.root['node'].root['node'].variational_parameters['globals']['log_baseline_log_std'] *= 0. # allow more variation
@@ -202,12 +202,30 @@ class StructureSearch(object):
             print(f"Trying to add node below {node.label}")
         # Use only data around the node
         # data_indices = np.where(root['node'].data_probs > 1/np.sqrt(len(nodes)))[0]
-        new_node = self.tree.add_node_to(node, optimal_init=True)
+
+        # Decide wether to initialize from a factor
+        from_factor = False
+        factor_idx = None
+        if self.tree.root['node'].root['node'].num_global_noise_factors > 0:
+            from_factor = bool(np.random.binomial(1, 0.5))
+
+        if from_factor:
+            if verbose:
+                print(f"Initializing new node from noise factor")
+            factor_idx = np.argmax(np.var(self.tree.root['node'].root['node'].variational_parameters['globals']['noise_factors_mean'], axis=1))
+
+        new_node = self.tree.add_node_to(node, optimal_init=True, factor_idx=factor_idx)
 
         local_node = None
         if local:
             local_node = new_node
-        self.tree.optimize_elbo(local_node=local_node, root_node=None, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
+
+        if from_factor:
+            # Remove factor
+            self.tree.root['node'].root['node'].variational_parameters['globals']['noise_factors_mean'] *= 0.01
+            self.tree.optimize_elbo(local_node=None, root_node=None, num_samples=num_samples, n_iters=2*n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
+        else:
+            self.tree.optimize_elbo(local_node=local_node, root_node=None, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
         if verbose:
             print(f"{init_elbo} -> {self.tree.elbo}")
 
