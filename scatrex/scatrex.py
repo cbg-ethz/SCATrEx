@@ -332,6 +332,7 @@ class SCATrEx(object):
         init_log_baseline = np.log(init_baseline[1:])
         self.ntssb.root['node'].root['node'].variational_parameters['globals']['log_baseline_mean'] = np.clip(init_log_baseline, -1, 1)
         optimize_kwargs.setdefault('sticks_only', True) # ignore other node-specific parameters
+        optimize_kwargs.setdefault('mb_size', adata.shape[0]) # use all cells in batch
         elbos = self.ntssb.optimize_elbo(max_nodes=1, **optimize_kwargs)
 
         self.ntssb.plot_tree(counts=True)
