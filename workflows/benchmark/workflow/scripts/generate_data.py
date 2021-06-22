@@ -13,7 +13,7 @@ simulated_observed_tree = snakemake.output['simulated_observed_tree']
 import scatrex
 from scatrex import models
 
-model_args = dict(log_lib_size_mean=10, num_global_noise_factors=n_factors)
+model_args = dict(log_lib_size_mean=10, num_global_noise_factors=n_factors, global_noise_factors_precisions_shape=10)
 sim_sca = scatrex.SCATrEx(model=models.cna, verbose=True, model_args=model_args)
 sim_sca.simulate_tree(n_genes=n_genes, n_extra_per_observed=n_extras, seed=seed)
 sim_sca.observed_tree.create_adata()

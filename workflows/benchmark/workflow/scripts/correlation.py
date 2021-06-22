@@ -16,7 +16,6 @@ sc.pp.log1p(adata)
 sc.pp.regress_out(adata, 'total_counts')
 sc.pp.scale(adata, max_value=10)
 
-import numpy as np
 from scipy.stats import spearmanr
 
 est_labels = []

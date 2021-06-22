@@ -4,12 +4,13 @@ Vary the number of genes between 200 and 800 and fix the number of cells at 500.
 """
 import os
 
-N_EXTRAS = [1, 2, 5]
+N_EXTRAS = [1, 2]
 N_FACTORS = [0, 2, 6]
 N_CLONES = config["n_clones"]
 N_GENES = config["n_genes"]
 N_CELLS = config["n_cells"]
 N_REPS = config["n_reps"]
+N_TRIES = config["n_tries"]
 
 METHOD_LIST = config["methods"]
 
@@ -37,6 +38,8 @@ rule generate_data:
         "scripts/generate_data.py"
 
 rule run_method:
+    params:
+        n_tries = N_TRIES
     input:
         simulated_data = f'{DATA_PATH}/' + 'e{n_extras}_f{n_factors}/r{rep_id}_data.csv',
         simulated_clones = f'{DATA_PATH}/' + 'e{n_extras}_f{n_factors}/r{rep_id}_clones.csv',
