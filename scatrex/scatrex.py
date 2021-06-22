@@ -333,9 +333,8 @@ class SCATrEx(object):
         self.ntssb.root['node'].root['node'].variational_parameters['globals']['log_baseline_mean'] = np.clip(init_log_baseline, -1, 1)
         optimize_kwargs.setdefault('sticks_only', True) # ignore other node-specific parameters
         elbos = self.ntssb.optimize_elbo(max_nodes=1, **optimize_kwargs)
+
         self.ntssb.plot_tree(counts=True)
-        self.ntssb.update_ass_logits(variational=True)
-        self.ntssb.assign_to_best()
 
         assignments = np.array([labels[0]] * self.adata.shape[0])
         assignments[cell_idx] = np.array([self.observed_tree.tree_dict[assignment.tssb.label]['label'] for assignment in self.ntssb.assignments])
