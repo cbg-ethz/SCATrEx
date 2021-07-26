@@ -1,18 +1,10 @@
-.. raw:: html
-  <img src="figures/logo_text.png" width="200px" align="center">
+<div align="left">
+  <img src="figures/logo_text.png", width="400px">
+</div>
 
-
-
-.. image:: https://img.shields.io/pypi/v/scatrex.svg
-        :target: https://pypi.python.org/pypi/scatrex
-
-.. image:: https://img.shields.io/travis/pedrofale/scatrex.svg
-        :target: https://travis-ci.com/pedrofale/scatrex
-
-.. image:: https://readthedocs.org/projects/scatrex/badge/?version=latest
-        :target: https://scatrex.readthedocs.io/en/latest/?badge=latest
-        :alt: Documentation Status
-
+[![pypi](https://img.shields.io/pypi/v/scatrex.svg)](https://pypi.python.org/pypi/scatrex)
+[![Travis](https://img.shields.io/travis/pedrofale/scatrex.svg)](https://travis-ci.com/pedrofale/scatrex)
+[![readthedocs](https://readthedocs.org/projects/scatrex/badge/?version=latest)](https://scatrex.readthedocs.io/en/latest/?badge=latest)
 
 Embed single-cell transcriptomic data in a clonal tree. SCATrEx allows you to
 map tumor scRNA-seq data onto either a copy number aberration or a single-nucleotide
