@@ -1,5 +1,6 @@
 .. image:: figures/logo_text.png
-  :width: 400
+  :width: 200
+  :align: center
 
 .. image:: https://img.shields.io/pypi/v/scatrex.svg
         :target: https://pypi.python.org/pypi/scatrex
