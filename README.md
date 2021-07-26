@@ -6,9 +6,9 @@
 [![Travis](https://img.shields.io/travis/pedrofale/scatrex.svg)](https://travis-ci.com/pedrofale/scatrex)
 [![readthedocs](https://readthedocs.org/projects/scatrex/badge/?version=latest)](https://scatrex.readthedocs.io/en/latest/?badge=latest)
 
-Embed single-cell transcriptomic data in a clonal tree. SCATrEx allows you to
-map tumor scRNA-seq data onto either a copy number aberration or a single-nucleotide
-variant clonal tree and identify extra subpopulations that respect that
+Augment a clonal tree with single-cell transcriptomic data. SCATrEx allows you to
+map tumor scRNA-seq data onto a copy number aberration
+clonal tree and identify extra subpopulations that respect that
 structure. Compared with fully unsupervised clustering methods, SCATrEx enables
 the discovery of more interpretable groups of cells in light of the
 underlying evolutionary process.
