@@ -1,7 +1,5 @@
-=======
-SCATrEx
-=======
-
+.. image:: figures/logo_text.png
+  :width: 400
 
 .. image:: https://img.shields.io/pypi/v/scatrex.svg
         :target: https://pypi.python.org/pypi/scatrex
