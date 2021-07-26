@@ -1,5 +1,5 @@
 .. raw:: html
-  <embed><img src="figures/logo_text.png" width="200" align="center"></embed>
+  <img src="figures/logo_text.png" width="200px" align="center">
 
 
 
