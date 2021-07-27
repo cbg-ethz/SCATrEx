@@ -23,7 +23,7 @@ class StructureSearch(object):
         self.best_elbo = self.tree.elbo
         self.best_tree = deepcopy(self.tree)
 
-    def run_search(self, n_iters=1000, n_iters_elbo=1000, thin=10, local=True, num_samples=1, step_size=0.001, verbose=True, tol=1e-6, mb_size=100, max_nodes=5, debug=False, callback=None, alpha=0.01, Tmax=10, anneal=False, restart_step=10,
+    def run_search(self, n_iters=1000, n_iters_elbo=1000, factor_delay=0, thin=10, local=True, num_samples=1, step_size=0.001, verbose=True, tol=1e-6, mb_size=100, max_nodes=5, debug=False, callback=None, alpha=0.01, Tmax=10, anneal=False, restart_step=10,
                     moves=['add', 'merge', 'pivot_reattach', 'swap', 'subtree_reattach', 'push_subtree', 'perturb_node', 'perturb_globals'],
                     move_weights=[1, 3, 1, 1, 1, 1, 1, 1], merge_n_tries=5, opt=None, search_callback=None, add_rule='accept', **callback_kwargs):
         print(f'Will search for the maximum marginal likelihood tree with the following moves: {moves}\n')
@@ -32,21 +32,29 @@ class StructureSearch(object):
         if not anneal:
             T = 1.
 
+        n_factors = self.tree.root['node'].root['node'].num_global_noise_factors
+
+        init_baseline = np.mean(self.tree.data / np.sum(self.tree.data, axis=1).reshape(-1,1) * self.tree.data.shape[1], axis=0)
+        init_baseline = init_baseline / init_baseline[0]
+        init_log_baseline = np.log(init_baseline[1:])
+        init_log_baseline = np.clip(init_log_baseline, -1, 1)
+
         if len(self.traces['score']) == 0:
+            if n_factors > 0 and factor_delay > 0:
+                self.tree.root['node'].root['node'].num_global_noise_factors = 0
+
             # Compute score of initial tree
             self.tree.reset_variational_parameters()
-            init_baseline = np.mean(self.tree.data / np.sum(self.tree.data, axis=1).reshape(-1,1) * self.tree.data.shape[1], axis=0)
-            init_baseline = init_baseline / init_baseline[0]
-            init_log_baseline = np.log(init_baseline[1:])
-            self.tree.root['node'].root['node'].variational_parameters['globals']['log_baseline_mean'] = np.clip(init_log_baseline, -1, 1)
+            self.tree.root['node'].root['node'].variational_parameters['globals']['log_baseline_mean'] = init_log_baseline
             self.tree.optimize_elbo(root_node=None, sticks_only=True, num_samples=num_samples, n_iters=n_iters_elbo*10, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
 
             # full update
             self.tree.optimize_elbo(root_node=None, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
-            self.best_elbo = self.tree.elbo
-            self.best_tree = deepcopy(self.tree)
+            self.tree.plot_tree(super_only=False)
             self.tree.update_ass_logits(variational=True)
             self.tree.assign_to_best()
+            self.best_elbo = self.tree.elbo
+            self.best_tree = deepcopy(self.tree)
 
         init_elbo = self.tree.elbo
         init_root = self.tree.root
@@ -78,6 +86,12 @@ class StructureSearch(object):
             #    move_id = 'merge' # always try to merge after adding # not -- must give a chance for the noise factors to be updated too
             # else:
             move_id = np.random.choice(moves, p=p)
+
+            if i == factor_delay and n_factors > 0:
+                self.tree = deepcopy(self.best_tree)
+                self.tree.root['node'].root['node'].num_global_noise_factors = n_factors
+                self.tree.root['node'].root['node'].init_noise_factors()
+                move_id = 'full'
 
             if move_id == 'add':
                 init_root, init_elbo = self.add_node(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, mb_size=mb_size, max_nodes=max_nodes, debug=debug, opt=opt, callback=callback)
