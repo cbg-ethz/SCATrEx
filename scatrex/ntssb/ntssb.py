@@ -1408,6 +1408,7 @@ class NTSSB(object):
                             unobserved_node.set_parent(observed_node)
                             unobserved_node.tssb = observed_node.tssb
                             unobserved_node.cnvs = observed_node.cnvs
+                            unobserved_node.observed_parameters = observed_node.observed_parameters
                             n_siblings = len(list(observed_node.children()))
                             unobserved_node.label = observed_node.label + '-' + str(n_siblings-1)
 
@@ -1671,7 +1672,10 @@ class NTSSB(object):
         # Move subtree
         roots[nodeA_idx]['node'].set_parent(target_subtree['node'].root['node'])
         roots[nodeA_idx]['node'].set_mean(variational=True)
-        roots[nodeA_idx]['node'].tssb = target_subtree['node']
+        for n in nodes_below_nodeA:
+            n.tssb = target_subtree['node']
+            n.cnvs = target_subtree['node'].root['node'].cnvs
+            n.observed_parameters = target_subtree['node'].root['node'].observed_parameters
         target_subtree['node'].root['children'].append(roots[nodeA_idx])
         target_subtree['node'].root['sticks'] = np.vstack([target_subtree['node'].root['sticks'], 1.])
 
