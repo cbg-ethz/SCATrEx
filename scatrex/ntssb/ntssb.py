@@ -1570,7 +1570,7 @@ class NTSSB(object):
     #                     observed_node_tssb_root['children'].append(unobserved_node_tssb_root)
     #                     observed_node_tssb_root['sticks'] = np.vstack([observed_node_tssb_root['sticks'], 1.])
 
-    def merge_nodes(self, nodeA, nodeB):
+    def merge_nodes(self, nodeA, nodeB, optimal_params=True):
         if isinstance(nodeA, str) and isinstance(nodeB, str):
             self.plot_tree(super_only=False)
             nodes = self.get_nodes(None)
@@ -1606,7 +1606,17 @@ class NTSSB(object):
                 ntssb_root['pivot_node'] = nodeB_root['node']
         nodeA_root['node'].children().clear()
 
+        numDataA, numDataB = (len(nodeA.data), len(nodeB.data))
         nodeB.data.update(nodeA.data)
+
+        # Keep node that explains the most data
+        if optimal_params:
+            if numDataA > numDataB:
+                nodeB.variational_parameters['locals']['unobserved_factors_mean'] = nodeA.variational_parameters['locals']['unobserved_factors_mean']
+                nodeB.variational_parameters['locals']['unobserved_factors_log_std'] = nodeA.variational_parameters['locals']['unobserved_factors_log_std']
+                nodeB.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = nodeA.variational_parameters['locals']['unobserved_factors_kernel_log_mean']
+                nodeB.variational_parameters['locals']['unobserved_factors_kernel_log_std'] = nodeA.variational_parameters['locals']['unobserved_factors_kernel_log_std']
+                nodeB.set_mean(variational=True)
 
         # Remove nodeA from tssb root dict
         nodes = np.array([n['node'] for n in nodeA_parent_root['children']])
