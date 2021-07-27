@@ -2016,7 +2016,7 @@ class NTSSB(object):
         print(f'Created `self.gene_node_colormaps` with keys {list(self.gene_node_colormaps.keys())}')
 
     def plot_tree(self, super_only=False, counts=False, root_fillcolor=None, events=False, color_subclusters=False, reset_names=True, ordered=False,
-                    genemode='avg', show_labels=True, color_by_weight=False, gene=None, fontcolor='black'):
+                    genemode='avg', show_labels=True, color_by_weight=False, gene=None, fontcolor='black', pivot_probabilities=None):
 
         node_color_dict = None
 
@@ -2048,7 +2048,19 @@ class NTSSB(object):
                         if show_labels:
                             lab = child['pivot_node'].label + '<br/><br/>' + lab
                         g.node(child['pivot_node'].label, '<' + lab + '>')
-                    g.edge(child['pivot_node'].label, child['node'].root['label'])
+                    if pivot_probabilities is not None:
+                        if child['node'].root['label'] in pivot_probabilities:
+                            for pivot in pivot_probabilities[child['node'].root['label']]:
+                                prob = pivot_probabilities[child['node'].root['label']][pivot]
+                                weight = prob * 4.
+                                weight = np.max([0.1, weight])
+                                prob_str = " " + f"{prob:0.2g}".lstrip('0')
+                                arrowsize = np.min([1, weight])
+                                g.edge(pivot, child['node'].root['label'], penwidth=str(weight), arrowsize=str(arrowsize), label=prob_str, color=child['node'].color)
+                        else:
+                            g.edge(child['pivot_node'].label, child['node'].root['label'])
+                    else:
+                        g.edge(child['pivot_node'].label, child['node'].root['label'])
                     g = descend(child, g)
                 return g
             g = descend(self.root, g)
