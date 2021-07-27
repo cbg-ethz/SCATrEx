@@ -55,6 +55,15 @@ class Node(AbstractNode):
         node_mean = node_mean / sum
         return node_mean
 
+    def init_noise_factors(self):
+        # Noise
+        self.variational_parameters['globals']['cell_noise_mean'] = np.zeros((self.tssb.ntssb.num_data, self.num_global_noise_factors))
+        self.variational_parameters['globals']['cell_noise_log_std'] = -np.ones((self.tssb.ntssb.num_data, self.num_global_noise_factors))
+        self.variational_parameters['globals']['noise_factors_mean'] = np.zeros((self.num_global_noise_factors, self.n_genes))
+        self.variational_parameters['globals']['noise_factors_log_std'] = -np.ones((self.num_global_noise_factors, self.n_genes))
+        self.variational_parameters['globals']['factor_precision_log_means'] = np.log(self.global_noise_factors_precisions_shape)*np.ones((self.num_global_noise_factors))
+        self.variational_parameters['globals']['factor_precision_log_stds'] = -np.ones((self.num_global_noise_factors))
+
     def reset_variational_parameters(self, means=True, variances=True):
         if self.parent() is None:
             # Baseline: first value is 1
