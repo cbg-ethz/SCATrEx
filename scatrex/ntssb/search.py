@@ -93,7 +93,7 @@ class StructureSearch(object):
                 self.tree.root['node'].root['node'].init_noise_factors()
                 move_id = 'full'
 
-            if move_id == 'add':
+            if move_id == 'add' and self.tree.n_nodes < self.tree.max_nodes:
                 init_root, init_elbo = self.add_node(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, mb_size=mb_size, max_nodes=max_nodes, debug=debug, opt=opt, callback=callback)
             elif move_id == 'merge':
                 init_root, init_elbo = self.merge_nodes(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, mb_size=mb_size, max_nodes=max_nodes, debug=debug, opt=opt, callback=callback)
