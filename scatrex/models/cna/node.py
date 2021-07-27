@@ -187,7 +187,7 @@ class Node(AbstractNode):
         else: # Non-root node: inherits everything from upstream node
             self.node_hyperparams = self.node_hyperparams_caller()
             if down_params:
-                self.unobserved_factors_kernel = gamma_sample(self.unobserved_factors_kernel_concentration_caller(), 0.3 * np.exp(np.abs(parent.unobserved_factors)), size=self.n_genes)
+                self.unobserved_factors_kernel = gamma_sample(self.unobserved_factors_kernel_concentration_caller(), np.exp(np.abs(parent.unobserved_factors)), size=self.n_genes)
                 self.unobserved_factors = normal_sample(parent.unobserved_factors, self.unobserved_factors_kernel)
                 self.unobserved_factors = np.clip(self.unobserved_factors, -4, 4)
 
