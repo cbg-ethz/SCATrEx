@@ -9,6 +9,7 @@ from scipy.stats import spearmanr
 import matplotlib.pyplot as plt
 import pickle
 from copy import deepcopy
+import os
 
 import scanpy as sc
 from anndata import AnnData
@@ -17,7 +18,8 @@ class SCATrEx(object):
     def __init__(self,
                  model=cna,
                  model_args=dict(),
-                 verbose=False):
+                 verbose=False,
+                 temppath='./temppath'):
 
         self.model = cna
         self.model_args = model_args
@@ -27,6 +29,9 @@ class SCATrEx(object):
         self.verbose = verbose
         self.search = None
         self.adata = None
+        self.temppath = temppath
+        if not os.path.exists(temppath):
+            os.makedirs(temppath)
 
     def add_data(self, data):
         """
@@ -165,6 +170,8 @@ class SCATrEx(object):
             cells = np.where(self.adata.obs['node'][cell_idx]==clone_id)[0]
             cnv_mat[cells] = np.array(clones)[np.where(np.array(labels)==clone_id)[0]]
         self.adata.layers['cnvs'] = cnv_mat
+
+        self.ntssb.initialize_gene_node_colormaps()
 
     def learn_clonemap_corr(self, observed_tree=None, cell_filter=None, layer='scaled', dna_diploid_threshold=0.95):
         if not self.observed_tree and observed_tree is None:
@@ -356,6 +363,8 @@ class SCATrEx(object):
             cnv_mat[cells] = np.array(clones[clone_idx])
         self.adata.layers['clonemap_cnvs'] = np.array(cnv_mat)
 
+        self.ntssb.initialize_gene_node_colormaps()
+
         return elbos
 
     def normalize_data(self, target_sum=1e4, log=True, copy=False):
@@ -389,13 +398,40 @@ class SCATrEx(object):
         # Assign to best
         return
 
-    def plot_tree(self, **kwargs):
+    def plot_tree(self, ax=None, figsize=(6,6), dpi=100, tree_dpi=300, cbtitle='', title='', show_colorbar=True, **kwargs):
         """
         The nodes will be coloured according to the average normalized counts of the feature indicated in `color`
         """
+        gene = None
+        if 'gene' in kwargs:
+            gene = kwargs['gene']
+
         if self.adata is not None:
-            kwargs.setdefault('var_names', self.adata.var_names)
-        self.ntssb.plot_tree(**kwargs)
+            if gene is not None:
+                gene_pos = np.where(self.adata.var_names == gene)[0][0]
+                kwargs['gene'] = gene_pos
+
+        g = self.ntssb.plot_tree(**kwargs)
+
+        if gene is not None:
+            # Plot colorbar
+            g.attr(dpi=str(tree_dpi))
+            g.render('temptree', directory=self.temppath, format='png')
+            im = plt.imread(os.path.join(self.temppath, 'temptree.png'))
+            if ax is not None:
+                plt.sca(ax)
+            else:
+                plt.figure(figsize=figsize, dpi=dpi)
+            plt.imshow(im, interpolation='bilinear')
+            if show_colorbar:
+                plt.colorbar(self.ntssb.gene_node_colormaps[kwargs['genemode']]['mapper'], label=cbtitle)
+            plt.axis('off')
+            plt.title(title)
+            g = plt.gca()
+            os.remove(os.path.join(self.temppath, 'temptree.png'))
+            os.remove(os.path.join(self.temppath, 'temptree'))
+
+        return g
 
     def plot_tree_proj(self, project=True, figsize=(4,4), title='', lw=0.001, hw=0.003, s=10, fc='k', ec='k', fs=22, lfs=16, save=None):
         if project:
@@ -481,3 +517,39 @@ class SCATrEx(object):
 
     def compute_pathway_enrichments(self, db='kegg', method='gsva'):
         pass
+
+
+    def compute_pivot_likelihoods(self, clone='B', normalized=True):
+        """
+        For the given clone, compute the tree ELBO for each possible pivot and
+        return a dictionary of pivots and their ELBOs.
+        """
+        if clone == 'A':
+            raise ValueError('The root clone was selected, which by definition \
+            does not have parent nodes. Please select a non-root clone.')
+
+        tssbs = ntssb.get_subtrees()
+        labels = [tssb.label for tssb in tssbs]
+        tssb = subtrees[np.where(np.array(labels)==clone)[0]]
+
+        parent_tssb = tssb.root['node'].parent().tssb
+        possible_pivots = parent_tssb.get_nodes()
+
+        pivot_likelihoods = dict()
+        for pivot in possible_pivots:
+            if len(possible_pivots) == 1:
+                possible_pivots[pivot] = self.ntssb.elbo
+                print(f'Clone {clone} has only one possible parent node.')
+                break
+            ntssb = deepcopy(self.ntssb)
+            ntssb.pivot_reattach_to(clone, pivot.label)
+            ntssb.optimize_elbo()
+            pivot_likelihoods[pivot.label] = ntssb.elbo
+
+        if normalize:
+            labels = list(pivot_likelihoods.get_keys())
+            vals = list(pivot_likelihoods.get_values())
+            vals = np.array(vals)/np.sum(vals)
+            pivot_likelihoods = dict(zip(labels, vals.tolist()))
+
+        return pivot_likelihoods
