@@ -109,14 +109,15 @@ class StructureSearch(object):
                 init_root, init_elbo = self.push_subtree(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, debug=debug, mb_size=mb_size, max_nodes=max_nodes, opt=opt, callback=callback)
             elif move_id == 'perturb_node':
                 init_root, init_elbo = self.perturb_node(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, debug=debug, mb_size=mb_size, max_nodes=max_nodes, opt=opt, callback=callback)
-            elif move_id == 'perturb_globals':
+            elif move_id == 'reset_globals':
                 init_root = deepcopy(self.tree.root)
                 init_elbo = self.tree.elbo
+                self.tree.root['node'].root['node'].variational_parameters['globals']['cell_noise_mean'] *= 0. # shrink
                 self.tree.root['node'].root['node'].variational_parameters['globals']['noise_factors_mean'] *= 0. # shrink
-                self.tree.root['node'].root['node'].variational_parameters['globals']['noise_factors_log_std'] *= 0. # allow more variation
-                self.tree.root['node'].root['node'].variational_parameters['globals']['log_baseline_mean'] *= 0.5 # shrink
+                self.tree.root['node'].root['node'].variational_parameters['globals']['log_baseline_mean'] = init_log_baseline # reset to initial
+                self.tree.root['node'].root['node'].variational_parameters['locals']['unobserved_factors_mean'] *= 0. # reset to initial
                 # self.tree.root['node'].root['node'].variational_parameters['globals']['log_baseline_log_std'] *= 0. # allow more variation
-                self.tree.optimize_elbo(root_node=None, global_only=True, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
+                self.tree.optimize_elbo(root_node=None, global_only=False, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
             elif move_id == 'globals':
                 init_root = deepcopy(self.tree.root)
                 init_elbo = self.tree.elbo
