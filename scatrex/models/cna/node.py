@@ -89,7 +89,7 @@ class Node(AbstractNode):
                 if means:
                     self.variational_parameters['globals']['cell_noise_mean'] = np.zeros((self.tssb.ntssb.num_data, self.num_global_noise_factors))
                 if variances:
-                    self.variational_parameters['globals']['cell_noise_log_std'] = np.zeros((self.tssb.ntssb.num_data, self.num_global_noise_factors))
+                    self.variational_parameters['globals']['cell_noise_log_std'] = -np.ones((self.tssb.ntssb.num_data, self.num_global_noise_factors))
                 if means:
                     self.variational_parameters['globals']['noise_factors_mean'] = np.zeros((self.num_global_noise_factors, self.n_genes))
                 if variances:
