@@ -1157,48 +1157,59 @@ class TSSB(object):
         return ordered_dict
 
     def tssb_dict2graphviz(self, root_dict, g=None, counts=False, weights=False, root_fillcolor=None, color_by_weight=False, expected_weights=False, events=False, color_subclusters=False,
-                                    show_labels=True, gene=None, genemode='raw', fontcolor='black', fontname=None):
+                                    show_labels=True, gene=None, genemode='raw', fontcolor='black', fontname=None, node_color_dict=None):
         if g is None:
             g = Digraph()
             g.attr(fontcolor=fontcolor, fontname=fontname)
 
-        if color_by_weight or weights:
-            self.set_node_names()
-            if expected_weights:
-                name_weight_dict = dict([(n.label,w) for w, n in zip(*self.get_expected_mixture())])
-            else:
-                name_weight_dict = dict([(n.label,w) for w, n in zip(*self.get_mixture())])
-            w, nodes = self.get_fixed_weights()
-            for i, node in enumerate(nodes):
-                name_weight_dict[node.label] = w[i]
+        if node_color_dict is None:
+            if color_by_weight or weights:
+                self.set_node_names()
+                if expected_weights:
+                    name_weight_dict = dict([(n.label,w) for w, n in zip(*self.get_expected_mixture())])
+                else:
+                    name_weight_dict = dict([(n.label,w) for w, n in zip(*self.get_mixture())])
+                w, nodes = self.get_fixed_weights()
+                for i, node in enumerate(nodes):
+                    name_weight_dict[node.label] = w[i]
 
-            norm = matplotlib.colors.Normalize(vmin=0, vmax=1, clip=True)
-            mapper = matplotlib.cm.ScalarMappable(norm=norm, cmap=matplotlib.cm.Reds)
-            name_color_dict = dict()
-            for name in name_weight_dict:
-                color = matplotlib.colors.to_hex(mapper.to_rgba(name_weight_dict[name]))
-                name_color_dict[name] = color
+                norm = matplotlib.colors.Normalize(vmin=0, vmax=1, clip=True)
+                mapper = matplotlib.cm.ScalarMappable(norm=norm, cmap=matplotlib.cm.Reds)
+                node_color_dict = dict()
+                for name in name_weight_dict:
+                    color = matplotlib.colors.to_hex(mapper.to_rgba(name_weight_dict[name]))
+                    node_color_dict[name] = color
 
-        if gene is not None:
-            name_exp_dict = dict([(n.label,nodeavg[gene]) for n, nodeavg in zip(*self.ntssb.get_avg_node_exp())])
-            cmap = self.ntssb.exp_cmap
-            arr = np.array(list(name_exp_dict.values()))
-            norm = matplotlib.colors.Normalize(vmin=min(arr), vmax=max(arr))
-            if genemode == 'unobserved':
-                name_exp_dict = dict([(n.label,nodeavg[gene]) for n, nodeavg in zip(*self.ntssb.get_node_unobs())])
-                cmap = self.ntssb.exp_cmap
-                arr = np.array(list(name_exp_dict.values()))
-                norm = matplotlib.colors.Normalize(vmin=min(arr), vmax=max(arr))
-            elif genemode == 'observed':
-                name_exp_dict = dict([(n.label,nodeavg[gene]) for n, nodeavg in zip(*self.ntssb.get_node_obs())])
-                cmap = self.ntssb.cnv_cmap
-                arr = np.array(list(name_exp_dict.values()))
-                norm = matplotlib.colors.Normalize(vmin=0, vmax=4)
-            mapper = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap)
-            name_color_dict = dict()
-            for name in name_exp_dict:
-                color = matplotlib.colors.to_hex(mapper.to_rgba(name_exp_dict[name]))
-                name_color_dict[name] = color
+            if gene is not None:
+                if genemode == 'unobserved':
+                    nodes, vals = self.ntssb.get_node_unobs()
+                    vals = np.array(vals)
+                    global_min, global_max = np.min(vals), np.max(vals)
+                    node_labs = [node.label for node in nodes]
+                    gene_vals = [val[gene] for val in vals]
+                    cmap = self.ntssb.exp_cmap
+                    norm = matplotlib.colors.Normalize(vmin=global_min, vmax=global_max)
+                elif genemode == 'observed':
+                    nodes, vals = self.ntssb.get_node_obs()
+                    node_labs = [node.label for node in nodes]
+                    gene_vals = [val[gene] for val in vals]
+                    cmap = self.ntssb.obs_cmap
+                    norm = matplotlib.colors.Normalize(vmin=0, vmax=cmap.N-1)
+                else:
+                    nodes, vals = self.ntssb.get_avg_node_exp()
+                    vals = np.array(vals)
+                    global_min, global_max = np.min(vals), np.max(vals)
+                    node_labs = [node.label for node in nodes]
+                    gene_vals = [val[gene] for val in vals]
+                    name_exp_dict = dict([(n.label,nodeavg[gene]) for n, nodeavg in zip(*self.ntssb.get_avg_node_exp())])
+                    cmap = self.ntssb.exp_cmap
+                    norm = matplotlib.colors.Normalize(vmin=global_min, vmax=global_max)
+                name_exp_dict = dict(zip(node_labs, gene_vals))
+                mapper = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap)
+                node_color_dict = dict()
+                for name in name_exp_dict:
+                    color = matplotlib.colors.to_hex(mapper.to_rgba(name_exp_dict[name]))
+                    node_color_dict[name] = color
 
         root_label = ""
         if show_labels:
@@ -1219,9 +1230,9 @@ class TSSB(object):
         if root_fillcolor is not None:
             style = 'filled'
             fillcolor = root_fillcolor
-        elif color_by_weight or gene is not None:
+        elif node_color_dict is not None:
             style = 'filled'
-            fillcolor=name_color_dict[str(self.root['label'])]
+            fillcolor=node_color_dict[str(self.root['label'])]
         else:
             style = 'filled'
             fillcolor = self.color
@@ -1253,8 +1264,8 @@ class TSSB(object):
 
                 fillcolor = None
                 style = None
-                if color_by_weight or gene is not None:
-                    fillcolor = name_color_dict[str(child_name)]
+                if node_color_dict is not None:
+                    fillcolor = node_color_dict[str(child_name)]
                     style = 'filled'
                 g.node(str(child_name), '<' + str(child_label) + '>', fillcolor=fillcolor, style=style)
 
@@ -1270,10 +1281,10 @@ class TSSB(object):
         return g
 
     def plot_tree(self, g=None, counts=False, root_fillcolor=None, color_by_weight=False, weights=False, expected_weights=False, events=False, color_subclusters=False, reset_names=True,
-                        show_labels=True, gene=None, genemode='raw', fontcolor='black', fontname=None):
+                        show_labels=True, gene=None, genemode='raw', fontcolor='black', fontname=None, node_color_dict=None):
         if reset_names:
             self.set_node_names(root_name=self.label)
         g = self.tssb_dict2graphviz(self.root, g=g, counts=counts, root_fillcolor=root_fillcolor, color_by_weight=color_by_weight, weights=weights, expected_weights=expected_weights, events=events, color_subclusters=color_subclusters,
-                                            show_labels=show_labels, gene=gene, genemode=genemode, fontcolor=fontcolor, fontname=fontname)
+                                            show_labels=show_labels, gene=gene, genemode=genemode, fontcolor=fontcolor, fontname=fontname, node_color_dict=node_color_dict)
 
         return g

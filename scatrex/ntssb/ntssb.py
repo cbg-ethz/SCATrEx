@@ -84,8 +84,9 @@ class NTSSB(object):
         self.max_nodes = len(self.input_tree_dict.keys()) * 1 # upper bound on number of nodes
         self.n_nodes = len(self.input_tree_dict.keys())
 
-        self.cnv_cmap = matplotlib.colors.LinearSegmentedColormap.from_list("cmap", ["#2040C8", "white", "#EE241D"])
+        self.obs_cmap = self.input_tree.cmap
         self.exp_cmap = matplotlib.cm.viridis
+        self.gene_node_colormaps = dict()
 
         self.reset_tree(use_weights=use_weights, node_hyperparams=node_hyperparams)
 
@@ -1935,8 +1936,12 @@ class NTSSB(object):
     def get_node_unobs(self):
         nodes = self.get_nodes(None)
         unobs = []
+        estimated = np.var(nodes[0].variational_parameters['locals']['unobserved_factors_mean']) != 0
+        if estimated:
+            print("Getting the learned unobserved factors.")
         for node in nodes:
-            unobs.append(node.unobserved_factors)
+            unobs_factors = node.unobserved_factors if not estimated else node.variational_parameters['locals']['unobserved_factors_mean']
+            unobs.append(unobs_factors)
         return nodes, unobs
 
     def get_node_obs(self):
@@ -1975,15 +1980,60 @@ class NTSSB(object):
             obs.append(subtree.root['node'].cnvs)
         return subtrees, obs
 
+    def initialize_gene_node_colormaps(self):
+        nodes, vals = self.get_node_unobs()
+        vals = np.array(vals)
+        global_min, global_max = np.min(vals), np.max(vals)
+        cmap = self.exp_cmap
+        norm = matplotlib.colors.Normalize(vmin=global_min, vmax=global_max)
+        mapper = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap)
+        self.gene_node_colormaps['unobserved'] = dict()
+        self.gene_node_colormaps['unobserved']['vals'] = dict(zip([node.label for node in nodes], vals))
+        self.gene_node_colormaps['unobserved']['mapper'] = mapper
+
+        nodes, vals = self.get_node_obs()
+        cmap = self.obs_cmap
+        norm = matplotlib.colors.Normalize(vmin=0, vmax=cmap.N-1)
+        mapper = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap)
+        self.gene_node_colormaps['observed'] = dict()
+        self.gene_node_colormaps['observed']['vals'] = dict(zip([node.label for node in nodes], vals))
+        self.gene_node_colormaps['observed']['mapper'] = mapper
+
+        nodes, vals = self.get_avg_node_exp()
+        vals = np.array(vals)
+        global_min, global_max = np.min(vals), np.max(vals)
+        cmap = self.exp_cmap
+        norm = matplotlib.colors.Normalize(vmin=global_min, vmax=global_max)
+        mapper = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap)
+        self.gene_node_colormaps['avg'] = dict()
+        self.gene_node_colormaps['avg']['vals'] = dict(zip([node.label for node in nodes], vals))
+        self.gene_node_colormaps['avg']['mapper'] = mapper
+
+        print(f'Created `self.gene_node_colormaps` with keys {list(self.gene_node_colormaps.keys())}')
+
     def plot_tree(self, super_only=False, counts=False, root_fillcolor=None, events=False, color_subclusters=False, reset_names=True, ordered=False,
-                    genemode='raw', show_labels=True, color_by_weight=False, gene=None, fontcolor='black'):
+                    genemode='avg', show_labels=True, color_by_weight=False, gene=None, fontcolor='black'):
+
+        node_color_dict = None
+
+        if gene is not None:
+            if len(self.gene_node_colormaps.keys()) == 0:
+                self.initialize_gene_node_colormaps()
+
+            vals = self.gene_node_colormaps[genemode]['vals']
+            mapper = self.gene_node_colormaps[genemode]['mapper']
+            node_color_dict = dict()
+            for name in vals:
+                color = matplotlib.colors.to_hex(mapper.to_rgba(vals[name][gene]))
+                node_color_dict[name] = color
+
         if super_only:
-            g = self.tssb_dict2graphviz(counts=counts, root_fillcolor=root_fillcolor, events=events, show_labels=show_labels, gene=gene, genemode=genemode, fontcolor=fontcolor)
+            g = self.tssb_dict2graphviz(counts=counts, root_fillcolor=root_fillcolor, events=events, show_labels=show_labels, gene=gene, genemode=genemode, fontcolor=fontcolor, node_color_dict=node_color_dict)
         else:
-            g = self.root['node'].plot_tree(counts=counts, reset_names=True, root_fillcolor=root_fillcolor, events=events, show_labels=show_labels, gene=gene, genemode=genemode, fontcolor=fontcolor)
+            g = self.root['node'].plot_tree(counts=counts, reset_names=True, root_fillcolor=root_fillcolor, events=events, show_labels=show_labels, gene=gene, genemode=genemode, fontcolor=fontcolor, node_color_dict=node_color_dict)
             def descend(root, g):
                 for i, child in enumerate(root['children']):
-                    g = child['node'].plot_tree(g, reset_names=True, counts=counts, root_fillcolor=root_fillcolor, show_labels=show_labels, gene=gene, genemode=genemode, fontcolor=fontcolor, events=events)
+                    g = child['node'].plot_tree(g, reset_names=True, counts=counts, root_fillcolor=root_fillcolor, show_labels=show_labels, gene=gene, genemode=genemode, fontcolor=fontcolor, events=events, node_color_dict=node_color_dict)
                     if counts:
                         lab = str(child['pivot_node'].num_local_data())
                         if show_labels:
