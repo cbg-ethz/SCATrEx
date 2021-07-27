@@ -386,6 +386,11 @@ class Node(AbstractNode):
             return jax.lax.cond(data_mask_subset[i] != 1, stop_cell_grad, keep_cell_grad, i)
         cell_noise_mean, cell_noise_log_std = vmap(stop_cell_grads)(jnp.arange(mb_size))
 
+        def has_children(i):
+            return jnp.any(ancestor_nodes_indices.ravel() == i)
+        def has_next_branch(i):
+            return jnp.any(previous_branches_indices.ravel() == i)
+
         ones_vec = jnp.ones(cnvs[0].shape)
         zeros_vec = jnp.log(ones_vec)
 
@@ -418,8 +423,10 @@ class Node(AbstractNode):
         nu_sticks_log_stds = jnp.clip(nu_sticks_log_stds, -4., 4.)
         def sample_nu(i):
             return jnp.clip(diag_gaussian_sample(rng, nu_sticks_log_means[i], nu_sticks_log_stds[i]), -4., 4.)
+        def sample_valid_nu(i):
+            return jax.lax.cond(has_children(i), sample_nu, lambda i: jnp.array([logit(1-1e-6)]), i) # Sample all valid
         def sample_all_nus(i):
-            return jax.lax.cond(cnvs[i][0] >= 0, sample_nu, lambda i: jnp.array([logit(1e-6)]), i) # Sample all
+            return jax.lax.cond(cnvs[i][0] >= 0, sample_valid_nu, lambda i: jnp.array([logit(1e-6)]), i) # Sample all
         log_nu_sticks = vmap(sample_all_nus)(jnp.arange(len(cnvs)))
         def sigmoid_nus(i):
             return jax.lax.cond(cnvs[i][0] >= 0, lambda i: jnn.sigmoid(log_nu_sticks[i]), lambda i: jnp.array([1e-6]), i) # Sample all
@@ -429,8 +436,10 @@ class Node(AbstractNode):
         psi_sticks_log_stds = jnp.clip(psi_sticks_log_stds, -4., 4.)
         def sample_psi(i):
             return jnp.clip(diag_gaussian_sample(rng, psi_sticks_log_means[i], psi_sticks_log_stds[i]), -4., 4.)
+        def sample_valid_psis(i):
+            return jax.lax.cond(has_next_branch(i), sample_psi, lambda i: jnp.array([logit(1-1e-6)]), i) # Sample all valid
         def sample_all_psis(i):
-            return jax.lax.cond(cnvs[i][0] >= 0, sample_psi, lambda i: jnp.array([logit(1e-6)]), i) # Sample all
+            return jax.lax.cond(cnvs[i][0] >= 0, sample_valid_psis, lambda i: jnp.array([logit(1e-6)]), i) # Sample all
         log_psi_sticks = vmap(sample_all_psis)(jnp.arange(len(cnvs)))
         def sigmoid_psis(i):
             return jax.lax.cond(cnvs[i][0] >= 0, lambda i: jnn.sigmoid(log_psi_sticks[i]), lambda i: jnp.array([1e-6]), i) # Sample all
@@ -479,7 +488,9 @@ class Node(AbstractNode):
         def compute_node_kl(i):
             # # unobserved_factors_kernel -- USING JUST A SPARSE GAMMA DOES NOT PENALIZE KERNELS EQUAL TO ZERO
             pl = diag_gamma_logpdf(jnp.exp(nodes_log_unobserved_factors_kernels[i]), broadcasted_concentration,
-                                    (parent_vector[i] != -1)*log_concentration*jnp.abs(nodes_unobserved_factors[parent_vector[i]]))
+                                    (parent_vector[i] != -1)*jnp.abs(nodes_unobserved_factors[parent_vector[i]]))
+            pl = pl - (parent_vector[i] != -1) * jnp.all(tssb_indices[i] == tssb_indices[parent_vector[i]]) * diag_gamma_logpdf(1e-2 * np.ones(broadcasted_concentration.shape), broadcasted_concentration,
+                                    (parent_vector[i] != -1)*jnp.abs(nodes_unobserved_factors[parent_vector[i]])) # penalize copies in unobserved nodes
             ent = - diag_gaussian_logpdf(nodes_log_unobserved_factors_kernels[i], log_unobserved_factors_kernel_means[i], log_unobserved_factors_kernel_log_stds[i])
             kl = (parent_vector[i] != -1) * (pl + ent)
 
@@ -487,16 +498,19 @@ class Node(AbstractNode):
             pl = diag_gaussian_logpdf(nodes_unobserved_factors[i],
                         (parent_vector[i] != -1) * nodes_unobserved_factors[parent_vector[i]],
                         nodes_log_unobserved_factors_kernels[i]*(parent_vector[i] != -1) + log_kernel*(parent_vector[i] == -1))
+            pl = pl - (parent_vector[i] != -1) * jnp.all(tssb_indices[i] == tssb_indices[parent_vector[i]]) * diag_gaussian_logpdf(nodes_unobserved_factors[parent_vector[i]],
+                        (parent_vector[i] != -1) * nodes_unobserved_factors[parent_vector[i]],
+                        nodes_log_unobserved_factors_kernels[i]*(parent_vector[i] != -1)) # penalize copies in unobserved nodes
             ent = - diag_gaussian_logpdf(nodes_unobserved_factors[i], unobserved_means[i], unobserved_log_stds[i])
             kl = kl + pl + ent
 
             # sticks
-            nu_pl = beta_logpdf(nu_sticks[i], jnp.log(jnp.array([1.])), jnp.log(jnp.array([dp_alphas[i]])))
-            nu_ent = - diag_gaussian_logpdf(log_nu_sticks[i], nu_sticks_log_means[i], nu_sticks_log_stds[i])
+            nu_pl = has_children(i) * beta_logpdf(nu_sticks[i], jnp.log(jnp.array([1.])), jnp.log(jnp.array([dp_alphas[i]])))
+            nu_ent = has_children(i) * - diag_gaussian_logpdf(log_nu_sticks[i], nu_sticks_log_means[i], nu_sticks_log_stds[i])
             kl = kl + nu_pl + nu_ent
 
-            psi_pl = beta_logpdf(psi_sticks[i], jnp.log(jnp.array([1.])), jnp.log(jnp.array([dp_gammas[i]])))
-            psi_ent = - diag_gaussian_logpdf(log_psi_sticks[i], psi_sticks_log_means[i], psi_sticks_log_stds[i])
+            psi_pl = has_next_branch(i) * beta_logpdf(psi_sticks[i], jnp.log(jnp.array([1.])), jnp.log(jnp.array([dp_gammas[i]])))
+            psi_ent = has_next_branch(i) * - diag_gaussian_logpdf(log_psi_sticks[i], psi_sticks_log_means[i], psi_sticks_log_stds[i])
             kl = kl + psi_pl + psi_ent
 
             return kl
