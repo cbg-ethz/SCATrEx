@@ -346,13 +346,18 @@ class StructureSearch(object):
             if verbose:
                 print(f"Trying to set {node.label} as pivot of {subtree.label}")
 
+            removed_pivot = False
             if len(init_pivot_node.data) == 0 and init_pivot_node_parent is not None and len(init_pivot_node.children()) == 0:
                 print(f"Also removing initial pivot ({init_pivot_node.label}) from tree")
                 self.tree.merge_nodes(init_pivot_node, init_pivot_node_parent)
+                # self.tree.optimize_elbo(sticks_only=True, root_node=init_pivot_node_parent, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
+                removed_pivot = True
 
             root_node = None
             if local:
                 root_node = subtree.root['node']
+                if removed_pivot:
+                    root_node = init_pivot_node_parent
             self.tree.optimize_elbo(root_node=root_node, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
             if verbose:
                 print(f"{init_elbo} -> {self.tree.elbo}")
