@@ -69,10 +69,10 @@ class StructureSearch(object):
                 nodes, mixture = self.tree.get_node_mixture()
                 n_nodes = len(nodes)
                 if np.mod(i, 5) == 0:
-                    if np.sum(mixture < 0.1*1./n_nodes) > .3*n_nodes:
+                    if np.sum(mixture < 0.1*1./n_nodes) > np.ceil(n_nodes/3):
                         # Reduce probability of adding, and only add if score improves
-                        p = np.array(move_weights)
-                        p[np.where(np.array(moves)=='add')[0][0]] = 0.25 * 1/len(moves)
+                        # p = np.array(move_weights)
+                        # p[np.where(np.array(moves)=='add')[0][0]] = 0.25 * 1/len(moves)
                         add_rule = 'improve'
                     else:
                         # Keep uniform move probability and always accept adds
