@@ -72,6 +72,8 @@ class NTSSB(object):
         self.assignments = []
 
         self.elbo = -np.inf
+        self.ll = -np.inf
+        self.kl = -np.inf
         self.data = None
         self.num_data = None
 
@@ -866,7 +868,16 @@ class NTSSB(object):
     def batch_objective(self, obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, node_mask, do_global, global_only, sticks_only, num_samples, params, t):
         print("Recompiling batch objective!")
         rng = random.PRNGKey(t)
-        return -self.batch_elbo(rng, obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, node_mask, jnp.ones((self.num_data,)), jnp.arange(self.num_data), do_global, global_only, sticks_only, params, num_samples)
+        # Average over a batch of random samples from the var approx.
+        rngs = random.split(rng, num_samples)
+        init = [0]
+        init.extend([None] * (15 + len(params)))
+        vectorized_elbo = vmap(self.root['node'].root['node']._compute_elbo, in_axes=init)
+        elbos, lls, kls = vectorized_elbo(rngs, obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, node_mask, jnp.ones((self.num_data,)), jnp.arange(self.num_data), do_global, global_only, sticks_only, *params)
+        elbo = jnp.mean(elbos)
+        ll = jnp.mean(lls)
+        kl = jnp.mean(kls)
+        return elbo, ll, kl
 
     @partial(jit, static_argnums=(0,16))
     def do_grad(self, obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, node_mask, data_mask_subset, indices, do_global, global_only, sticks_only, num_samples, params, i):
@@ -1066,8 +1077,11 @@ class NTSSB(object):
 
 
             # Without node mask
-            self.elbo = np.array(-self.batch_objective(obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, all_nodes_mask,
-                                    do_global, global_only, sticks_only, num_samples, self.get_params(opt_state), 10))
+            ret = self.batch_objective(obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, all_nodes_mask,
+                                    jnp.array(1.), jnp.array(0.), jnp.array(0.), num_samples, self.get_params(opt_state), 10)
+            self.elbo = np.array(ret[0])
+            self.ll = np.array(ret[1])
+            self.kl = np.array(ret[2])
 
             # Weigh by tree prior
             subtrees = self.get_mixture()[1][1:] # without the root
@@ -1093,8 +1107,21 @@ class NTSSB(object):
             self.assign_to_best()
             return elbos
         else:
-            self.elbo = np.array(-self.batch_objective(obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, all_nodes_mask,
-                                    do_global, global_only, sticks_only, num_samples, init_params, 10))
+            ret = self.batch_objective(obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, all_nodes_mask,
+                                    jnp.array(1.), jnp.array(0.), jnp.array(0.), num_samples, self.get_params(opt_state), 10)
+            self.elbo = np.array(ret[0])
+            self.ll = np.array(ret[1])
+            self.kl = np.array(ret[2])
+
+            # Weigh by tree prior
+            subtrees = self.get_mixture()[1][1:] # without the root
+            for subtree in subtrees:
+                pivot_node = subtree.root['node'].parent()
+                parent_subtree = pivot_node.tssb
+                prior_weights, subnodes = parent_subtree.get_fixed_weights()
+                # Weight ELBO by chosen pivot's prior probability
+                node_idx = np.where(pivot_node == np.array(subnodes))[0][0]
+                self.elbo = self.elbo + np.log(prior_weights[node_idx])
             self.update_ass_logits(variational=True)
             self.assign_to_best()
             return None
