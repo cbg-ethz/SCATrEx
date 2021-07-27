@@ -161,8 +161,9 @@ class Node(AbstractNode):
 
             if root_params:
                 # The root is used to store global parameters:  mu
-                self.baseline = np.exp(normal_sample(0, 1., size=self.n_genes))
-                self.baseline[0] = 1.
+                self.log_baseline = normal_sample(0, 1., size=self.n_genes)
+                self.log_baseline[0] = 0.
+                self.baseline = np.exp(self.log_baseline)
                 self.overdispersion = np.exp(normal_sample(0, 1))
                 self.log_lib_size_mean = log_lib_size_mean
                 self.log_lib_size_std = log_lib_size_std
@@ -277,7 +278,12 @@ class Node(AbstractNode):
 
     def loglh(self, n, variational=False, axis=None):
         noise = self.get_noise(variational=variational)[n]
-        node_mean = self.get_mean(baseline=np.append(1, np.exp(self.log_baseline_caller())), unobserved_factors=self.variational_parameters['locals']['unobserved_factors_mean'], noise=noise)
+        unobs_factors = self.unobserved_factors
+        baseline = self.baseline_caller()
+        if variational:
+            unobs_factors = self.variational_parameters['locals']['unobserved_factors_mean']
+            baseline = np.append(1, np.exp(self.log_baseline_caller(variational=True)))
+        node_mean = self.get_mean(baseline=baseline, unobserved_factors=unobs_factors, noise=noise)
         llh = poisson_lpmf(self.tssb.ntssb.data[n],  self.lib_sizes_caller()[n] * node_mean, axis=axis)
         return llh
 
@@ -570,11 +576,14 @@ class Node(AbstractNode):
         else:
             return self.parent().node_std_caller()
 
-    def log_baseline_caller(self):
+    def log_baseline_caller(self, variational=True):
         if self.parent() is None:
-            return self.variational_parameters['globals']['log_baseline_mean']
+            if variational:
+                return self.variational_parameters['globals']['log_baseline_mean']
+            else:
+                return self.log_baseline
         else:
-            return self.parent().log_baseline_caller()
+            return self.parent().log_baseline_caller(variational=variational)
 
     def baseline_caller(self):
         if self.parent() is None:
