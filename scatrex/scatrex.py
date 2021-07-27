@@ -5,7 +5,7 @@ from .plotting import scatterplot
 
 import numpy as np
 from sklearn.decomposition import PCA
-from scipy.stats import spearmanr
+from scipy import stats
 import matplotlib.pyplot as plt
 import pickle
 from copy import deepcopy
@@ -222,7 +222,7 @@ class SCATrEx(object):
             corrs = []
             for clone_idx in range(len(clones)):
                     if clone_idx != diploid_clone_idx:
-                        correlation, _ = spearmanr(rna_filtered[i], clones_filtered[clone_idx])
+                        correlation, _ = stats.spearmanr(rna_filtered[i], clones_filtered[clone_idx])
                     else:
                         correlation = -1.
                     corrs.append(correlation)
@@ -442,7 +442,7 @@ class SCATrEx(object):
                                     line_width=lw, head_width=hw, s=s, fc=fc, ec=ec, fontsize=fs,
                                     legend_fontsize=lfs, figsize=figsize, save=save)
 
-    def plot_unobserved_parameters(self, figsize=(4,4), lw=4, alpha=0.7, title='', fontsize=18, step=4, estimated=False, name='unobserved_factors', save=None):
+    def plot_unobserved_parameters(self, gene=None, figsize=(4,4), lw=4, alpha=0.7, title='', fontsize=18, step=4, estimated=False, name='unobserved_factors', save=None):
         nodes, _ = self.ntssb.get_node_mixture()
         plt.figure(figsize=figsize)
         ticklabs = []
@@ -451,19 +451,28 @@ class SCATrEx(object):
             ls = '-'
             tickpos.append(- step*i)
             ticklabs.append(fr"{node.label.replace('-', '')}")
-            unobs_factors = node.__getattribute__(name)
+            unobs = node.__getattribute__(name)
             if estimated:
                 try:
-                    unobs_factors = node.variational_parameters['locals'][name]
+                    mean = node.variational_parameters['locals'][name]
                 except KeyError:
                     try:
-                        unobs_factors = node.variational_parameters['locals'][name + '_mean']
+                        mean = node.variational_parameters['locals'][name + '_mean']
+                        std = np.exp(node.variational_parameters['locals'][name + '_log_std'])
                     except KeyError:
-                        unobs_factors = node.variational_parameters['locals'][name + '_log_mean']
-
-            plt.plot(unobs_factors - step*i, label=node.label, color=node.tssb.color, lw=4, alpha=0.7, ls=ls)
+                        mean = np.exp(node.variational_parameters['locals'][name + '_log_mean'])
+                        std = np.exp(node.variational_parameters['locals'][name + '_log_std'])
+            if estimated and gene is not None:
+                print(f"Plotting the variational distributions over gene {gene}")
+                gene_pos = np.where(self.adata.var_names == gene)[0][0]
+                # Plot the variational distribution
+                xx = np.arange(-5, 5, 0.001)
+                # plt.scatter(xx, stats.norm.pdf(xx, mean[14], std[14]), c=np.abs(xx))
+                plt.plot(xx, stats.norm.pdf(xx, mean[gene_pos], std[gene_pos]) - step*i, label=node.label, color=node.tssb.color, lw=4, alpha=0.7, ls=ls)
+            else:
+                plt.plot(unobs - step*i, label=node.label, color=node.tssb.color, lw=4, alpha=0.7, ls=ls)
+                plt.xticks([])
         plt.yticks(tickpos, labels=ticklabs, fontsize=fontsize)
-        plt.xticks([])
         plt.title(title, fontsize=fontsize)
         if save is not None:
             plt.savefig(save, bbox_inches='tight')
