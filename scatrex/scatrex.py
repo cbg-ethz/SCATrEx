@@ -399,9 +399,11 @@ class SCATrEx(object):
         return
 
     def plot_tree(self, ax=None, figsize=(6,6), dpi=100, tree_dpi=300, cbtitle='', title='', show_colorbar=True, **kwargs):
+    def plot_tree(self, pathway=None, ax=None, figsize=(6,6), dpi=80, tree_dpi=300, cbtitle='', title='', show_colorbar=True, **kwargs):
         """
         The nodes will be coloured according to the average normalized counts of the feature indicated in `color`
         """
+        # Deal with colorbars
         gene = None
         if 'gene' in kwargs:
             gene = kwargs['gene']
@@ -411,9 +413,21 @@ class SCATrEx(object):
                 gene_pos = np.where(self.adata.var_names == gene)[0][0]
                 kwargs['gene'] = gene_pos
 
+        if pathway is not None:
+            pathway_node_cmap = dict()
+            for node in self.enrichments:
+                try:
+                    val = -np.log10(self.enrichments[node][pathway]['Adjusted P-value'])
+                except:
+                    val = 0.
+                    pass
+                color = matplotlib.colors.to_hex(constants.PATHWAY_CMAPPER.to_rgba(val))
+                pathway_node_cmap[node] = color
+            kwargs['node_color_dict'] = pathway_node_cmap
+
         g = self.ntssb.plot_tree(**kwargs)
 
-        if gene is not None:
+        if gene is not None or pathway is not None:
             # Plot colorbar
             g.attr(dpi=str(tree_dpi))
             g.render('temptree', directory=self.temppath, format='png')
@@ -423,11 +437,14 @@ class SCATrEx(object):
             else:
                 plt.figure(figsize=figsize, dpi=dpi)
             plt.imshow(im, interpolation='bilinear')
-            if show_colorbar:
-                plt.colorbar(self.ntssb.gene_node_colormaps[kwargs['genemode']]['mapper'], label=cbtitle)
             plt.axis('off')
             plt.title(title)
             g = plt.gca()
+            if show_colorbar:
+                if gene is not None:
+                    plt.colorbar(self.ntssb.gene_node_colormaps[kwargs['genemode']]['mapper'], label=cbtitle)
+                elif pathway is not None:
+                    plt.colorbar(constants.PATHWAY_CMAPPER, label=cbtitle)
             os.remove(os.path.join(self.temppath, 'temptree.png'))
             os.remove(os.path.join(self.temppath, 'temptree'))
 
