@@ -524,9 +524,34 @@ class SCATrEx(object):
 
         return smoothed
 
-    def compute_pathway_enrichments(self, db='kegg', method='gsva'):
-        pass
+    def get_rankings(self, genemode='unobserved', threshold=0.5):
+        term_names = self.adata.var_names
+        nodes, term_scores = self.ntssb.get_node_unobs()
+        term_scores = np.abs(np.array(term_scores))
+        top_terms = []
+        threshold = 0.5
+        for k, node in enumerate(nodes):
+            top_terms_idx = (term_scores[k]).argsort()[::-1]
+            top_terms_idx = top_terms_idx[np.where(term_scores[k][top_terms_idx] >= threshold)]
+            top_terms_list = [term_names[i] for i in top_terms_idx]
+            top_terms.append(top_terms_list)
+        return dict(zip([node.label for node in nodes], top_terms))
 
+    def compute_pathway_enrichments(self, threshold=0.5, cutoff=0.05, genemode='unobserved', libs=['MSigDB_Hallmark_2020']):
+        enrichments = []
+        gene_rankings = self.get_rankings(genemode=genemode, threshold=threshold)
+        for node in tqdm(gene_rankings):
+            enr = []
+            if len(gene_rankings[node]) > 0:
+                enr = gp.enrichr(gene_list=gene_rankings[node],
+                             gene_sets=libs,
+                             organism='Human',
+                             outdir='test/enrichr',
+                             cutoff=cutoff
+                            ).results
+                enr = enr[['Term','Adjusted P-value']].set_index('Term').T
+            enrichments.append(enr)
+        self.enrichments = dict(zip([node for node in gene_rankings], enrichments))
 
     def compute_pivot_likelihoods(self, clone='B', normalized=True):
         """
