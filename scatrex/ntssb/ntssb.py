@@ -2016,20 +2016,19 @@ class NTSSB(object):
         print(f'Created `self.gene_node_colormaps` with keys {list(self.gene_node_colormaps.keys())}')
 
     def plot_tree(self, super_only=False, counts=False, root_fillcolor=None, events=False, color_subclusters=False, reset_names=True, ordered=False,
-                    genemode='avg', show_labels=True, color_by_weight=False, gene=None, fontcolor='black', pivot_probabilities=None):
+                    genemode='avg', show_labels=True, color_by_weight=False, gene=None, fontcolor='black', pivot_probabilities=None, node_color_dict=None):
 
-        node_color_dict = None
+        if node_color_dict is None:
+            if gene is not None:
+                if len(self.gene_node_colormaps.keys()) == 0:
+                    self.initialize_gene_node_colormaps()
 
-        if gene is not None:
-            if len(self.gene_node_colormaps.keys()) == 0:
-                self.initialize_gene_node_colormaps()
-
-            vals = self.gene_node_colormaps[genemode]['vals']
-            mapper = self.gene_node_colormaps[genemode]['mapper']
-            node_color_dict = dict()
-            for name in vals:
-                color = matplotlib.colors.to_hex(mapper.to_rgba(vals[name][gene]))
-                node_color_dict[name] = color
+                vals = self.gene_node_colormaps[genemode]['vals']
+                mapper = self.gene_node_colormaps[genemode]['mapper']
+                node_color_dict = dict()
+                for name in vals:
+                    color = matplotlib.colors.to_hex(mapper.to_rgba(vals[name][gene]))
+                    node_color_dict[name] = color
 
         if super_only:
             g = self.tssb_dict2graphviz(counts=counts, root_fillcolor=root_fillcolor, events=events, show_labels=show_labels, gene=gene, genemode=genemode, fontcolor=fontcolor, node_color_dict=node_color_dict)
