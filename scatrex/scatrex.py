@@ -1,18 +1,21 @@
 from .models import *
 from .ntssb import NTSSB
 from .ntssb import StructureSearch
-from .plotting import scatterplot
+from .plotting import scatterplot, constants
 
 import numpy as np
 from sklearn.decomposition import PCA
 from scipy import stats
 import matplotlib.pyplot as plt
+import matplotlib
 import pickle
 from copy import deepcopy
 import os
 
 import scanpy as sc
 from anndata import AnnData
+import gseapy as gp
+from tqdm import tqdm
 
 class SCATrEx(object):
     def __init__(self,
