@@ -401,7 +401,9 @@ class SCATrEx(object):
         # Assign to best
         return
 
-    def plot_tree(self, ax=None, figsize=(6,6), dpi=100, tree_dpi=300, cbtitle='', title='', show_colorbar=True, **kwargs):
+    def set_node_event_strings(self, **kwargs):
+        self.ntssb.set_node_event_strings(var_names=sim_sca.adata.var_names, **kwargs)
+
     def plot_tree(self, pathway=None, ax=None, figsize=(6,6), dpi=80, tree_dpi=300, cbtitle='', title='', show_colorbar=True, **kwargs):
         """
         The nodes will be coloured according to the average normalized counts of the feature indicated in `color`
