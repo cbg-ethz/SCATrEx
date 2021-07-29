@@ -485,7 +485,6 @@ class SCATrEx(object):
                         mean = np.exp(node.variational_parameters['locals'][name + '_log_mean'])
                         std = np.exp(node.variational_parameters['locals'][name + '_log_std'])
             if estimated and gene is not None:
-                print(f"Plotting the variational distributions over gene {gene}")
                 gene_pos = np.where(self.adata.var_names == gene)[0][0]
                 # Plot the variational distribution
                 xx = np.arange(-5, 5, 0.001)
