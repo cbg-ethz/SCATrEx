@@ -29,6 +29,7 @@ class ObservedTree(Tree):
     def __init__(self, **kwargs):
         super(ObservedTree, self).__init__(**kwargs)
         self.cmap = get_cnv_cmap()
+        self.sign_colors = {'-': 'blue', '+': 'red'}
 
     def add_node_params(self, n_genes=50, n_regions=5):
         C = len(self.tree_dict.keys())
@@ -71,4 +72,5 @@ class ObservedTree(Tree):
                 affected = f'{affected_genes[0]}...{affected_genes[-1]}'
             else:
                 affected = ','.join(affected_genes)
+            self.tree_dict[node]['params_label'] = f'<font color="{self.sign_colors[sign]}">{sign}{m}</font>: {affected}'
             self.tree_dict[node]['params_label'] = f'{sign}{m}: {affected}'
