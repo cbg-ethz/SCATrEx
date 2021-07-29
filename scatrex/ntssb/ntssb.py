@@ -1957,7 +1957,12 @@ class NTSSB(object):
 
     def get_avg_node_exp(self, norm=True):
         nodes = self.get_nodes(None)
-        data = self.normalized_data if norm else self.data
+        data = self.data
+        if norm:
+            try:
+                data = self.normalized_data
+            except AttributeError:
+                pass
         avgs = []
         for node in nodes:
             idx = np.array(list(node.data))
