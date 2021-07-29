@@ -1966,7 +1966,10 @@ class NTSSB(object):
         avgs = []
         for node in nodes:
             idx = np.array(list(node.data))
-            avgs.append(np.mean(data[idx], axis=0))
+            if len(idx) > 0:
+                avgs.append(np.mean(data[idx], axis=0))
+            else:
+                avgs.append(np.zeros(data.shape[1]))
         return nodes, avgs
 
     def get_avg_subtree_exp(self, norm=True):
