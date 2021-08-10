@@ -2007,10 +2007,10 @@ class NTSSB(object):
             obs.append(subtree.root['node'].cnvs)
         return subtrees, obs
 
-    def initialize_gene_node_colormaps(self):
+    def initialize_gene_node_colormaps(self, node_obs=None, node_avg_exp=None):
         nodes, vals = self.get_node_unobs()
         vals = np.array(vals)
-        global_min, global_max = np.min(vals), np.max(vals)
+        global_min, global_max = np.nanmin(vals), np.nanmax(vals)
         cmap = self.exp_cmap
         norm = matplotlib.colors.Normalize(vmin=global_min, vmax=global_max)
         mapper = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap)
@@ -2018,22 +2018,32 @@ class NTSSB(object):
         self.gene_node_colormaps['unobserved']['vals'] = dict(zip([node.label for node in nodes], vals))
         self.gene_node_colormaps['unobserved']['mapper'] = mapper
 
-        nodes, vals = self.get_node_obs()
+        if node_obs:
+            nodes_labels = list(node_obs.keys())
+            vals = list(node_obs.values())
+        else:
+            nodes, vals = self.get_node_obs()
+            nodes_labels = [node.label for node in nodes]
         cmap = self.obs_cmap
         norm = matplotlib.colors.Normalize(vmin=0, vmax=cmap.N-1)
         mapper = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap)
         self.gene_node_colormaps['observed'] = dict()
-        self.gene_node_colormaps['observed']['vals'] = dict(zip([node.label for node in nodes], vals))
+        self.gene_node_colormaps['observed']['vals'] = dict(zip(nodes_labels, vals))
         self.gene_node_colormaps['observed']['mapper'] = mapper
 
-        nodes, vals = self.get_avg_node_exp()
+        if node_avg_exp:
+            nodes_labels = list(node_avg_exp.keys())
+            vals = list(node_avg_exp.values())
+        else:
+            nodes, vals = self.get_avg_node_exp()
+            nodes_labels = [node.label for node in nodes]
         vals = np.array(vals)
-        global_min, global_max = np.min(vals), np.max(vals)
+        global_min, global_max = np.nanmin(vals), np.nanmax(vals)
         cmap = self.exp_cmap
         norm = matplotlib.colors.Normalize(vmin=global_min, vmax=global_max)
         mapper = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap)
         self.gene_node_colormaps['avg'] = dict()
-        self.gene_node_colormaps['avg']['vals'] = dict(zip([node.label for node in nodes], vals))
+        self.gene_node_colormaps['avg']['vals'] = dict(zip(nodes_labels, vals))
         self.gene_node_colormaps['avg']['mapper'] = mapper
 
         print(f'Created `self.gene_node_colormaps` with keys {list(self.gene_node_colormaps.keys())}')
@@ -2050,7 +2060,7 @@ class NTSSB(object):
                 mapper = self.gene_node_colormaps[genemode]['mapper']
                 node_color_dict = dict()
                 for name in vals:
-                    color = matplotlib.colors.to_hex(mapper.to_rgba(vals[name][gene]))
+                    color = matplotlib.colors.to_hex(mapper.to_rgba(vals[name][gene])) if not np.isnan(vals[name][gene]) else 'gray'
                     node_color_dict[name] = color
 
         if super_only:
