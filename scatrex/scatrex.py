@@ -46,7 +46,8 @@ class SCATrEx(object):
             self.adata = AnnData(data)
         self.adata.raw = self.adata
         if self.observed_tree is not None:
-            self.adata.uns['obs_node_colors'] = [self.observed_tree.tree_dict[node]['color'] for node in self.observed_tree.tree_dict]
+            self.adata.uns['obs_node_colors'] = [self.observed_tree.tree_dict[node]['color'] for node in np.unique(self.observed_tree.adata.obs['obs_node'])]
+            # self.adata.uns['obs_node_colors'] = [self.observed_tree.tree_dict[node]['color'] for node in self.observed_tree.tree_dict]
 
     def set_observed_tree(self, observed_tree):
         if isinstance(observed_tree, str):
