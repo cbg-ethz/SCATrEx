@@ -74,3 +74,19 @@ class ObservedTree(Tree):
                 affected = ','.join(affected_genes)
             self.tree_dict[node]['params_label'] = f'<font color="{self.sign_colors[sign]}">{sign}{m}</font>: {affected}'
             self.tree_dict[node]['params_label'] = f'{sign}{m}: {affected}'
+
+    def plot_heatmap(self, var_names=None, cmap=None, **kwds):
+        if var_names is None:
+            var_names = self.adata.var_names
+        if cmap is None:
+            cmap = self.cmap
+        kwds['vmax'] = 4 if 'vmax' not in kwds else kwds['vmax']
+        kwds['vmin'] = 0 if 'vmin' not in kwds else kwds['vmin']
+
+        ax = sc.pl.heatmap(self.adata, var_names, groupby='node', cmap=cmap, show=False, **kwds)
+        yticks = ax['groupby_ax'].get_yticks()
+        ax['groupby_ax'].set_yticks(yticks - 0.5)
+        node_labels = self.adata.obs['node'].values.tolist()
+        ax['groupby_ax'].set_yticklabels(np.unique(node_labels))
+        ax['groupby_ax'].get_yticks()
+        plt.show()
