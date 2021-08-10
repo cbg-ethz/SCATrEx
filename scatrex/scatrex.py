@@ -464,7 +464,7 @@ class SCATrEx(object):
                                     line_width=lw, head_width=hw, s=s, fc=fc, ec=ec, fontsize=fs,
                                     legend_fontsize=lfs, figsize=figsize, save=save)
 
-    def plot_unobserved_parameters(self, gene=None, figsize=(4,4), lw=4, alpha=0.7, title='', fontsize=18, step=4, estimated=False, name='unobserved_factors', save=None):
+    def plot_unobserved_parameters(self, gene=None, figsize=(4,4), lw=4, alpha=0.7, title='', fontsize=18, step=4, estimated=False, x_max=4, name='unobserved_factors', save=None):
         nodes, _ = self.ntssb.get_node_mixture()
         plt.figure(figsize=figsize)
         ticklabs = []
@@ -479,15 +479,16 @@ class SCATrEx(object):
                     mean = node.variational_parameters['locals'][name]
                 except KeyError:
                     try:
-                        mean = node.variational_parameters['locals'][name + '_mean']
+                        unobs = node.variational_parameters['locals'][name + '_mean']
                         std = np.exp(node.variational_parameters['locals'][name + '_log_std'])
                     except KeyError:
-                        mean = np.exp(node.variational_parameters['locals'][name + '_log_mean'])
+                        unobs = np.exp(node.variational_parameters['locals'][name + '_log_mean'])
                         std = np.exp(node.variational_parameters['locals'][name + '_log_std'])
             if estimated and gene is not None:
                 gene_pos = np.where(self.adata.var_names == gene)[0][0]
+                mean = unobs
                 # Plot the variational distribution
-                xx = np.arange(-5, 5, 0.001)
+                xx = np.arange(-x_max, x_max, 0.001)
                 # plt.scatter(xx, stats.norm.pdf(xx, mean[14], std[14]), c=np.abs(xx))
                 plt.plot(xx, stats.norm.pdf(xx, mean[gene_pos], std[gene_pos]) - step*i, label=node.label, color=node.tssb.color, lw=4, alpha=0.7, ls=ls)
             else:
