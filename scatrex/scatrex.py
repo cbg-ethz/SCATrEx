@@ -640,7 +640,7 @@ class SCATrEx(object):
         for cnv in cnv_levels:
             gene_avg = []
             for gene in range(self.adata.X.shape[1]):
-                cells = np.where(self.adata.layers[f'{layer}_cnvs''][:,gene]==cnv)[0]
+                cells = np.where(self.adata.layers[f'{layer}_cnvs'][:,gene]==cnv)[0]
                 if len(cells) > 0:
                     gene_avg.append(np.mean(self.adata.X[cells,gene]))
             exp_levels.append(np.array(gene_avg))
