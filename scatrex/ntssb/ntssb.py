@@ -100,22 +100,25 @@ class NTSSB(object):
 
         input_tree_dict = self.input_tree_dict
 
-        obj = self.node_constructor(True, input_tree_dict['A']['params'], parent=None, label='A', **node_hyperparams)
-        input_tree_dict['A']['subtree'] = TSSB(obj, 'A', ntssb=self, dp_alpha=input_tree_dict['A']['dp_alpha_subtree'],
-                                                             alpha_decay=input_tree_dict['A']['alpha_decay_subtree'],
-                                                             dp_gamma=input_tree_dict['A']['dp_gamma_subtree'],
-                                                             color=input_tree_dict['A']['color'])
+        # Get root node
+        root_node = self.input_tree.root()
+
+        obj = self.node_constructor(True, input_tree_dict[root_node]['params'], parent=None, label=root_node, **node_hyperparams)
+        input_tree_dict[root_node]['subtree'] = TSSB(obj, root_node, ntssb=self, dp_alpha=input_tree_dict[root_node]['dp_alpha_subtree'],
+                                                             alpha_decay=input_tree_dict[root_node]['alpha_decay_subtree'],
+                                                             dp_gamma=input_tree_dict[root_node]['dp_gamma_subtree'],
+                                                             color=input_tree_dict[root_node]['color'])
 
         main = boundbeta(1.0, self.dp_alpha) if self.min_depth == 0 else 0.0 # if min_depth > 0, no data can be added to the root (main stick is nu)
         if use_weights:
-            main = self.input_tree_dict['A']['weight']
-            input_tree_dict['A']['subtree'].weight = self.input_tree_dict['A']['weight']
+            main = self.input_tree_dict[root_node]['weight']
+            input_tree_dict[root_node]['subtree'].weight = self.input_tree_dict[root_node]['weight']
 
-        self.root = {    'node'     : input_tree_dict['A']['subtree'],
+        self.root = {    'node'     : input_tree_dict[root_node]['subtree'],
                          'main'     : main,
                          'sticks'   : empty((0,1)), # psi sticks
                          'children' : [],
-                         'label'    : 'A',
+                         'label'    : root_node,
                          'super_parent'   :  None,
                          'parent'   : None    }
 
@@ -175,7 +178,7 @@ class NTSSB(object):
                                                  'pivot_tssb'   : pivot_tssb  })
 
                 descend(super_tree['children'][-1], child, depth+1)
-        descend(self.root, 'A')
+        descend(self.root, root_node)
 
     def reset_variational_parameters(self, **kwargs):
         # Reset node parameters
