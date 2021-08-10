@@ -370,7 +370,18 @@ class SCATrEx(object):
             cnv_mat[cells] = np.array(clones[clone_idx])
         self.adata.layers['clonemap_cnvs'] = np.array(cnv_mat)
 
-        self.ntssb.initialize_gene_node_colormaps()
+        # Initialize colormaps and account for filtered genes
+        node_obs = dict(zip([self.observed_tree.tree_dict[node]['label'] for node in self.observed_tree.tree_dict], [self.observed_tree.tree_dict[node]['params'] for node in self.observed_tree.tree_dict]))
+        nodes = self.ntssb.get_nodes()
+        avgs = []
+        for node in nodes:
+            idx = np.array(list(node.data))
+            if len(idx) > 0:
+                avgs.append(np.mean(self.adata.X[idx], axis=0))
+            else:
+                avgs.append(np.nan*np.zeros(self.adata.X.shape[1]))
+        node_avg_exp = dict(zip([node.label for node in nodes], avgs))
+        self.ntssb.initialize_gene_node_colormaps(node_obs=node_obs, node_avg_exp=node_avg_exp)
 
         return elbos
 
