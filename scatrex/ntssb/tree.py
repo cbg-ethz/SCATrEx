@@ -185,7 +185,7 @@ class Tree(ABC):
         params = []
         params_labels = []
         for node in self.tree_dict:
-            if self.tree_dict[node]['label'] != '':
+            if self.tree_dict[node]['size'] != 0:
                 params_labels.append([self.tree_dict[node]['label']] * self.tree_dict[node]['size'])
                 params.append(np.vstack([self.tree_dict[node]['params']] * self.tree_dict[node]['size']))
         params = pd.DataFrame(np.vstack(params))
@@ -194,8 +194,8 @@ class Tree(ABC):
             params.columns = var_names
         self.adata = AnnData(params)
         self.adata.obs['node'] = params_labels
-        self.adata.uns['node_colors'] = [self.tree_dict[node]['color'] for node in self.tree_dict if self.tree_dict[node]['label'] != '']
-        self.adata.uns['node_sizes'] = np.array([self.tree_dict[node]['size'] for node in self.tree_dict if self.tree_dict[node]['label'] != ''])
+        self.adata.uns['node_colors'] = [self.tree_dict[node]['color'] for node in self.tree_dict if self.tree_dict[node]['size'] != 0]
+        self.adata.uns['node_sizes'] = np.array([self.tree_dict[node]['size'] for node in self.tree_dict if self.tree_dict[node]['size'] != 0])
         self.adata.var['bulk'] = np.mean(self.adata.X, axis=0)
 
     def plot_heatmap(self, var_names=None, cmap=None, **kwds):
@@ -203,40 +203,39 @@ class Tree(ABC):
             var_names = self.adata.var_names
         if cmap is None:
             cmap = self.cmap
-        kwds['vmax'] = 4 if kwds['vmax'] is None else kwds['vmax']
-        kwds['vmin'] = 0 if kwds['vmin'] is None else kwds['vmin']
+        kwds['vmax'] = 4 if 'vmax' not in kwds else kwds['vmax']
+        kwds['vmin'] = 0 if 'vmin' not in kwds else kwds['vmin']
 
         ax = sc.pl.heatmap(self.adata, var_names, groupby='node', cmap=cmap, show=False, **kwds)
         yticks = ax['groupby_ax'].get_yticks()
         ax['groupby_ax'].set_yticks(yticks - 0.5)
         node_labels = self.adata.obs['node'].values.tolist()
-        ax['groupby_ax'].set_yticklabels(node_labels)
+        ax['groupby_ax'].set_yticklabels(np.unique(node_labels))
         ax['groupby_ax'].get_yticks()
         plt.show()
 
     def read_tree_from_dict(self, tree_dict, input_params_key='params', input_label_key='label', input_parent_key='parent', input_sizes_key='size', root_parent='NULL'):
         self.tree_dict = dict()
-        alphabet = list(string.ascii_uppercase)
 
         sizes = None
         try:
             sizes = [tree_dict[node][input_sizes_key] for node in tree_dict]
         except KeyError:
             pass
+        colors = None
+        try:
+            colors = [tree_dict[node]['color'] for node in tree_dict]
+        except KeyError:
+            pass
 
-        for node in tree_dict:
+        for idx, node in enumerate(tree_dict):
             parent_id = tree_dict[node][input_parent_key]
             if parent_id == root_parent:
                 parent_id = '-1'
-            color = ''
-            label = ''
-            size = 0
+            color = constants.CLONES_PAL[idx] if 'color' not in tree_dict[node] else tree_dict[node]['color']
+            label = node if input_label_key not in tree_dict[node] else tree_dict[node][input_label_key]
+            size = 0.
             weight = 0.
-            if tree_dict[node]['label'] != '':
-                color = constants.CLONES_PAL[int(tree_dict[node][input_label_key])]
-                label = alphabet[int(tree_dict[node][input_label_key])]
-                weight = 1.0/len(list(tree_dict.keys()))
-                size = 1
             self.tree_dict[node] = dict(
                 parent=parent_id,
                 children=[],
