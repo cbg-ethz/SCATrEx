@@ -608,3 +608,32 @@ class SCATrEx(object):
             pivot_likelihoods = dict(zip(labels, vals.tolist()))
 
         return pivot_likelihoods
+
+
+    def get_cnv_exp(self, max_level=4, method=''):
+        cnv_levels = np.unique(self.observed_tree.adata.X)
+        exp_levels = []
+        for cnv in cnv_levels:
+            gene_avg = []
+            for gene in range(self.adata.X.shape[1]):
+                cells = np.where(self.adata.layers[f'{layer}_cnvs''][:,gene]==cnv)[0]
+                if len(cells) > 0:
+                    gene_avg.append(np.mean(self.adata.X[cells,gene]))
+            exp_levels.append(np.array(gene_avg))
+
+        try:
+            max_level_pos = np.where(cnv_levels>=max_level)[0][0]
+        except IndexError:
+            print(f"{max_level} not present in {cnv_levels}.")
+            max_level_pos = np.argmax(cnv_levels)
+        exp_levels[max_level_pos] = np.concatenate(exp_levels[max_level_pos:])
+        exp_levels = exp_levels[:max_level_pos+1]
+        cnv_levels = list(cnv_levels[:max_level_pos+1].astype(int))
+        cnv_levels_labels = list(cnv_levels)
+        cnv_levels_labels[max_level_pos] = f'{cnv_levels[max_level_pos]}+'
+
+        d = dict()
+        for i in range(len(cnv_levels)):
+            d[cnv_levels[i]] = dict(label=cnv_levels_labels[i], exp=exp_levels[i])
+
+        return d
