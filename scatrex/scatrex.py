@@ -173,7 +173,7 @@ class SCATrEx(object):
         for clone_id in np.unique(self.adata.obs['obs_node'][cell_idx]):
             cells = np.where(self.adata.obs['node'][cell_idx]==clone_id)[0]
             cnv_mat[cells] = np.array(clones)[np.where(np.array(labels)==clone_id)[0]]
-        self.adata.layers['cnvs'] = cnv_mat
+        self.adata.layers['scatrex_cnvs'] = cnv_mat
 
         self.ntssb.initialize_gene_node_colormaps()
 
