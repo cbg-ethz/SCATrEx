@@ -426,6 +426,11 @@ class SCATrEx(object):
         """
         The nodes will be coloured according to the average normalized counts of the feature indicated in `color`
         """
+        # Add events
+        events = False
+        if 'events' in kwargs:
+            events = kwargs['events']
+
         # Deal with colorbars
         gene = None
         if 'gene' in kwargs:
