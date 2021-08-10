@@ -331,11 +331,12 @@ class SCATrEx(object):
         print(f"Filtered scRNA data for clonemap shape: {rna_filtered.shape}")
 
         if filter_diploid_cells:
-            # Set weights -- no diploid cells allowed
-            for node in diploid_labels:
-                observed_tree_filtered.tree_dict[node]['size'] = 0
-            observed_tree_filtered.update_weights(uniform=False)
-            print(f'Assigning no weight to diploid clones: {diploid_labels}')
+            if len(diploid_clone_idx) > 0:
+                # Set weights -- no diploid cells allowed
+                for node in diploid_labels:
+                    observed_tree_filtered.tree_dict[node]['size'] = 0
+                observed_tree_filtered.update_weights(uniform=False)
+                print(f'Assigning no weight to diploid clones: {diploid_labels}')
 
         self.ntssb = NTSSB(observed_tree_filtered, self.model.Node, node_hyperparams=self.model_args)
         self.ntssb.add_data(np.array(rna_filtered), to_root=True)
@@ -354,7 +355,8 @@ class SCATrEx(object):
         assignments = np.array([labels[0]] * self.adata.shape[0])
         assignments[cell_idx] = np.array([self.observed_tree.tree_dict[assignment.tssb.label]['label'] for assignment in self.ntssb.assignments])
         if len(others_idx) > 0:
-            assignments[others_idx] = labels[diploid_clone_idx]
+            if len(diploid_clone_indices) > 0:
+                assignments[others_idx] = labels[diploid_clone_idx]
 
         self.adata.obs['node'] = assignments.astype(str)
         self.adata.obs['obs_node'] = assignments.astype(str)
