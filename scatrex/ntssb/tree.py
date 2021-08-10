@@ -261,6 +261,13 @@ class Tree(ABC):
                 if self.tree_dict[j]['parent'] == i:
                     self.tree_dict[i]['children'].append(j)
 
+
+    def root(self):
+        nodes = list(self.tree_dict.keys())
+        for node in nodes:
+            if self.tree_dict[node]['parent'] not in nodes:
+                return node
+
     def update_weights(self, uniform=False):
         total = np.sum([self.tree_dict[node]['size'] for node in self.tree_dict])
         for node in self.tree_dict:
