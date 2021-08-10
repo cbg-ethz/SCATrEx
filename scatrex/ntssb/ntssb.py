@@ -1951,6 +1951,18 @@ class NTSSB(object):
             unobs.append(unobs_factors)
         return nodes, unobs
 
+    def get_node_unobs_affected_genes(self):
+        nodes = self.get_nodes(None)
+        unobs = []
+        estimated = np.var(nodes[0].variational_parameters['locals']['unobserved_factors_kernel_log_mean']) != 0
+        if estimated:
+            print("Getting the learned unobserved factors.")
+        for node in nodes:
+            unobs_factors = node.unobserved_factors if not estimated else node.variational_parameters['locals']['unobserved_factors_mean']
+            unobs_factors_kernel = node.unobserved_factors_kernel if not estimated else node.variational_parameters['locals']['unobserved_factors_kernel_log_mean']
+            unobs.append(unobs_factors)
+        return nodes, unobs
+
     def get_node_obs(self):
         nodes = self.get_nodes(None)
         obs = []
