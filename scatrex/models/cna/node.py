@@ -199,7 +199,7 @@ class Node(AbstractNode):
                 # Make sure some genes are affected
                 self.unobserved_factors_kernel[np.argmax(self.unobserved_factors_kernel)] *= 10.
                 self.unobserved_factors = normal_sample(parent.unobserved_factors, self.unobserved_factors_kernel)
-                self.unobserved_factors = np.clip(self.unobserved_factors, -2, 2)
+                self.unobserved_factors = np.clip(self.unobserved_factors, -5, 5)
 
             # Observation mean
             self.set_mean()
