@@ -17,7 +17,7 @@ from ...ntssb.node import *
 from ...ntssb.tree import *
 
 class Node(AbstractNode):
-    def __init__(self, is_observed, observed_parameters, log_lib_size_mean=10, log_lib_size_std=1,
+    def __init__(self, is_observed, observed_parameters, log_lib_size_mean=6, log_lib_size_std=.8,
                         num_global_noise_factors=4, global_noise_factors_precisions_shape=2.,
                         cell_global_noise_factors_weights_scale=1.,
                         unobserved_factors_root_kernel=0.1, unobserved_factors_kernel=1.,
@@ -136,13 +136,13 @@ class Node(AbstractNode):
                                                     size=[self.tssb.ntssb.num_data, self.num_global_noise_factors])
 
     def generate_data_params(self):
-        self.lib_sizes = np.exp(normal_sample(self.log_lib_size_mean, self.log_lib_size_std, size=self.tssb.ntssb.num_data)).reshape(self.tssb.ntssb.num_data, 1)
+        self.lib_sizes = 20. + np.exp(normal_sample(self.log_lib_size_mean, self.log_lib_size_std, size=self.tssb.ntssb.num_data)).reshape(self.tssb.ntssb.num_data, 1)
         self.lib_sizes = np.ceil(self.lib_sizes)
         self.cell_global_noise_factors_weights = normal_sample(0, self.cell_global_noise_factors_weights_scale,
                                                     size=[self.tssb.ntssb.num_data, self.num_global_noise_factors])
 
     def reset_parameters(self, root_params=True, down_params=True,
-                        log_lib_size_mean=10, log_lib_size_std=1,
+                        log_lib_size_mean=6, log_lib_size_std=.8,
                         num_global_noise_factors=4, global_noise_factors_precisions_shape=2.,
                         cell_global_noise_factors_weights_scale=1.,
                         unobserved_factors_root_kernel=0.1, unobserved_factors_kernel=1.,
