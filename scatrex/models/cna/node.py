@@ -21,7 +21,7 @@ class Node(AbstractNode):
                         num_global_noise_factors=4, global_noise_factors_precisions_shape=2.,
                         cell_global_noise_factors_weights_scale=1.,
                         unobserved_factors_root_kernel=0.1, unobserved_factors_kernel=1.,
-                        unobserved_factors_kernel_concentration=.01, **kwargs):
+                        unobserved_factors_kernel_concentration=.01, frac_dosage=1, **kwargs):
         super(Node, self).__init__(is_observed, observed_parameters, **kwargs)
 
         # The observed parameters are the CNVs of all genes
@@ -38,6 +38,7 @@ class Node(AbstractNode):
                 unobserved_factors_root_kernel=unobserved_factors_root_kernel,
                 unobserved_factors_kernel=unobserved_factors_kernel,
                 unobserved_factors_kernel_concentration=unobserved_factors_kernel_concentration,
+                frac_dosage=frac_dosage,
             )
         else:
             self.node_hyperparams = self.node_hyperparams_caller()
@@ -145,7 +146,8 @@ class Node(AbstractNode):
                         num_global_noise_factors=4, global_noise_factors_precisions_shape=2.,
                         cell_global_noise_factors_weights_scale=1.,
                         unobserved_factors_root_kernel=0.1, unobserved_factors_kernel=1.,
-                        unobserved_factors_kernel_concentration=.01):
+                        unobserved_factors_kernel_concentration=.01,
+                        frac_dosage=1.):
         parent = self.parent()
 
         if parent is None: # this is the root
@@ -157,6 +159,7 @@ class Node(AbstractNode):
                 unobserved_factors_root_kernel=unobserved_factors_root_kernel,
                 unobserved_factors_kernel=unobserved_factors_kernel,
                 unobserved_factors_kernel_concentration=unobserved_factors_kernel_concentration,
+                frac_dosage=frac_dosage,
             )
 
             if root_params:
@@ -179,6 +182,10 @@ class Node(AbstractNode):
                 self.unobserved_factors_root_kernel = unobserved_factors_root_kernel
                 self.unobserved_factors_kernel_concentration = unobserved_factors_kernel_concentration
 
+                self.frac_dosage = frac_dosage
+
+            self.inert_genes = np.random.choice(self.n_genes, size=int(self.n_genes*(1.-self.frac_dosage)), replace=False)
+
             self.unobserved_factors_kernel = np.array([self.unobserved_factors_root_kernel] * self.n_genes)
             self.unobserved_factors = normal_sample(0., self.unobserved_factors_kernel)
 
@@ -189,8 +196,10 @@ class Node(AbstractNode):
             self.node_hyperparams = self.node_hyperparams_caller()
             if down_params:
                 self.unobserved_factors_kernel = gamma_sample(self.unobserved_factors_kernel_concentration_caller(), np.exp(np.abs(parent.unobserved_factors)), size=self.n_genes)
+                # Make sure some genes are affected
+                self.unobserved_factors_kernel[np.argmax(self.unobserved_factors_kernel)] *= 10.
                 self.unobserved_factors = normal_sample(parent.unobserved_factors, self.unobserved_factors_kernel)
-                self.unobserved_factors = np.clip(self.unobserved_factors, -4, 4)
+                self.unobserved_factors = np.clip(self.unobserved_factors, -2, 2)
 
             # Observation mean
             self.set_mean()
@@ -207,10 +216,13 @@ class Node(AbstractNode):
                 self.node_mean = self.baseline_caller() * self.cnvs/2 * np.exp(self.unobserved_factors)
             self.node_mean = self.node_mean / np.sum(self.node_mean)
 
-    def get_mean(self, baseline=None, unobserved_factors=None, noise=None, cell_factors=None, global_factors=None, cnvs=None, norm=True):
+    def get_mean(self, baseline=None, unobserved_factors=None, noise=None, cell_factors=None, global_factors=None, cnvs=None, norm=True, inert_genes=None):
         baseline = np.append(1, np.exp(self.log_baseline_caller())) if baseline is None else baseline
         unobserved_factors = self.variational_parameters['locals']['unobserved_factors_mean'] if unobserved_factors is None else unobserved_factors
         cnvs = self.cnvs if cnvs is None else cnvs
+        if inert_genes is not None:
+            cnvs = np.array(cnvs)
+            cnvs[inert_genes] = 2. # set these genes to 2, i.e., act like they have no CNV
         node_mean = None
         if noise is not None:
             node_mean = baseline * cnvs/2 * np.exp(unobserved_factors + noise)
@@ -232,7 +244,7 @@ class Node(AbstractNode):
     # ========= Functions to take samples from node. =========
     def sample_observation(self, n):
         noise = self.cell_global_noise_factors_weights_caller()[n].dot(self.global_noise_factors_caller())
-        node_mean = self.get_mean(unobserved_factors=self.unobserved_factors, baseline=self.baseline_caller(), noise=noise)
+        node_mean = self.get_mean(unobserved_factors=self.unobserved_factors, baseline=self.baseline_caller(), noise=noise, inert_genes=self.inert_genes_caller())
         s = multinomial_sample(self.lib_sizes_caller()[n], node_mean)
         return s
 
@@ -575,6 +587,12 @@ class Node(AbstractNode):
             return self.node_std
         else:
             return self.parent().node_std_caller()
+
+    def inert_genes_caller(self):
+        if self.parent() is None:
+            return self.inert_genes
+        else:
+            return self.parent().inert_genes_caller()
 
     def log_baseline_caller(self, variational=True):
         if self.parent() is None:
