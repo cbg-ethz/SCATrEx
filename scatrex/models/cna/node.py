@@ -25,7 +25,10 @@ class Node(AbstractNode):
         super(Node, self).__init__(is_observed, observed_parameters, **kwargs)
 
         # The observed parameters are the CNVs of all genes
-        self.cnvs = self.observed_parameters
+        self.cnvs = np.array(self.observed_parameters)
+        self.cnvs[np.where(self.cnvs == 0)[0]] = 1e-6
+        self.observed_parameters = np.array(self.cnvs)
+
         self.n_genes = self.cnvs.size
 
         # Node hyperparameters
