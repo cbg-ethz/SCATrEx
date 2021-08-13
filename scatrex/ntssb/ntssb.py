@@ -217,7 +217,7 @@ class NTSSB(object):
             node.remove_data()
 
         for n in range(self.num_data):
-            node = np.random.choice(nodes)
+            node = np.random.choice(nodes, p=weights)
             node.tssb.assignments.append(node)
             node.add_datum(n)
             self.assignments.append(node)
