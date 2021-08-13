@@ -197,9 +197,9 @@ class Node(AbstractNode):
             if down_params:
                 self.unobserved_factors_kernel = gamma_sample(self.unobserved_factors_kernel_concentration_caller(), np.exp(np.abs(parent.unobserved_factors)), size=self.n_genes)
                 # Make sure some genes are affected
-                self.unobserved_factors_kernel[np.argmax(self.unobserved_factors_kernel)] *= 10.
+                self.unobserved_factors_kernel[np.argmax(self.unobserved_factors_kernel)] = np.max([5., np.max(self.unobserved_factors_kernel)])
                 self.unobserved_factors = normal_sample(parent.unobserved_factors, self.unobserved_factors_kernel)
-                self.unobserved_factors = np.clip(self.unobserved_factors, -5, 5)
+                self.unobserved_factors = np.clip(self.unobserved_factors, -10, 10)
 
             # Observation mean
             self.set_mean()
@@ -246,6 +246,7 @@ class Node(AbstractNode):
         noise = self.cell_global_noise_factors_weights_caller()[n].dot(self.global_noise_factors_caller())
         node_mean = self.get_mean(unobserved_factors=self.unobserved_factors, baseline=self.baseline_caller(), noise=noise, inert_genes=self.inert_genes_caller())
         s = multinomial_sample(self.lib_sizes_caller()[n], node_mean)
+        # s = negative_binomial_sample(self.lib_sizes_caller()[n] * node_mean, 0.01)
         return s
 
     # ========= Functions to evaluate node's parameters. =========
@@ -563,6 +564,12 @@ class Node(AbstractNode):
             return self.node_hyperparams
         else:
             return self.parent().node_hyperparams_caller()
+
+    def global_noise_factors_precisions_shape_caller(self):
+        if self.parent() is None:
+            return self.global_noise_factors_precisions_shape
+        else:
+            return self.parent().global_noise_factors_precisions_shape_caller()
 
     def lib_sizes_caller(self):
         if self.parent() is None:
