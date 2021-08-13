@@ -13,7 +13,7 @@ from ..plotting import constants
 class Tree(ABC):
     def __init__(self, n_nodes=3, dp_alpha_subtree=1.0, alpha_decay_subtree=0.9,
                         dp_gamma_subtree=1.0, dp_alpha_parent_edge=1.0, alpha_decay_parent_edge=0.9,
-                        eta=0.):
+                        eta=0., node_weights=None):
 
 
         self.tree_dict = dict()
@@ -26,6 +26,9 @@ class Tree(ABC):
         self.eta = eta
         self.adata = None
         self.cmap = None
+        self.node_weights = node_weights
+        if self.node_weights is None:
+            self.node_weights = np.random.dirichlet([10.] * self.n_nodes)
 
     def get_size(self):
         return len(self.tree_dict.keys())
@@ -97,8 +100,8 @@ class Tree(ABC):
                             dp_alpha_parent_edge=self.dp_alpha_parent_edge,
                             alpha_decay_parent_edge=self.alpha_decay_parent_edge,
                             eta=self.eta,
-                            weight=1.0/self.n_nodes,
-                            size=1,
+                            weight=self.node_weights[0],
+                            size=int(self.node_weights[0] * 100),
                             color=constants.CLONES_PAL[0],
                             label='A'))
         for c in range(1, self.n_nodes):
@@ -110,8 +113,8 @@ class Tree(ABC):
                             dp_alpha_parent_edge=self.dp_alpha_parent_edge,
                             alpha_decay_parent_edge=self.alpha_decay_parent_edge,
                             eta=self.eta,
-                            weight=1.0/self.n_nodes,
-                            size=1,
+                            weight=self.node_weights[c],
+                            size=int(self.node_weights[c] * 100),
                             color=constants.CLONES_PAL[c],
                             label=alphabet[c])
 
@@ -274,6 +277,11 @@ class Tree(ABC):
             self.tree_dict[node]['weight'] = self.tree_dict[node]['size']/total + 1e-6
             if uniform:
                 self.tree_dict[node]['weight'] = 1.0/len(list(self.tree_dict.keys()))
+
+    def subset_genes(self, gene_list):
+        self.adata = self.adata[:,gene_list]
+        for node in self.tree_dict:
+            self.tree_dict[node]['params'] = pd.DataFrame(self.tree_dict[node]['params'], columns=self.adata.var_names)[gene_list].values
 
     @abstractmethod
     def add_node_params(self):
