@@ -36,7 +36,7 @@ class StructureSearch(object):
 
         init_baseline = np.mean(self.tree.data / np.sum(self.tree.data, axis=1).reshape(-1,1) * self.tree.data.shape[1], axis=0)
         init_baseline = init_baseline / init_baseline[0]
-        init_log_baseline = np.log(init_baseline[1:])
+        init_log_baseline = np.log(init_baseline[1:] + 1e-6)
         init_log_baseline = np.clip(init_log_baseline, -1, 1)
 
         if len(self.traces['score']) == 0:
@@ -222,7 +222,7 @@ class StructureSearch(object):
         from_factor = False
         factor_idx = None
         if self.tree.root['node'].root['node'].num_global_noise_factors > 0:
-            if len(nodes) < len(sca.ntssb.input_tree_dict.keys()) * 2:
+            if len(nodes) < len(self.tree.input_tree_dict.keys()) * 2:
                 p = 0.8
             else:
                 p = 0.5
@@ -232,8 +232,8 @@ class StructureSearch(object):
             if verbose:
                 print(f"Initializing new node from noise factor")
             # Choose factor that the data in the node like
-            cells_in_node = np.where(np.array(sca.ntssb.assignments) == nodes[-1])
-            factor_idx = np.argmax(np.mean(sca.ntssb.root['node'].root['node'].variational_parameters['globals']['cell_noise_mean'][cells_in_node], axis=0))
+            cells_in_node = np.where(np.array(self.tree.assignments) == nodes[-1])
+            factor_idx = np.argmax(np.mean(self.tree.root['node'].root['node'].variational_parameters['globals']['cell_noise_mean'][cells_in_node], axis=0))
             # factor_idx = np.argmax(np.var(self.tree.root['node'].root['node'].variational_parameters['globals']['noise_factors_mean'], axis=1))
 
         new_node = self.tree.add_node_to(node, optimal_init=True, factor_idx=factor_idx)
