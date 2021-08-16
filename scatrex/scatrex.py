@@ -211,7 +211,7 @@ class SCATrEx(object):
         adata = adata[cell_idx]
         sc.pp.normalize_total(adata, target_sum=1e4)
         sc.pp.log1p(adata)
-        sc.pp.highly_variable_genes(adata, n_top_genes=500)
+        sc.pp.highly_variable_genes(adata, n_top_genes=np.min([500, adata.shape[1]]))
         hvgenes = np.where(np.array(adata.var.highly_variable).ravel())[0]
         clones_filtered = clones[:,hvgenes]
         rna_filtered = np.array(adata.raw.X[:,hvgenes])
@@ -320,7 +320,7 @@ class SCATrEx(object):
             # Subset the data to the highest variable genes
             sc.pp.normalize_total(adata, target_sum=1e4)
             sc.pp.log1p(adata)
-            sc.pp.highly_variable_genes(adata, n_top_genes=500)
+            sc.pp.highly_variable_genes(adata, n_top_genes=np.min([500, adata.shape[1]]))
 
             hvgenes = np.where(np.array(adata.var.highly_variable).ravel())[0]
             clones_filtered = clones_filtered[:,hvgenes]
