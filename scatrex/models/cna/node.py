@@ -174,6 +174,7 @@ class Node(AbstractNode):
                 # self.log_baseline = normal_sample(0, 1., size=self.n_genes)
                 # self.log_baseline[0] = 0.
                 # self.baseline = np.exp(self.log_baseline)
+                self.baseline_shape = baseline_shape
                 self.baseline = np.random.gamma(self.baseline_shape, 1, size=self.n_genes-1)
                 self.baseline = np.concatenate([1, self.baseline])
                 self.log_baseline = np.log(self.baseline)
