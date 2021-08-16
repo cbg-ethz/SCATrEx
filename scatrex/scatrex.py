@@ -345,7 +345,7 @@ class SCATrEx(object):
         self.ntssb.reset_variational_parameters()
         init_baseline = np.mean(self.ntssb.data / np.sum(self.ntssb.data, axis=1).reshape(-1,1) * self.ntssb.data.shape[1], axis=0)
         init_baseline = init_baseline / init_baseline[0]
-        init_log_baseline = np.log(init_baseline[1:])
+        init_log_baseline = np.log(init_baseline[1:] + 1e-6)
         self.ntssb.root['node'].root['node'].variational_parameters['globals']['log_baseline_mean'] = np.clip(init_log_baseline, -1, 1)
         optimize_kwargs.setdefault('sticks_only', True) # ignore other node-specific parameters
         optimize_kwargs.setdefault('mb_size', adata.shape[0]) # use all cells in batch
