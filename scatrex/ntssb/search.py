@@ -222,7 +222,11 @@ class StructureSearch(object):
         from_factor = False
         factor_idx = None
         if self.tree.root['node'].root['node'].num_global_noise_factors > 0:
-            from_factor = bool(np.random.binomial(1, 0.5))
+            if len(nodes) < len(sca.ntssb.input_tree_dict.keys()) * 2:
+                p = 0.8
+            else:
+                p = 0.5
+            from_factor = bool(np.random.binomial(1, p))
 
         if from_factor:
             if verbose:
