@@ -23,7 +23,7 @@ class Node(AbstractNode):
                         num_global_noise_factors=4, global_noise_factors_precisions_shape=2.,
                         cell_global_noise_factors_weights_scale=1.,
                         unobserved_factors_root_kernel=0.1, unobserved_factors_kernel=1.,
-                        unobserved_factors_kernel_concentration=.01, frac_dosage=1, **kwargs):
+                        unobserved_factors_kernel_concentration=.01, frac_dosage=1, baseline_shape=0.1, **kwargs):
         super(Node, self).__init__(is_observed, observed_parameters, **kwargs)
 
         # The observed parameters are the CNVs of all genes
@@ -44,6 +44,7 @@ class Node(AbstractNode):
                 unobserved_factors_kernel=unobserved_factors_kernel,
                 unobserved_factors_kernel_concentration=unobserved_factors_kernel_concentration,
                 frac_dosage=frac_dosage,
+                baseline_shape=baseline_shape,
             )
         else:
             self.node_hyperparams = self.node_hyperparams_caller()
@@ -152,7 +153,7 @@ class Node(AbstractNode):
                         cell_global_noise_factors_weights_scale=1.,
                         unobserved_factors_root_kernel=0.1, unobserved_factors_kernel=1.,
                         unobserved_factors_kernel_concentration=.01,
-                        frac_dosage=1.):
+                        frac_dosage=1., baseline_shape=0.1):
         parent = self.parent()
 
         if parent is None: # this is the root
@@ -165,13 +166,18 @@ class Node(AbstractNode):
                 unobserved_factors_kernel=unobserved_factors_kernel,
                 unobserved_factors_kernel_concentration=unobserved_factors_kernel_concentration,
                 frac_dosage=frac_dosage,
+                baseline_shape=baseline_shape,
             )
 
             if root_params:
                 # The root is used to store global parameters:  mu
-                self.log_baseline = normal_sample(0, 1., size=self.n_genes)
-                self.log_baseline[0] = 0.
-                self.baseline = np.exp(self.log_baseline)
+                # self.log_baseline = normal_sample(0, 1., size=self.n_genes)
+                # self.log_baseline[0] = 0.
+                # self.baseline = np.exp(self.log_baseline)
+                self.baseline = np.random.gamma(self.baseline_shape, 1, size=self.n_genes-1)
+                self.baseline = np.concatenate([1, self.baseline])
+                self.log_baseline = np.log(self.baseline)
+
                 self.overdispersion = np.exp(normal_sample(0, 1))
                 self.log_lib_size_mean = log_lib_size_mean
                 self.log_lib_size_std = log_lib_size_std
