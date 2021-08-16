@@ -16,6 +16,8 @@ from ...util import *
 from ...ntssb.node import *
 from ...ntssb.tree import *
 
+MIN_CNV = 1e-6
+
 class Node(AbstractNode):
     def __init__(self, is_observed, observed_parameters, log_lib_size_mean=6, log_lib_size_std=.8,
                         num_global_noise_factors=4, global_noise_factors_precisions_shape=2.,
@@ -26,7 +28,7 @@ class Node(AbstractNode):
 
         # The observed parameters are the CNVs of all genes
         self.cnvs = np.array(self.observed_parameters)
-        self.cnvs[np.where(self.cnvs == 0)[0]] = 1e-6
+        self.cnvs[np.where(self.cnvs == 0)[0]] = MIN_CNV
         self.observed_parameters = np.array(self.cnvs)
 
         self.n_genes = self.cnvs.size
@@ -227,9 +229,9 @@ class Node(AbstractNode):
         if inert_genes is not None:
             cnvs = np.array(cnvs)
             inert_genes = np.array(inert_genes)
-            zero_genes = np.where(cnvs == 0)[0]
+            zero_genes = np.where(cnvs == MIN_CNV)[0]
             cnvs[inert_genes] = 2. # set these genes to 2, i.e., act like they have no CNV
-            cnvs[zero_genes] = 1e-6 # (except if they are zero)
+            cnvs[zero_genes] = MIN_CNV # (except if they are zero)
         node_mean = None
         if noise is not None:
             node_mean = baseline * cnvs/2 * np.exp(unobserved_factors + noise)
