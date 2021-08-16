@@ -226,7 +226,10 @@ class Node(AbstractNode):
         cnvs = self.cnvs if cnvs is None else cnvs
         if inert_genes is not None:
             cnvs = np.array(cnvs)
+            inert_genes = np.array(inert_genes)
+            zero_genes = np.where(cnvs == 0)[0]
             cnvs[inert_genes] = 2. # set these genes to 2, i.e., act like they have no CNV
+            cnvs[zero_genes] = 1e-6 # (except if they are zero)
         node_mean = None
         if noise is not None:
             node_mean = baseline * cnvs/2 * np.exp(unobserved_factors + noise)
