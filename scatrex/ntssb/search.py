@@ -227,7 +227,10 @@ class StructureSearch(object):
         if from_factor:
             if verbose:
                 print(f"Initializing new node from noise factor")
-            factor_idx = np.argmax(np.var(self.tree.root['node'].root['node'].variational_parameters['globals']['noise_factors_mean'], axis=1))
+            # Choose factor that the data in the node like
+            cells_in_node = np.where(np.array(sca.ntssb.assignments) == nodes[-1])
+            factor_idx = np.argmax(np.mean(sca.ntssb.root['node'].root['node'].variational_parameters['globals']['cell_noise_mean'][cells_in_node], axis=0))
+            # factor_idx = np.argmax(np.var(self.tree.root['node'].root['node'].variational_parameters['globals']['noise_factors_mean'], axis=1))
 
         new_node = self.tree.add_node_to(node, optimal_init=True, factor_idx=factor_idx)
 
@@ -237,7 +240,7 @@ class StructureSearch(object):
 
         if from_factor:
             # Remove factor
-            self.tree.root['node'].root['node'].variational_parameters['globals']['noise_factors_mean'] *= 0.01
+            self.tree.root['node'].root['node'].variational_parameters['globals']['noise_factors_mean'][factor_idx] *= 0.0
             self.tree.optimize_elbo(local_node=None, root_node=None, num_samples=num_samples, n_iters=2*n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
         else:
             self.tree.optimize_elbo(local_node=local_node, root_node=None, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
