@@ -245,6 +245,7 @@ class StructureSearch(object):
         if from_factor:
             # Remove factor
             self.tree.root['node'].root['node'].variational_parameters['globals']['noise_factors_mean'][factor_idx] *= 0.0
+            self.tree.root['node'].root['node'].variational_parameters['globals']['cell_noise_mean'][:,factor_idx] *= 0.0
             self.tree.optimize_elbo(local_node=None, root_node=None, num_samples=num_samples, n_iters=2*n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
         else:
             self.tree.optimize_elbo(local_node=local_node, root_node=None, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
