@@ -17,6 +17,7 @@ from ...ntssb.node import *
 from ...ntssb.tree import *
 
 MIN_CNV = 1e-6
+MAX_XI = 5
 
 class Node(AbstractNode):
     def __init__(self, is_observed, observed_parameters, log_lib_size_mean=6, log_lib_size_std=.8,
@@ -212,7 +213,9 @@ class Node(AbstractNode):
                 if not self.is_observed:
                     self.unobserved_factors_kernel[np.argmax(self.unobserved_factors_kernel)] = np.max([5., np.max(self.unobserved_factors_kernel)])
                 self.unobserved_factors = normal_sample(parent.unobserved_factors, self.unobserved_factors_kernel)
-                self.unobserved_factors = np.clip(self.unobserved_factors, -10, 10)
+                self.unobserved_factors = np.clip(self.unobserved_factors, -MAX_XI, MAX_XI)
+                if not self.is_observed:
+                    self.unobserved_factors[np.argmax(self.unobserved_factors)] = np.max([MAX_XI, np.max(self.unobserved_factors)]) # just force an amplification
 
             # Observation mean
             self.set_mean()
