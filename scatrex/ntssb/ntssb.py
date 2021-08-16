@@ -1135,11 +1135,11 @@ class NTSSB(object):
         params_idx = 0
         for i, global_param in enumerate(global_names):
                 params_idx = globals_start + i
-                self.root['node'].root['node'].variational_parameters['globals'][global_param] = params[params_idx]
+                self.root['node'].root['node'].variational_parameters['globals'][global_param] = np.array(params[params_idx])
 
         for node_idx, node in enumerate(nodes):
             for i, local_param in enumerate(local_names):
-                node.variational_parameters['locals'][local_param] = params[i][node_idx]
+                node.variational_parameters['locals'][local_param] = np.array(params[i][node_idx])
             node.set_mean(variational=True)
 
     def update_ass_logits(self, indices=None, variational=False, prior=True):
