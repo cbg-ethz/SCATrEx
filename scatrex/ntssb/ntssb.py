@@ -1205,16 +1205,20 @@ class NTSSB(object):
             else:
                 # Initialize the mean
                 # if len(root['children']) == 1: # Worst explained by parent
-                data_indices = list(root['node'].data.copy())
-                if len(data_indices) > 0:
-                    # worst_index = np.argmin(root['node'].data_ass_logits[data_indices])
-                    worst_index = np.random.choice(np.array(data_indices)[np.array([np.argsort(root['node'].data_ass_logits[data_indices])[:5]])].ravel())
-                    print(f'Setting new node to explain datum {worst_index}')
-                    worst_datum = self.data[worst_index]
-                    noise = self.root['node'].root['node'].variational_parameters['globals']['cell_noise_mean'][worst_index].dot(self.root['node'].root['node'].variational_parameters['globals']['noise_factors_mean'])
-                    total_rna = np.sum(baseline * root['node'].cnvs/2 * np.exp(root['node'].variational_parameters['locals']['unobserved_factors_mean'] + noise))
-                    root['children'][-1]['node'].variational_parameters['locals']['unobserved_factors_mean'] = np.log((worst_datum+1) * total_rna/(self.root['node'].root['node'].lib_sizes[worst_index]*baseline * root['node'].cnvs/2 * np.exp(noise)))
-                    root['children'][-1]['node'].set_mean(root['children'][-1]['node'].get_mean(unobserved_factors=root['children'][-1]['node'].variational_parameters['locals']['unobserved_factors_mean'], baseline=baseline))
+                # data_indices = list(root['node'].data.copy())
+                # if len(data_indices) > 0:
+                #     # worst_index = np.argmin(root['node'].data_ass_logits[data_indices])
+                #     worst_index = np.random.choice(np.array(data_indices)[np.array([np.argsort(root['node'].data_ass_logits[data_indices])[:5]])].ravel())
+                #     print(f'Setting new node to explain datum {worst_index}')
+                #     worst_datum = self.data[worst_index]
+                #     noise = self.root['node'].root['node'].variational_parameters['globals']['cell_noise_mean'][worst_index].dot(self.root['node'].root['node'].variational_parameters['globals']['noise_factors_mean'])
+                #     total_rna = np.sum(baseline * root['node'].cnvs/2 * np.exp(root['node'].variational_parameters['locals']['unobserved_factors_mean'] + noise))
+                #     root['children'][-1]['node'].variational_parameters['locals']['unobserved_factors_mean'] = np.log((worst_datum+1) * total_rna/(self.root['node'].root['node'].lib_sizes[worst_index]*baseline * root['node'].cnvs/2 * np.exp(noise)))
+                #     root['children'][-1]['node'].set_mean(root['children'][-1]['node'].get_mean(unobserved_factors=root['children'][-1]['node'].variational_parameters['locals']['unobserved_factors_mean'], baseline=baseline))
+                data_in_node = self.data[list(root['node'].data.copy())]
+                target_genes = np.argsort(np.var(np.log(data_in_node + 1), axis=0))[-5:]
+                root['children'][-1]['node'].variational_parameters['locals']['unobserved_factors_kernel_log_mean'][target_genes] = 1.
+
 
         return root['children'][-1]['node']
 
@@ -2064,7 +2068,7 @@ class NTSSB(object):
                     node_color_dict[name] = color
 
         if super_only:
-            g = self.tssb_dict2graphviz(counts=counts, root_fillcolor=root_fillcolor, events=events, show_labels=show_labels, gene=gene, genemode=genemode, fontcolor=fontcolor, node_color_dict=node_color_dict)
+            g = self.tssb_dict2graphviz(counts=counts, root_fillcolor=root_fillcolor, events=events, show_labels=show_labels, gene=gene, genemode=genemode, fontcolor=fontcolor)
         else:
             g = self.root['node'].plot_tree(counts=counts, reset_names=True, root_fillcolor=root_fillcolor, events=events, show_labels=show_labels, gene=gene, genemode=genemode, fontcolor=fontcolor, node_color_dict=node_color_dict)
             def descend(root, g):
