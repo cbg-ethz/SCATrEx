@@ -1217,7 +1217,7 @@ class NTSSB(object):
                 #     root['children'][-1]['node'].set_mean(root['children'][-1]['node'].get_mean(unobserved_factors=root['children'][-1]['node'].variational_parameters['locals']['unobserved_factors_mean'], baseline=baseline))
                 data_indices = list(root['node'].data.copy())
                 if len(data_indices) > 0:
-                    data_in_node = self.data[data_indices]
+                    data_in_node = np.array(self.data)[data_indices]
                     target_genes = np.argsort(np.var(np.log(data_in_node + 1), axis=0))[-5:]
                     root['children'][-1]['node'].variational_parameters['locals']['unobserved_factors_kernel_log_mean'][target_genes] = 1.
 
