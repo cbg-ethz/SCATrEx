@@ -114,7 +114,7 @@ class TSSB(object):
     def get_ntssb_root(self):
         ntssb = self.ntssb
         def descend(root):
-            if root['node'] == tssb:
+            if root['node'] == self:
                 return root
             for child in root['children']:
                 return descend(child)
