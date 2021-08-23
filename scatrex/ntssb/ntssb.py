@@ -1899,15 +1899,14 @@ class NTSSB(object):
         if show_labels and events:
             root_label = self.root['label'] + '<br/><br/>' + self.root['node'].event_str
 
-        style = None
-        if root_fillcolor is not None:
-            style = 'filled'
+        style = 'filled'
         if root_fillcolor is None:
             root_fillcolor = self.root['node'].color
         if gene is not None:
-            style = 'filled'
             fillcolor=name_color_dict[str(self.root['label'])]
         g.node(str(self.root['label']), '<' + str(root_label) + '>', fillcolor=root_fillcolor, style=style)
+
+        edge_color = 'black'
 
         def descend(root, g):
             name = root['label']
@@ -1932,10 +1931,7 @@ class NTSSB(object):
                 fillcolor = child['node'].color
                 if gene is not None:
                     fillcolor = name_color_dict[str(child_name)]
-                    style = 'filled'
                 g.node(str(child_name), '<' + str(child_label) + '>', fillcolor=fillcolor, style=style)
-
-                edge_color = 'black'
 
                 g.edge(str(name), str(child_name), color=edge_color)
 
