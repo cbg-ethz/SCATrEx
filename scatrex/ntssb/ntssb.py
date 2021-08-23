@@ -1893,7 +1893,7 @@ class NTSSB(object):
         if counts:
             root_label = self.root['node'].num_data()
         if show_labels and counts:
-            root_label = self.root['label'] + '<br/><br/>' + str(self.root['node'].num_local_data()) + ' cells'
+            root_label = self.root['label'] + '<br/><br/>' + str(self.root['node'].num_data()) + ' cells'
         if events:
             root_label = self.root['node'].event_str
         if show_labels and events:
