@@ -1336,9 +1336,10 @@ class NTSSB(object):
         # Set new node's parameters equal to the previous parameters of node
         new_node.variational_parameters['locals']['unobserved_factors_mean'] = paramsB
         new_node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = paramsB_k
-        new_node.data = dataB.copy()
-        new_node.data_ass_logits = np.array(logitsB)
         new_node.set_mean(variational=True)
+        if child_node:
+            new_node.data = dataB.copy()
+            new_node.data_ass_logits = np.array(logitsB)
 
     def swap_nodes(self, nodeA, nodeB):
         if isinstance(nodeA, str) and isinstance(nodeB, str):
