@@ -536,9 +536,9 @@ class Node(AbstractNode):
             pl = diag_gaussian_logpdf(nodes_unobserved_factors[i],
                         (parent_vector[i] != -1) * nodes_unobserved_factors[parent_vector[i]],
                         nodes_log_unobserved_factors_kernels[i]*(parent_vector[i] != -1) + log_kernel*(parent_vector[i] == -1))
-            pl = pl - (parent_vector[i] != -1) * jnp.all(tssb_indices[i] == tssb_indices[parent_vector[i]]) * diag_gaussian_logpdf(nodes_unobserved_factors[parent_vector[i]],
-                        (parent_vector[i] != -1) * nodes_unobserved_factors[parent_vector[i]],
-                        nodes_log_unobserved_factors_kernels[i]*(parent_vector[i] != -1)) # penalize copies in unobserved nodes
+            # pl = pl - (parent_vector[i] != -1) * jnp.all(tssb_indices[i] == tssb_indices[parent_vector[i]]) * diag_gaussian_logpdf(nodes_unobserved_factors[parent_vector[i]],
+            #             (parent_vector[i] != -1) * nodes_unobserved_factors[parent_vector[i]],
+            #             nodes_log_unobserved_factors_kernels[i]*(parent_vector[i] != -1)) # penalize copies in unobserved nodes
             ent = - diag_gaussian_logpdf(nodes_unobserved_factors[i], unobserved_means[i], unobserved_log_stds[i])
             kl = kl + pl + ent
 
