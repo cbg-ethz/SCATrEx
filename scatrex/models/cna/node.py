@@ -525,7 +525,7 @@ class Node(AbstractNode):
 
         def compute_node_kl(i):
             # # unobserved_factors_kernel -- USING JUST A SPARSE GAMMA DOES NOT PENALIZE KERNELS EQUAL TO ZERO
-            pl = diag_gamma_logpdf(jnp.exp(nodes_log_unobserved_factors_kernels[i]), broadcasted_concentration,
+            pl = diag_gamma_logpdf(jnp.clip(jnp.exp(nodes_log_unobserved_factors_kernels[i]), a_min=1e-2), broadcasted_concentration,
                                     (parent_vector[i] != -1)*jnp.abs(nodes_unobserved_factors[parent_vector[i]]))
             pl = pl - (parent_vector[i] != -1) * jnp.all(tssb_indices[i] == tssb_indices[parent_vector[i]]) * diag_gamma_logpdf(1e-2 * np.ones(broadcasted_concentration.shape), broadcasted_concentration,
                                     (parent_vector[i] != -1)*jnp.abs(nodes_unobserved_factors[parent_vector[i]])) # penalize copies in unobserved nodes
