@@ -198,9 +198,10 @@ class StructureSearch(object):
                         self.best_tree = deepcopy(self.tree)
                         print(f'New best! {self.best_elbo}')
 
+            score = self.tree.elbo if score_type == 'elbo' else self.tree.ll
             self.tree.plot_tree(super_only=False)
             self.traces['elbo'].append(self.tree.elbo)
-            self.traces['score'].append(new_score)
+            self.traces['score'].append(score)
             self.traces['move'].append(move_id)
             self.traces['n_nodes'].append(self.tree.n_nodes)
             self.traces['temperature'].append(T)
