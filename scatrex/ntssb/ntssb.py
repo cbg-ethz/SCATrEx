@@ -1690,8 +1690,8 @@ class NTSSB(object):
         roots[nodeA_idx]['node'].set_mean(variational=True)
         for n in nodes_below_nodeA:
             n.tssb = target_subtree['node']
-            n.cnvs = target_subtree['node'].root['node'].cnvs
-            n.observed_parameters = target_subtree['node'].root['node'].observed_parameters
+            n.cnvs = np.array(target_subtree['node'].root['node'].cnvs)
+            n.observed_parameters = np.array(target_subtree['node'].root['node'].observed_parameters)
         target_subtree['node'].root['children'].append(roots[nodeA_idx])
         target_subtree['node'].root['sticks'] = np.vstack([target_subtree['node'].root['sticks'], 1.])
 
