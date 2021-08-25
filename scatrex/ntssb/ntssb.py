@@ -1443,7 +1443,7 @@ class NTSSB(object):
         else: # e.g. A with A-0
             init_baseline = np.mean(self.data / np.sum(self.data, axis=1).reshape(-1,1) * self.data.shape[1], axis=0)
             init_baseline = init_baseline / init_baseline[0]
-            init_log_baseline = np.log(init_baseline[1:])
+            init_log_baseline = np.log(init_baseline[1:] + 1e-6)
             root_node.variational_parameters['globals']['log_baseline_mean'] = init_log_baseline
             root_node.variational_parameters['locals']['unobserved_factors_mean'] = np.zeros((self.data.shape[1],))
             root_node.set_mean(variational=True)
