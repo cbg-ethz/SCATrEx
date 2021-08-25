@@ -14,6 +14,7 @@ class StructureSearch(object):
 
         self.traces = dict()
         self.traces['tree'] = []
+        self.traces['elbo'] = []
         self.traces['score'] = []
         self.traces['move'] = []
         self.traces['temperature'] = []
@@ -23,10 +24,15 @@ class StructureSearch(object):
         self.best_elbo = self.tree.elbo
         self.best_tree = deepcopy(self.tree)
 
-    def run_search(self, n_iters=1000, n_iters_elbo=1000, factor_delay=0, thin=10, local=True, num_samples=1, step_size=0.001, verbose=True, tol=1e-6, mb_size=100, max_nodes=5, debug=False, callback=None, alpha=0.01, Tmax=10, anneal=False, restart_step=10,
+    def run_search(self, n_iters=1000, n_iters_elbo=1000, factor_delay=0, posterior_delay=0, thin=10, local=True, num_samples=1, step_size=0.001, verbose=True, tol=1e-6, mb_size=100, max_nodes=5, debug=False, callback=None, alpha=0.01, Tmax=10, anneal=False, restart_step=10,
                     moves=['add', 'merge', 'pivot_reattach', 'swap', 'subtree_reattach', 'push_subtree', 'perturb_node', 'perturb_globals'],
                     move_weights=[1, 3, 1, 1, 1, 1, 1, 1], merge_n_tries=5, opt=None, search_callback=None, add_rule='accept', **callback_kwargs):
         print(f'Will search for the maximum marginal likelihood tree with the following moves: {moves}\n')
+
+        score_type = 'elbo'
+        if posterior_delay > 0:
+            score_type = 'll'
+
         main_step_size = step_size
         T = Tmax
         if not anneal:
@@ -56,7 +62,7 @@ class StructureSearch(object):
             self.best_elbo = self.tree.elbo
             self.best_tree = deepcopy(self.tree)
 
-        init_elbo = self.tree.elbo
+        init_score = self.tree.elbo if score_type == 'elbo' else self.tree.ll
         init_root = self.tree.root
         move_id = 'full'
         n_merge = 0
@@ -93,6 +99,14 @@ class StructureSearch(object):
                 self.tree.root['node'].root['node'].init_noise_factors()
                 move_id = 'full'
 
+            if i < posterior_delay:
+                score_type = 'll'
+            else:
+                score_type = 'elbo'
+
+            init_elbo = self.tree.elbo
+            init_score = self.tree.elbo if score_type == 'elbo' else self.tree.ll
+
             if move_id == 'add' and self.tree.n_nodes < self.tree.max_nodes-1:
                 init_root, init_elbo = self.add_node(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, mb_size=mb_size, max_nodes=max_nodes, debug=debug, opt=opt, callback=callback)
             elif move_id == 'merge':
@@ -127,7 +141,6 @@ class StructureSearch(object):
                 init_elbo = self.tree.elbo
                 self.tree.optimize_elbo(root_node=None, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=callback)
 
-
             if np.isnan(self.tree.elbo):
                 print("Got NaN!")
                 self.tree.root = deepcopy(init_root)
@@ -148,6 +161,9 @@ class StructureSearch(object):
             #             T = Tmax - alpha*idx
             #             T = T * (1 + (self.tree.elbo - self.best_elbo)/self.tree.elbo)
 
+
+            new_score = self.tree.elbo if score_type == 'elbo' else self.tree.ll
+
             accepted = True
 
             if move_id == 'add':
@@ -159,7 +175,7 @@ class StructureSearch(object):
                             self.best_tree = deepcopy(self.tree)
                             print(f'New best! {self.best_elbo}')
                 else:
-                    if (-(init_elbo - self.tree.elbo)/T) < np.log(np.random.rand()):
+                    if (-(init_score - new_score)/T) < np.log(np.random.rand()):
                         self.tree.root = deepcopy(init_root)
                         self.tree.elbo = init_elbo
                         accepted = False
@@ -171,7 +187,7 @@ class StructureSearch(object):
                                 self.best_tree = deepcopy(self.tree)
                                 print(f'New best! {self.best_elbo}')
             else:
-                if move_id != 'full' and move_id != 'globals' and (-(init_elbo - self.tree.elbo)/T) < np.log(np.random.rand()) or self.tree.n_nodes >= self.tree.max_nodes: # Rejected
+                if move_id != 'full' and move_id != 'globals' and (-(init_score - new_score)/T) < np.log(np.random.rand()) or self.tree.n_nodes >= self.tree.max_nodes: # Rejected
                     self.tree.root = deepcopy(init_root)
                     self.tree.elbo = init_elbo
                     accepted = False
@@ -183,7 +199,8 @@ class StructureSearch(object):
                         print(f'New best! {self.best_elbo}')
 
             self.tree.plot_tree(super_only=False)
-            self.traces['score'].append(self.tree.elbo)
+            self.traces['elbo'].append(self.tree.elbo)
+            self.traces['score'].append(new_score)
             self.traces['move'].append(move_id)
             self.traces['n_nodes'].append(self.tree.n_nodes)
             self.traces['temperature'].append(T)
