@@ -487,6 +487,24 @@ class SCATrEx(object):
                                     line_width=lw, head_width=hw, s=s, fc=fc, ec=ec, fontsize=fs,
                                     legend_fontsize=lfs, figsize=figsize, save=save)
 
+    def plot_observed_parameters(self, figsize=(4,4), lw=4, alpha=0.7, title='', fontsize=18, step=4, save=None):
+        nodes, _ = self.ntssb.get_node_mixture()
+        plt.figure(figsize=figsize)
+        ticklabs = []
+        tickpos = []
+        for i, node in enumerate(nodes):
+            ls = '-'
+            tickpos.append(- step*i)
+            ticklabs.append(fr"{node.label.replace('-', '')}")
+            obs = node.observed_parameters
+            plt.plot(obs - step*i, label=node.label, color=node.tssb.color, lw=4, alpha=0.7, ls=ls)
+            plt.xticks([])
+        plt.yticks(tickpos, labels=ticklabs, fontsize=fontsize)
+        plt.title(title, fontsize=fontsize)
+        if save is not None:
+            plt.savefig(save, bbox_inches='tight')
+        plt.show()
+
     def plot_unobserved_parameters(self, gene=None, figsize=(4,4), lw=4, alpha=0.7, title='', fontsize=18, step=4, estimated=False, x_max=4, name='unobserved_factors', save=None):
         nodes, _ = self.ntssb.get_node_mixture()
         plt.figure(figsize=figsize)
