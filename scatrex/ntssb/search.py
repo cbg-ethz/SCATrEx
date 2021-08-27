@@ -102,6 +102,9 @@ class StructureSearch(object):
             if i < posterior_delay:
                 score_type = 'll'
             else:
+                # Go back to best in terms of ELBO
+                self.tree.root = deepcopy(self.best_tree.root)
+                self.tree.elbo = self.best_elbo
                 score_type = 'elbo'
 
             init_elbo = self.tree.elbo
