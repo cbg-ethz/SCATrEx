@@ -99,6 +99,9 @@ class StructureSearch(object):
                 self.tree.root['node'].root['node'].init_noise_factors()
                 move_id = 'full'
 
+            if score_type == 'elbo' and np.var(self.traces['score'][:int(np.min([10, n_iters/10]))]) == 0:
+                posterior_delay = i + 10
+
             if i < posterior_delay:
                 score_type = 'll'
             elif i == posterior_delay:
