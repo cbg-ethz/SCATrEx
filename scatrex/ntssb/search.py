@@ -170,7 +170,7 @@ class StructureSearch(object):
             accepted = True
 
             if move_id == 'add':
-                if add_rule == 'accept':
+                if add_rule == 'accept' and score_type == 'elbo': # only accept immediatly if using ELBO to score
                     if self.tree.n_nodes < self.tree.max_nodes:
                         print(f'*Move ({move_id}) accepted. ({init_elbo} -> {self.tree.elbo})*')
                         if self.tree.elbo > self.best_elbo:
