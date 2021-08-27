@@ -83,7 +83,7 @@ class Node(AbstractNode):
                     # init_log_baseline = np.log(init_baseline / init_baseline[0])[1:]
                     init_baseline = np.mean(self.tssb.ntssb.data / np.sum(self.tssb.ntssb.data, axis=1).reshape(-1,1) * self.n_genes, axis=0)
                     init_baseline = init_baseline / init_baseline[0]
-                    init_log_baseline = np.log(init_baseline[1:])
+                    init_log_baseline = np.log(init_baseline[1:] + 1e-6)
                     self.variational_parameters['globals']['log_baseline_mean'] = np.clip(init_log_baseline, -1, 1)
             if variances:
                 self.variational_parameters['globals']['log_baseline_log_std'] = np.array(np.zeros((self.n_genes-1,)))
