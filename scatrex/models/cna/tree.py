@@ -54,12 +54,15 @@ class ObservedTree(Tree):
                 # Sample regions to be affected
                 affected_regions = np.random.choice(np.arange(0, n_regions), size=n_r, replace=False)
 
+                all_affected_genes = []
                 for r in affected_regions:
                     # Apply event to region
                     if r > 0:
                         affected_genes = np.arange(region_stops[r-1], region_stops[r])
                     elif r == 0:
                         affected_genes = np.arange(0, region_stops[r])
+
+                    all_affected_genes.append(affected_genes)
 
                     if np.any(parent_params[affected_genes]) == 0:
                         continue
@@ -79,9 +82,6 @@ class ObservedTree(Tree):
                     clone_cn_events_genes = np.zeros((n_genes,))
                     clone_cn_events_genes[affected_genes] = s*m
 
-                    if np.all(parent_params[affected_genes] + clone_cn_events_genes[affected_genes] >= min_cn):
-                        break
-
                     self.tree_dict[node]['params'][affected_genes] = parent_params[affected_genes] + clone_cn_events_genes[affected_genes]
 
                     # String to show in tree
@@ -96,6 +96,10 @@ class ObservedTree(Tree):
                         pref = self.tree_dict[node]['params_label'] + '\n'
                     self.tree_dict[node]['params_label'] = pref + f'<font color="{self.sign_colors[sign]}">{sign}{m}</font>: {affected}'
                     self.tree_dict[node]['params_label'] = pref + f'{sign}{m}: {affected}'
+
+                all_affected_genes = np.concatenate(all_affected_genes)
+                if np.all(parent_params[all_affected_genes] + clone_cn_events_genes[all_affected_genes] >= min_cn):
+                    break
 
     def plot_heatmap(self, var_names=None, cmap=None, **kwds):
         if var_names is None:
