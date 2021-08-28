@@ -60,7 +60,7 @@ class ObservedTree(Tree):
                 elif r == 0:
                     affected_genes = np.arange(0, region_stops[r])
 
-                if np.any(parent_params[affected_genes]) == 0:
+                if np.any(parent_params[affected_genes]) == min_cn:
                     continue
 
                 while True:
