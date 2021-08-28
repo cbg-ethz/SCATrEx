@@ -47,23 +47,23 @@ class ObservedTree(Tree):
             self.tree_dict[node]['params_label'] = ''
             parent_params = np.array(self.tree_dict[self.tree_dict[node]['parent']]['params'])
 
-            # Sample number of regions to be affected
-            n_r = np.random.choice(np.arange(1, np.max([int(2/3 * n_regions), 2])))
+            while True:
+                # Sample number of regions to be affected
+                n_r = np.random.choice(np.arange(1, np.max([int(2/3 * n_regions), 2])))
 
-            # Sample regions to be affected
-            affected_regions = np.random.choice(np.arange(0, n_regions), size=n_r, replace=False)
+                # Sample regions to be affected
+                affected_regions = np.random.choice(np.arange(0, n_regions), size=n_r, replace=False)
 
-            for r in affected_regions:
-                # Apply event to region
-                if r > 0:
-                    affected_genes = np.arange(region_stops[r-1], region_stops[r])
-                elif r == 0:
-                    affected_genes = np.arange(0, region_stops[r])
+                for r in affected_regions:
+                    # Apply event to region
+                    if r > 0:
+                        affected_genes = np.arange(region_stops[r-1], region_stops[r])
+                    elif r == 0:
+                        affected_genes = np.arange(0, region_stops[r])
 
-                if np.any(parent_params[affected_genes]) == min_cn:
-                    continue
+                    if np.any(parent_params[affected_genes]) == 0:
+                        continue
 
-                while True:
                     # Sample event sign
                     s = np.random.choice([-1, 1])
 
@@ -82,20 +82,20 @@ class ObservedTree(Tree):
                     if np.all(parent_params[affected_genes] + clone_cn_events_genes[affected_genes] >= min_cn):
                         break
 
-                self.tree_dict[node]['params'][affected_genes] = parent_params[affected_genes] + clone_cn_events_genes[affected_genes]
+                    self.tree_dict[node]['params'][affected_genes] = parent_params[affected_genes] + clone_cn_events_genes[affected_genes]
 
-                # String to show in tree
-                sign = '-' if s < 0 else '+'
-                affected = ""
-                if len(affected_genes) > 5:
-                    affected = f'{affected_genes[0]}...{affected_genes[-1]}'
-                else:
-                    affected = ','.join(np.array(affected_genes).astype(str))
-                pref = ''
-                if self.tree_dict[node]['params_label'] != '':
-                    pref = self.tree_dict[node]['params_label'] + '\n'
-                self.tree_dict[node]['params_label'] = pref + f'<font color="{self.sign_colors[sign]}">{sign}{m}</font>: {affected}'
-                self.tree_dict[node]['params_label'] = pref + f'{sign}{m}: {affected}'
+                    # String to show in tree
+                    sign = '-' if s < 0 else '+'
+                    affected = ""
+                    if len(affected_genes) > 5:
+                        affected = f'{affected_genes[0]}...{affected_genes[-1]}'
+                    else:
+                        affected = ','.join(np.array(affected_genes).astype(str))
+                    pref = ''
+                    if self.tree_dict[node]['params_label'] != '':
+                        pref = self.tree_dict[node]['params_label'] + '\n'
+                    self.tree_dict[node]['params_label'] = pref + f'<font color="{self.sign_colors[sign]}">{sign}{m}</font>: {affected}'
+                    self.tree_dict[node]['params_label'] = pref + f'{sign}{m}: {affected}'
 
     def plot_heatmap(self, var_names=None, cmap=None, **kwds):
         if var_names is None:
