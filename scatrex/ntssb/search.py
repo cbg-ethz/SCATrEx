@@ -99,8 +99,8 @@ class StructureSearch(object):
                 self.tree.root['node'].root['node'].init_noise_factors()
                 move_id = 'full'
 
-            if score_type == 'elbo' and np.var(self.traces['score'][:int(np.maximum([10, n_iters/10]))]) == 0:
-                print(f"Score hasn't changed in {int(np.maximum([10, n_iters/10]))} iterations. Using ll for 10 iterations.")
+            if score_type == 'elbo' and np.var(self.traces['score'][:int(np.max([10, n_iters/10]))]) == 0:
+                print(f"Score hasn't changed in {int(np.max([10, n_iters/10]))} iterations. Using ll for 10 iterations.")
                 posterior_delay = i + 10
 
             if i < posterior_delay:
