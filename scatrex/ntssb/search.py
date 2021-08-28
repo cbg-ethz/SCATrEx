@@ -257,7 +257,7 @@ class StructureSearch(object):
             if verbose:
                 print(f"Initializing new node from noise factor")
             # Choose factor that the data in the node like
-            cells_in_node = np.where(np.array(self.tree.assignments) == nodes[-1])
+            cells_in_node = np.where(np.array(self.tree.assignments) == node)
             factor_idx = np.argmax(np.mean(self.tree.root['node'].root['node'].variational_parameters['globals']['cell_noise_mean'][cells_in_node], axis=0))
             # factor_idx = np.argmax(np.var(self.tree.root['node'].root['node'].variational_parameters['globals']['noise_factors_mean'], axis=1))
 
