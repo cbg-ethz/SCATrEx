@@ -1200,8 +1200,10 @@ class NTSSB(object):
             baseline = np.append(1, np.exp(self.root['node'].root['node'].log_baseline_caller()))
 
             if factor_idx is not None:
-                root['children'][-1]['node'].variational_parameters['locals']['unobserved_factors_mean'] = self.root['node'].root['node'].variational_parameters['globals']['noise_factors_mean'][factor_idx]
-                root['children'][-1]['node'].set_mean(root['children'][-1]['node'].get_mean(unobserved_factors=root['children'][-1]['node'].variational_parameters['locals']['unobserved_factors_mean'], baseline=baseline))
+                target_genes = np.argsort(np.abs(self.root['node'].root['node'].variational_parameters['globals']['noise_factors_mean'][factor_idx])[-5:]
+                root['children'][-1]['node'].variational_parameters['locals']['unobserved_factors_kernel_log_mean'][target_genes] = 1.
+                # root['children'][-1]['node'].variational_parameters['locals']['unobserved_factors_mean'] = self.root['node'].root['node'].variational_parameters['globals']['noise_factors_mean'][factor_idx]
+                # root['children'][-1]['node'].set_mean(root['children'][-1]['node'].get_mean(unobserved_factors=root['children'][-1]['node'].variational_parameters['locals']['unobserved_factors_mean'], baseline=baseline))
             else:
                 # Initialize the mean
                 # if len(root['children']) == 1: # Worst explained by parent
