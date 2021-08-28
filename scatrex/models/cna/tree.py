@@ -31,7 +31,7 @@ class ObservedTree(Tree):
         self.cmap = get_cnv_cmap()
         self.sign_colors = {'-': 'blue', '+': 'red'}
 
-    def add_node_params(self, n_genes=50, n_regions=5):
+    def add_node_params(self, n_genes=50, n_regions=5, min_cn=0):
         C = len(self.tree_dict.keys())
         n_regions = np.max([n_regions, 3])
         # Define regions
@@ -79,7 +79,7 @@ class ObservedTree(Tree):
                     clone_cn_events_genes = np.zeros((n_genes,))
                     clone_cn_events_genes[affected_genes] = s*m
 
-                    if np.all(parent_params[affected_genes] + clone_cn_events_genes[affected_genes] >= 0):
+                    if np.all(parent_params[affected_genes] + clone_cn_events_genes[affected_genes] >= min_cn):
                         break
 
                 self.tree_dict[node]['params'][affected_genes] = parent_params[affected_genes] + clone_cn_events_genes[affected_genes]
