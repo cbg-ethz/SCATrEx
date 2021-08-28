@@ -43,11 +43,12 @@ class ObservedTree(Tree):
                 self.tree_dict[node]['params'] = np.ones((n_genes,)) * 2
                 self.tree_dict[node]['params_label'] = ''
                 continue
-            self.tree_dict[node]['params'] = np.array(self.tree_dict[self.tree_dict[node]['parent']]['params'])
-            self.tree_dict[node]['params_label'] = ''
             parent_params = np.array(self.tree_dict[self.tree_dict[node]['parent']]['params'])
 
             while True:
+                self.tree_dict[node]['params'] = np.array(self.tree_dict[self.tree_dict[node]['parent']]['params'])
+                self.tree_dict[node]['params_label'] = ''
+
                 # Sample number of regions to be affected
                 n_r = np.random.choice(np.arange(1, np.max([int(2/3 * n_regions), 2])))
 
@@ -98,7 +99,7 @@ class ObservedTree(Tree):
                     self.tree_dict[node]['params_label'] = pref + f'{sign}{m}: {affected}'
 
                 all_affected_genes = np.concatenate(all_affected_genes)
-                if np.all(parent_params[all_affected_genes] + clone_cn_events_genes[all_affected_genes] >= min_cn):
+                if np.all(self.tree_dict[node]['params'][all_affected_genes] >= min_cn):
                     break
 
     def plot_heatmap(self, var_names=None, cmap=None, **kwds):
