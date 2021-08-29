@@ -449,7 +449,7 @@ class Node(AbstractNode):
             return jax.lax.cond(node_mask[i] >= 0, sample_unobs_kernel, lambda i: zeros_vec, i)
         nodes_log_unobserved_factors_kernels = vmap(sample_all_unobs_kernel)(jnp.arange(len(cnvs)))
 
-        unobserved_means = jnp.clip(unobserved_means, a_min=jnp.log(1e-3), a_max=jnp.log(5e1))
+        unobserved_means = jnp.clip(unobserved_means, a_min=jnp.log(1e-3), a_max=jnp.log(2e1))
         unobserved_log_stds = jnp.clip(unobserved_log_stds, a_min=jnp.log(1e-2), a_max=jnp.log(1e2))
         def sample_unobs(i):
             return diag_gaussian_sample(rng, unobserved_means[i], unobserved_log_stds[i])
