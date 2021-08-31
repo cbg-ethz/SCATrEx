@@ -332,7 +332,7 @@ class SCATrEx(object):
         print(f"Filtered scRNA data for clonemap shape: {rna_filtered.shape}")
 
         if filter_diploid_cells:
-            if len(diploid_clone_idx) > 0:
+            if len(diploid_clone_indices) > 0:
                 # Set weights -- no diploid cells allowed
                 for node in diploid_labels:
                     observed_tree_filtered.tree_dict[node]['size'] = 0
@@ -417,6 +417,7 @@ class SCATrEx(object):
         # Evaluate likelihood of data at each node
 
         # Assign to best
+
         return
 
     def set_node_event_strings(self, **kwargs):
