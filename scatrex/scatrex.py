@@ -279,6 +279,7 @@ class SCATrEx(object):
             others_idx = np.where(np.array([cell_filter not in celltype for celltype in self.adata.obs['celltype_major']]))[0]
 
         labels = [self.observed_tree.tree_dict[clone]['label'] for clone in self.observed_tree.tree_dict]
+        ids = [clone for clone in self.observed_tree.tree_dict]
         clones = [self.observed_tree.tree_dict[clone]['params'] for clone in self.observed_tree.tree_dict]
         clones = np.array(clones)
         print(clones.shape)
@@ -295,9 +296,11 @@ class SCATrEx(object):
             malignant_indices_mask[diploid_clone_idx] = 0
             malignant_indices = malignant_indices[malignant_indices_mask]
             diploid_labels = np.array(labels)[diploid_clone_idx].tolist()
+            diploid_ids = np.array(ids)[diploid_clone_idx].tolist()
             malignant_labels = np.array(labels)[malignant_indices].tolist()
-            print(f'Diploid clones: {diploid_labels}')
-            print(f'Malignant clones: {malignant_labels}')
+            malignant_ids = np.array(ids)[malignant_indices].tolist()
+            print(f'Diploid clones: labels: {diploid_labels}, ids: {diploid_ids}')
+            print(f'Malignant clones: labels: {malignant_labels}, ids: {malignant_ids}')
 
         adata = self.adata.raw.to_adata()
         adata = adata[cell_idx]
@@ -334,10 +337,10 @@ class SCATrEx(object):
         if filter_diploid_cells:
             if len(diploid_clone_indices) > 0:
                 # Set weights -- no diploid cells allowed
-                for node in diploid_labels:
+                for node in diploid_ids:
                     observed_tree_filtered.tree_dict[node]['size'] = 0
                 observed_tree_filtered.update_weights(uniform=False)
-                print(f'Assigning no weight to diploid clones: {diploid_labels}')
+                print(f'Assigning no weight to diploid clones: {diploid_labels} ({diploid_ids})')
 
         self.ntssb = NTSSB(observed_tree_filtered, self.model.Node, node_hyperparams=self.model_args)
         self.ntssb.add_data(np.array(rna_filtered), to_root=True)
