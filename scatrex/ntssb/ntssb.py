@@ -1067,7 +1067,7 @@ class NTSSB(object):
             minibatch_probs = minibatch_probs/np.sum(minibatch_probs)
             for t in range(n_iters):
                 minibatch_idx = np.random.choice(self.num_data, p=minibatch_probs, size=mb_size, replace=False)
-                minibatch_idx = jnp.array(np.sort(minibatch_idx))
+                minibatch_idx = jnp.array(np.sort(minibatch_idx)).ravel()
                 data_mask_subset = jnp.array(data_mask[minibatch_idx])
                 # minibatch_idx = np.arange(self.num_data)
                 # data_mask_subset = data_mask
@@ -1450,16 +1450,21 @@ class NTSSB(object):
             root_node.variational_parameters['locals']['unobserved_factors_mean'] = np.zeros((self.data.shape[1],))
             root_node.set_mean(variational=True)
 
-            non_root_node.variational_parameters['locals']['unobserved_factors_mean'] = normal_sample(0., gamma_sample(root_node.unobserved_factors_kernel_concentration_caller(),
-                                                                                                root_node.unobserved_factors_kernel_concentration_caller(), size=self.data.shape[1]))
+            non_root_node.variational_parameters['locals']['unobserved_factors_mean'] = np.clip(normal_sample(0., gamma_sample(root_node.unobserved_factors_kernel_concentration_caller(),
+                                                                                                root_node.unobserved_factors_kernel_concentration_caller(), size=self.data.shape[1])), a_min=-5, a_max=5)
             data_indices = list(root_node.data)
             if len(data_indices) > 0:
-                idx = np.random.choice(np.array(data_indices))
-                print(f'Setting new node to explain datum {idx}')
-                datum = self.data[idx]
-                baseline = np.append(1, np.exp(non_root_node.log_baseline_caller()))
-                total_rna = np.sum(baseline * non_root_node.cnvs/2 * np.exp(root_node.variational_parameters['locals']['unobserved_factors_mean']))
-                non_root_node.variational_parameters['locals']['unobserved_factors_mean'] = np.log((datum+1) * total_rna/(root_node.lib_sizes[idx]*baseline * root_node.cnvs/2))
+                # idx = np.random.choice(np.array(data_indices))
+                # print(f'Setting new node to explain datum {idx}')
+                # datum = self.data[idx]
+                # baseline = np.append(1, np.exp(non_root_node.log_baseline_caller()))
+                # total_rna = np.sum(baseline * non_root_node.cnvs/2 * np.exp(root_node.variational_parameters['locals']['unobserved_factors_mean']))
+                # non_root_node.variational_parameters['locals']['unobserved_factors_mean'] = np.log((datum+1) * total_rna/(root_node.lib_sizes[idx]*baseline * root_node.cnvs/2))
+                non_root_node.variational_parameters['locals']['unobserved_factors_mean'] = np.zeros((self.data.shape[1],))
+                non_root_node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.log(self.unobserved_factors_kernel_concentration_caller())*np.ones((self.data.shape[1],))
+                data_in_node = np.array(self.data)[data_indices]
+                target_genes = np.argsort(np.var(np.log(data_in_node + 1), axis=0))[-5:]
+                non_root_node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'][target_genes] = 1.
             non_root_node.set_mean(variational=True)
             dataRoot = root_node.data.copy()
             logitsRoot = np.array(root_node.data_ass_logits)
