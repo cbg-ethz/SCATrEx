@@ -356,28 +356,31 @@ class SCATrEx(object):
 
         self.ntssb.plot_tree(counts=True)
 
-        assignments = np.array([labels[0]] * self.adata.shape[0])
-        assignments[cell_idx] = np.array([self.observed_tree.tree_dict[assignment.tssb.label]['label'] for assignment in self.ntssb.assignments])
+        assignments = np.array([ids[0]] * self.adata.shape[0])
+        # assignments[cell_idx] = np.array([self.observed_tree.tree_dict[assignment.tssb.label]['label'] for assignment in self.ntssb.assignments])
+        assignments[cell_idx] = np.array([assignment.tssb.label for assignment in self.ntssb.assignments])
         if len(others_idx) > 0:
             if len(diploid_clone_indices) > 0:
-                assignments[others_idx] = labels[diploid_clone_idx]
+                assignments[others_idx] = ids[diploid_clone_idx]
 
         self.adata.obs['node'] = assignments.astype(str)
         self.adata.obs['obs_node'] = assignments.astype(str)
 
-        scdna_labels = [self.observed_tree.tree_dict[node]['label'] for node in self.observed_tree.tree_dict if self.observed_tree.tree_dict[node]['size'] > 0]
+        # scdna_labels = [self.observed_tree.tree_dict[node]['label'] for node in self.observed_tree.tree_dict if self.observed_tree.tree_dict[node]['size'] > 0]
+        scdna_labels = list(self.observed_tree.tree_dict.keys())
         sizes = [np.count_nonzero(self.adata.obs['obs_node']==label) for label in scdna_labels]
         self.adata.uns['clonemap_estimated_frequencies'] = dict(zip(scdna_labels,sizes))
 
         cnv_mat = np.ones(self.adata.shape) * 2
         for clone_id in np.unique(assignments):
             cells = np.where(assignments==clone_id)[0]
-            clone_idx = np.where(np.array(labels).astype(str)==str(clone_id))[0]
+            clone_idx = np.where(np.array(ids).astype(str)==str(clone_id))[0]
             cnv_mat[cells] = np.array(clones[clone_idx])
         self.adata.layers['clonemap_cnvs'] = np.array(cnv_mat)
 
         # Initialize colormaps and account for filtered genes
-        node_obs = dict(zip([self.observed_tree.tree_dict[node]['label'] for node in self.observed_tree.tree_dict], [self.observed_tree.tree_dict[node]['params'] for node in self.observed_tree.tree_dict]))
+        # node_obs = dict(zip([self.observed_tree.tree_dict[node]['label'] for node in self.observed_tree.tree_dict], [self.observed_tree.tree_dict[node]['params'] for node in self.observed_tree.tree_dict]))
+        node_obs = dict(zip(scdna_labels, [self.observed_tree.tree_dict[node]['params'] for node in self.observed_tree.tree_dict]))
         nodes = self.ntssb.get_nodes()
         avgs = []
         for node in nodes:
