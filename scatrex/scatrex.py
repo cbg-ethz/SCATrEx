@@ -193,18 +193,29 @@ class SCATrEx(object):
             cell_idx = np.where(np.array([cell_filter in celltype for celltype in self.adata.obs['celltype_major']]))[0]
             others_idx = np.where(np.array([cell_filter not in celltype for celltype in self.adata.obs['celltype_major']]))[0]
 
-        labels = [self.observed_tree.tree_dict[clone]['label'] for clone in self.observed_tree.tree_dict if self.observed_tree.tree_dict[clone]['size'] > 0]
-        clones = [self.observed_tree.tree_dict[clone]['params'] for clone in self.observed_tree.tree_dict if self.observed_tree.tree_dict[clone]['size'] > 0]
+        labels = [self.observed_tree.tree_dict[clone]['label'] for clone in self.observed_tree.tree_dict]
+        ids = [clone for clone in self.observed_tree.tree_dict]
+        clones = [self.observed_tree.tree_dict[clone]['params'] for clone in self.observed_tree.tree_dict]
         clones = np.array(clones)
-
+        print(clones.shape)
 
         # Diploid clone
         dna_is_diploid = np.array((np.sum(clones == 2, axis=1) / clones.shape[1]) > dna_diploid_threshold)
-        diploid_clone_idx = np.where(dna_is_diploid)[0][0]
+        diploid_clone_indices = np.where(dna_is_diploid)[0]
         malignant_indices = np.arange(clones.shape[0])
-        malignant_indices_mask = np.ones(clones.shape[0], dtype=bool)
-        malignant_indices_mask[diploid_clone_idx] = 0
-        malignant_indices = malignant_indices[malignant_indices_mask]
+        if len(diploid_clone_indices) == 0:
+            print("No diploid clones in scDNA-seq data.")
+        else:
+            diploid_clone_idx = diploid_clone_indices[0]
+            malignant_indices_mask = np.ones(clones.shape[0], dtype=bool)
+            malignant_indices_mask[diploid_clone_idx] = 0
+            malignant_indices = malignant_indices[malignant_indices_mask]
+            diploid_labels = np.array(labels)[diploid_clone_idx].tolist()
+            diploid_ids = np.array(ids)[diploid_clone_idx].tolist()
+            malignant_labels = np.array(labels)[malignant_indices].tolist()
+            malignant_ids = np.array(ids)[malignant_indices].tolist()
+            print(f'Diploid clones: labels: {diploid_labels}, ids: {diploid_ids}')
+            print(f'Malignant clones: labels: {malignant_labels}, ids: {malignant_ids}')
 
         # Subset the data to the highest variable genes
         adata = deepcopy(self.adata)
@@ -230,22 +241,23 @@ class SCATrEx(object):
                     else:
                         correlation = -1.
                     corrs.append(correlation)
-            assignments[cell] = labels[np.argmax(corrs)]
+            assignments[cell] = ids[np.argmax(corrs)]
         if len(others_idx) > 0:
-            assignments[others_idx] = labels[diploid_clone_idx]
+            if len(diploid_clone_indices) > 0:
+                assignments[others_idx] = ids[diploid_clone_idx]
 
         assignments = np.array(assignments)
         self.adata.obs['node'] = assignments.astype(str)
         self.adata.obs['obs_node'] = assignments.astype(str)
 
-        labels = [self.observed_tree.tree_dict[node]['label'] for node in self.observed_tree.tree_dict if self.observed_tree.tree_dict[node]['size'] > 0]
+        labels = list(self.observed_tree.tree_dict.keys())
         sizes = [np.count_nonzero(self.adata.obs['obs_node']==label) for label in labels]
         self.adata.uns['corr_estimated_frequencies'] = dict(zip(labels,sizes))
 
         cnv_mat = np.ones(self.adata.shape) * 2
         for clone_id in np.unique(assignments):
             cells = np.where(assignments==clone_id)[0]
-            clone_idx = np.where(np.array(labels).astype(str)==str(clone_id))[0]
+            clone_idx = np.where(np.array(ids).astype(str)==str(clone_id))[0]
             cnv_mat[cells] = np.array(clones[clone_idx])
         self.adata.layers['corr_cnvs'] = np.array(cnv_mat)
 
