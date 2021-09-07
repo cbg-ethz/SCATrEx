@@ -1461,7 +1461,7 @@ class NTSSB(object):
                 # total_rna = np.sum(baseline * non_root_node.cnvs/2 * np.exp(root_node.variational_parameters['locals']['unobserved_factors_mean']))
                 # non_root_node.variational_parameters['locals']['unobserved_factors_mean'] = np.log((datum+1) * total_rna/(root_node.lib_sizes[idx]*baseline * root_node.cnvs/2))
                 non_root_node.variational_parameters['locals']['unobserved_factors_mean'] = np.zeros((self.data.shape[1],))
-                non_root_node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.log(self.unobserved_factors_kernel_concentration_caller())*np.ones((self.data.shape[1],))
+                non_root_node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.log(root_node.unobserved_factors_kernel_concentration_caller())*np.ones((self.data.shape[1],))
                 data_in_node = np.array(self.data)[data_indices]
                 target_genes = np.argsort(np.var(np.log(data_in_node + 1), axis=0))[-5:]
                 non_root_node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'][target_genes] = 1.
