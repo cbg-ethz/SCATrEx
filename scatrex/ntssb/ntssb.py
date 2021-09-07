@@ -1068,7 +1068,7 @@ class NTSSB(object):
             for t in range(n_iters):
                 minibatch_idx = np.random.choice(self.num_data, p=minibatch_probs, size=mb_size, replace=False)
                 minibatch_idx = jnp.array(np.sort(minibatch_idx)).ravel()
-                data_mask_subset = jnp.array(data_mask[minibatch_idx])
+                data_mask_subset = jnp.array(data_mask)[minibatch_idx]
                 # minibatch_idx = np.arange(self.num_data)
                 # data_mask_subset = data_mask
                 opt_state, g, params, elbo = self.update(obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, node_mask, data_mask_subset, minibatch_idx, do_global, global_only, sticks_only, num_samples, t, opt_state)
