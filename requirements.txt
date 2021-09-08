@@ -5,3 +5,4 @@ scipy
 tqdm
 scikit-learn
 graphviz
+gseapy
