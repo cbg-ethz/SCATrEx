@@ -21,8 +21,8 @@ def diag_gamma_sample(rng, log_alpha, log_beta):
     return jnp.exp(-log_beta) * random.gamma(rng, jnp.exp(log_alpha))
 
 def diag_gamma_logpdf(x, log_alpha, log_beta):
-    part = partial(gamma.logpdf, scale=jnp.exp(-log_beta))
-    return jnp.sum(vmap(part)(x, jnp.exp(log_alpha)))
+    # part = partial(gamma.logpdf, scale=jnp.exp(-log_beta))
+    return jnp.sum(vmap(gamma.logpdf)(x=x, a=jnp.exp(log_alpha), scale=jnp.exp(-log_beta)))
 
 def diag_gaussian_sample(rng, mean, log_std):
     # Take a single sample from a diagonal multivariate Gaussian.
