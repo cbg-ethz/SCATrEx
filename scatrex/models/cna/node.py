@@ -533,7 +533,7 @@ class Node(AbstractNode):
             # Penalize copies in unobserved nodes
             pl = diag_gamma_logpdf(1e-2 * np.ones(broadcasted_concentration.shape), broadcasted_concentration,
                                     (parent_vector[i] != -1)*jnp.abs(nodes_unobserved_factors[parent_vector[i]]))
-            ent = - diag_gaussian_logpdf(jnp.clip(nodes_log_unobserved_factors_kernels[i], a_min=jnp.log(1e-2)), log_unobserved_factors_kernel_means[i], log_unobserved_factors_kernel_log_stds[i])
+            ent = - diag_gaussian_logpdf(jnp.log(1e-2 * np.ones(broadcasted_concentration.shape)), log_unobserved_factors_kernel_means[i], log_unobserved_factors_kernel_log_stds[i])
             kl -= (parent_vector[i] != -1) * jnp.all(tssb_indices[i] == tssb_indices[parent_vector[i]]) * (pl + ent)
 
             # unobserved_factors
