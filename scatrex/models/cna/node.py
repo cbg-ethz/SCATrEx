@@ -24,7 +24,8 @@ class Node(AbstractNode):
                         num_global_noise_factors=4, global_noise_factors_precisions_shape=2.,
                         cell_global_noise_factors_weights_scale=1.,
                         unobserved_factors_root_kernel=0.1, unobserved_factors_kernel=1.,
-                        unobserved_factors_kernel_concentration=.01, frac_dosage=1, baseline_shape=0.1, **kwargs):
+                        unobserved_factors_kernel_concentration=.01,
+                        unobserved_factors_kernel_rate=rate, frac_dosage=1, baseline_shape=0.1, **kwargs):
         super(Node, self).__init__(is_observed, observed_parameters, **kwargs)
 
         # The observed parameters are the CNVs of all genes
@@ -44,6 +45,7 @@ class Node(AbstractNode):
                 unobserved_factors_root_kernel=unobserved_factors_root_kernel,
                 unobserved_factors_kernel=unobserved_factors_kernel,
                 unobserved_factors_kernel_concentration=unobserved_factors_kernel_concentration,
+                unobserved_factors_kernel_rate=unobserved_factors_kernel_rate,
                 frac_dosage=frac_dosage,
                 baseline_shape=baseline_shape,
             )
@@ -154,6 +156,7 @@ class Node(AbstractNode):
                         cell_global_noise_factors_weights_scale=1.,
                         unobserved_factors_root_kernel=0.1, unobserved_factors_kernel=1.,
                         unobserved_factors_kernel_concentration=.01,
+                        unobserved_factors_kernel_rate=1.,
                         frac_dosage=1., baseline_shape=0.1):
         parent = self.parent()
 
@@ -166,6 +169,7 @@ class Node(AbstractNode):
                 unobserved_factors_root_kernel=unobserved_factors_root_kernel,
                 unobserved_factors_kernel=unobserved_factors_kernel,
                 unobserved_factors_kernel_concentration=unobserved_factors_kernel_concentration,
+                unobserved_factors_kernel_rate=unobserved_factors_kernel_rate,
                 frac_dosage=frac_dosage,
                 baseline_shape=baseline_shape,
             )
@@ -194,6 +198,7 @@ class Node(AbstractNode):
 
                 self.unobserved_factors_root_kernel = unobserved_factors_root_kernel
                 self.unobserved_factors_kernel_concentration = unobserved_factors_kernel_concentration
+                self.unobserved_factors_kernel_rate = unobserved_factors_kernel_rate
 
                 self.frac_dosage = frac_dosage
 
@@ -519,20 +524,22 @@ class Node(AbstractNode):
         out = jnp.array(vmap(get_node_ll)(jnp.arange(len(parent_vector))))
         l = jnp.sum(jnn.logsumexp(out, axis=0) * data_mask_subset)
 
+        log_rate = jnp.log(self.unobserved_factors_kernel_rate)
         log_concentration = jnp.log(self.unobserved_factors_kernel_concentration)
         log_kernel = jnp.log(self.unobserved_factors_root_kernel)
         broadcasted_concentration = log_concentration * ones_vec
+        broadcasted_rate = log_rate * ones_vec
 
         def compute_node_kl(i):
             # # unobserved_factors_kernel -- USING JUST A SPARSE GAMMA DOES NOT PENALIZE KERNELS EQUAL TO ZERO
             pl = diag_gamma_logpdf(jnp.clip(jnp.exp(nodes_log_unobserved_factors_kernels[i]), a_min=1e-2), broadcasted_concentration,
-                                    (parent_vector[i] != -1)*jnp.abs(nodes_unobserved_factors[parent_vector[i]]))
+                                    log_rate + (parent_vector[i] != -1)*jnp.abs(nodes_unobserved_factors[parent_vector[i]]))
             ent = - diag_gaussian_logpdf(nodes_log_unobserved_factors_kernels[i], log_unobserved_factors_kernel_means[i], log_unobserved_factors_kernel_log_stds[i])
             kl = (parent_vector[i] != -1) * (pl + ent)
 
             # Penalize copies in unobserved nodes
             pl = diag_gamma_logpdf(1e-2 * np.ones(broadcasted_concentration.shape), broadcasted_concentration,
-                                    (parent_vector[i] != -1)*jnp.abs(nodes_unobserved_factors[parent_vector[i]]))
+                                    log_rate + (parent_vector[i] != -1)*jnp.abs(nodes_unobserved_factors[parent_vector[i]]))
             ent = - diag_gaussian_logpdf(jnp.log(1e-2 * np.ones(broadcasted_concentration.shape)), log_unobserved_factors_kernel_means[i], log_unobserved_factors_kernel_log_stds[i])
             kl -= (parent_vector[i] != -1) * jnp.all(tssb_indices[i] == tssb_indices[parent_vector[i]]) * (pl + ent)
 
