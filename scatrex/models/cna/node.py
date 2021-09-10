@@ -25,7 +25,7 @@ class Node(AbstractNode):
                         cell_global_noise_factors_weights_scale=1.,
                         unobserved_factors_root_kernel=0.1, unobserved_factors_kernel=1.,
                         unobserved_factors_kernel_concentration=.01,
-                        unobserved_factors_kernel_rate=rate, frac_dosage=1, baseline_shape=0.1, **kwargs):
+                        unobserved_factors_kernel_rate=1., frac_dosage=1, baseline_shape=0.1, **kwargs):
         super(Node, self).__init__(is_observed, observed_parameters, **kwargs)
 
         # The observed parameters are the CNVs of all genes
