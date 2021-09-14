@@ -90,12 +90,11 @@ class NTSSB(object):
 
         self.reset_tree(use_weights=use_weights, node_hyperparams=node_hyperparams)
 
-    def copy(self):
+    def remove_jits(self):
         self.opt_init = None
         self.get_params = None
         self.opt_update = None
         self.opt_state = None
-        return deepcopy(self)
 
     # ========= Functions to initialize tree. =========
     def reset_tree(self, use_weights=False, node_hyperparams=dict()):

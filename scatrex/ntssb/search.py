@@ -22,7 +22,8 @@ class StructureSearch(object):
         self.traces['times'] = []
         self.traces['n_nodes'] = []
         self.best_elbo = self.tree.elbo
-        self.best_tree = self.tree.copy()
+        self.tree.remove_jits()
+        self.best_tree = deepcopy(self.tree)
 
     def run_search(self, n_iters=1000, n_iters_elbo=1000, factor_delay=0, posterior_delay=0, thin=10, local=True, num_samples=1, step_size=0.001, verbose=True, tol=1e-6, mb_size=100, max_nodes=5, debug=False, callback=None, alpha=0.01, Tmax=10, anneal=False, restart_step=10,
                     moves=['add', 'merge', 'pivot_reattach', 'swap', 'subtree_reattach', 'push_subtree', 'perturb_node', 'perturb_globals'],
@@ -60,7 +61,8 @@ class StructureSearch(object):
             self.tree.update_ass_logits(variational=True)
             self.tree.assign_to_best()
             self.best_elbo = self.tree.elbo
-            self.best_tree = self.tree.copy()
+            self.tree.remove_jits()
+            self.best_tree = deepcopy(self.tree)
 
         init_score = self.tree.elbo if score_type == 'elbo' else self.tree.ll
         init_root = self.tree.root
@@ -94,7 +96,8 @@ class StructureSearch(object):
             move_id = np.random.choice(moves, p=p)
 
             if i == factor_delay and n_factors > 0:
-                self.tree = self.best_tree.copy()
+                self.best_tree.remove_jits()
+                self.tree = deepcopy(self.best_tree)
                 self.tree.root['node'].root['node'].num_global_noise_factors = n_factors
                 self.tree.root['node'].root['node'].init_noise_factors()
                 move_id = 'full'
@@ -107,12 +110,14 @@ class StructureSearch(object):
                 score_type = 'll'
             elif i == posterior_delay:
                 # Go back to best in terms of ELBO
+                self.best_tree.remove_jits()
                 self.tree.root = deepcopy(self.best_tree.root)
                 self.tree.elbo = self.best_elbo
                 score_type = 'elbo'
 
             init_elbo = self.tree.elbo
             init_score = self.tree.elbo if score_type == 'elbo' else self.tree.ll
+            self.tree.remove_jits()
 
             if move_id == 'add' and self.tree.n_nodes < self.tree.max_nodes-1:
                 init_root, init_elbo = self.add_node(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, mb_size=mb_size, max_nodes=max_nodes, debug=debug, opt=opt, callback=callback)
@@ -179,7 +184,8 @@ class StructureSearch(object):
                         print(f'*Move ({move_id}) accepted. ({init_elbo} -> {self.tree.elbo})*')
                         if self.tree.elbo > self.best_elbo:
                             self.best_elbo = self.tree.elbo
-                            self.best_tree = self.tree.copy()
+                            self.tree.remove_jits()
+                            self.best_tree = deepcopy(self.tree)
                             print(f'New best! {self.best_elbo}')
                 else:
                     if (-(init_score - new_score)/T) < np.log(np.random.rand()):
@@ -191,7 +197,8 @@ class StructureSearch(object):
                             print(f'*Move ({move_id}) accepted. ({init_elbo} -> {self.tree.elbo})*')
                             if self.tree.elbo > self.best_elbo:
                                 self.best_elbo = self.tree.elbo
-                                self.best_tree = self.tree.copy()
+                                self.tree.remove_jits()
+                                self.best_tree = deepcopy(self.tree)
                                 print(f'New best! {self.best_elbo}')
             else:
                 if move_id != 'full' and move_id != 'globals' and (-(init_score - new_score)/T) < np.log(np.random.rand()) or self.tree.n_nodes >= self.tree.max_nodes: # Rejected
@@ -202,7 +209,8 @@ class StructureSearch(object):
                     print(f'*Move ({move_id}) accepted. ({init_elbo} -> {self.tree.elbo})*')
                     if self.tree.elbo > self.best_elbo:
                         self.best_elbo = self.tree.elbo
-                        self.best_tree = self.tree.copy()
+                        self.tree.remove_jits()
+                        self.best_tree = deepcopy(self.tree)
                         print(f'New best! {self.best_elbo}')
 
             score = self.tree.elbo if score_type == 'elbo' else self.tree.ll
