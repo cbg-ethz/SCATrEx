@@ -1,8 +1,9 @@
-scanpy
-anndata
 jax
 scipy
 tqdm
 scikit-learn
 graphviz
 gseapy
+scanpy
+anndata
+leidenalg
