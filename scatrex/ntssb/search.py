@@ -326,39 +326,27 @@ class StructureSearch(object):
             node_idx = np.random.choice(range(len(nodes[1:])), p=[1./len(nodes[1:])]*len(nodes[1:]))
             nodeA = nodes[1:][node_idx]
 
-            def descend(root, done, ntree):
-                if not done:
-                    for i, child in enumerate(root['children']):
-                        if child['node'] != nodeA:
-                            done = descend(child, done, ntree)
-                            if done:
-                                break
-                        else:
-                            # child['node'] is nodeA
-                            nodes = [sibling for sibling in root['children'] if sibling['node'] != child['node']]
-                            nodes.append(root)
+            # Get parent and siblings
+            parent = nodeA.parent()
+            siblings = parent.children()
+            siblings = [s for s in siblings if s != nodeA]
+            targets = siblings.append(parent)
+            sims = [1./(np.mean(np.abs(nodeA.node_mean - node['node'].node_mean)) + 1e-8) for node in nodes]
 
-                            # Get similarities to nodeA
-                            sims = [1./(np.mean(np.abs(nodeA.node_mean - node['node'].node_mean)) + 1e-8) for node in nodes]
+            # Choose nodeB proportionally to similarities
+            nodeB_root = np.random.choice(nodes, p=sims/np.sum(sims))
+            nodeB = nodeB_root['node']
 
-                            # Choose nodeB proportionally to similarities
-                            nodeB_root = np.random.choice(nodes, p=sims/np.sum(sims))
-                            nodeB = nodeB_root['node']
+            if verbose:
+                print(f"Trying to merge {nodeA.label} to {nodeB.label}...")
 
-                            if verbose:
-                                print(f"Trying to merge {nodeA.label} to {nodeB.label}...")
-
-                            ntree.merge_nodes(nodeA, nodeB)
-                            local_node = None
-                            if local:
-                                local_node = nodeB
-                            ntree.optimize_elbo(unique_node=None, root_node=local_node, run=True, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback)
-                            if verbose:
-                                print(f"{init_elbo} -> {ntree.elbo}")
-
-                            return True
-
-            descend(subtree.root, False, self.tree)
+            self.tree.merge_nodes(nodeA, nodeB)
+            local_node = None
+            if local:
+                local_node = nodeB
+            self.tree.optimize_elbo(unique_node=None, root_node=local_node, run=True, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback)
+            if verbose:
+                print(f"{init_elbo} -> {ntree.elbo}")
 
         return init_root, init_elbo
 
