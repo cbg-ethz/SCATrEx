@@ -77,10 +77,6 @@ class NTSSB(object):
         self.data = None
         self.num_data = None
 
-        self.opt_init = None
-        self.get_params = None
-        self.opt_update = None
-        self.opt_state = None
         self.max_nodes = len(self.input_tree_dict.keys()) * 1 # upper bound on number of nodes
         self.n_nodes = len(self.input_tree_dict.keys())
 
@@ -89,12 +85,6 @@ class NTSSB(object):
         self.gene_node_colormaps = dict()
 
         self.reset_tree(use_weights=use_weights, node_hyperparams=node_hyperparams)
-
-    def remove_jits(self):
-        self.opt_init = None
-        self.get_params = None
-        self.opt_update = None
-        self.opt_state = None
 
     # ========= Functions to initialize tree. =========
     def reset_tree(self, use_weights=False, node_hyperparams=dict()):
@@ -893,14 +883,14 @@ class NTSSB(object):
     def do_grad(self, obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, node_mask, data_mask_subset, indices, do_global, global_only, sticks_only, num_samples, params, i):
         return jax.value_and_grad(self.objective, argnums=16)(obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, node_mask, data_mask_subset, indices, do_global, global_only, sticks_only, num_samples, params, i)
 
-    def update(self, obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, node_mask, data_mask_subset, indices, do_global, global_only, sticks_only, num_samples, i, opt_state):
+    def update(self, obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, node_mask, data_mask_subset, indices, do_global, global_only, sticks_only, num_samples, i, opt_state, opt_update, get_params):
         # print("Recompiling update!")
-        params = self.get_params(opt_state)
+        params = get_params(opt_state)
         value, gradient = self.do_grad(obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, node_mask, data_mask_subset, indices, do_global, global_only, sticks_only, num_samples, params, i)
-        opt_state = self.opt_update(i, gradient, opt_state)
+        opt_state = opt_update(i, gradient, opt_state)
         return opt_state, gradient, params, value
 
-    def optimize_elbo(self, root_node=None, local_node=None, global_only=False, sticks_only=False, unique_node=None, num_samples=10, n_iters=100, thin=10, step_size=0.05, debug=False, tol=1e-5, run=True, max_nodes=5, init=False, opt=None, mb_size=100, callback=None, **callback_kwargs):
+    def optimize_elbo(self, root_node=None, local_node=None, global_only=False, sticks_only=False, unique_node=None, num_samples=10, n_iters=100, thin=10, step_size=0.05, debug=False, tol=1e-5, run=True, max_nodes=5, init=False, opt=None, opt_triplet=None, mb_size=100, callback=None, **callback_kwargs):
         self.max_nodes = len(self.input_tree_dict.keys()) * max_nodes # upper bound on number of nodes
         self.data = jnp.array(self.data, dtype='float32')
 
@@ -1032,16 +1022,18 @@ class NTSSB(object):
         global_only = global_only * jnp.array(1.)
         sticks_only = sticks_only * jnp.array(1.)
 
-        opt_state = self.opt_state
         init_params = local_params_list + global_params
-        if self.opt_init is None or init:
+
+        if opt_triplet is None:
             if opt is None:
                 opt = optimizers.adam
             opt_init, opt_update, get_params = opt(step_size=step_size)
-            self.get_params = jit(get_params)
-            self.opt_update = jit(opt_update)
-            self.opt_init = jit(opt_init)
-        opt_state = self.opt_init(init_params)
+            get_params = jit(get_params)
+            opt_update = jit(opt_update)
+            opt_init = jit(opt_init)
+        else:
+            opt_init, opt_update, get_params = opt_triplet[0], opt_triplet[1], opt_triplet[2]
+        opt_state = opt_init(init_params)
 
         # print(f"Time to prepare optimizer: {end-start} s")
         # n_nodes = jnp.array(n_nodes)
@@ -1077,7 +1069,7 @@ class NTSSB(object):
                 data_mask_subset = jnp.array(data_mask)[minibatch_idx]
                 # minibatch_idx = np.arange(self.num_data)
                 # data_mask_subset = data_mask
-                opt_state, g, params, elbo = self.update(obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, node_mask, data_mask_subset, minibatch_idx, do_global, global_only, sticks_only, num_samples, t, opt_state)
+                opt_state, g, params, elbo = self.update(obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, node_mask, data_mask_subset, minibatch_idx, do_global, global_only, sticks_only, num_samples, t, opt_state, opt_update, get_params)
                 elbos.append(-elbo)
                 try:
                     callback(elbos, **callback_kwargs)
@@ -1088,7 +1080,7 @@ class NTSSB(object):
 
             # Without node mask
             ret = self.batch_objective(obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, all_nodes_mask,
-                                    jnp.array(1.), jnp.array(0.), jnp.array(0.), num_samples, self.get_params(opt_state), 10)
+                                    jnp.array(1.), jnp.array(0.), jnp.array(0.), num_samples, get_params(opt_state), 10)
             self.elbo = np.array(ret[0])
             self.ll = np.array(ret[1])
             self.kl = np.array(ret[2])
@@ -1106,19 +1098,18 @@ class NTSSB(object):
             # Combinatorial penalization to avoid duplicates -- also avoids real clusters!
             # self.elbo = self.elbo + np.log(1/(2**len(data_indices)))
 
-            # self.opt_state = opt_state
             new_elbo = self.elbo
             # print(f"Done. Speed: {avg_speed} s/it, Total: {total} s")
             # print(f"New ELBO: {new_elbo:.5f}")
             # print(f"New ELBO improvement: {(new_elbo - current_elbo)/np.abs(current_elbo) * 100:.3f}%\n")
 
-            self.set_node_means(self.get_params(opt_state), nodes, local_names, global_names)
+            self.set_node_means(get_params(opt_state), nodes, local_names, global_names)
             self.update_ass_logits(variational=True)
             self.assign_to_best()
             return elbos
         else:
             ret = self.batch_objective(obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, all_nodes_mask,
-                                    jnp.array(1.), jnp.array(0.), jnp.array(0.), num_samples, self.get_params(opt_state), 10)
+                                    jnp.array(1.), jnp.array(0.), jnp.array(0.), num_samples, get_params(opt_state), 10)
             self.elbo = np.array(ret[0])
             self.ll = np.array(ret[1])
             self.kl = np.array(ret[2])
