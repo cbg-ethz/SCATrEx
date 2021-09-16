@@ -546,14 +546,14 @@ class Node(AbstractNode):
             # unobserved_factors
             pl = diag_gaussian_logpdf(nodes_unobserved_factors[i],
                         (parent_vector[i] != -1) * nodes_unobserved_factors[parent_vector[i]],
-                        nodes_log_unobserved_factors_kernels[i]*(parent_vector[i] != -1) + log_kernel*(parent_vector[i] == -1))
+                        jnp.clip(nodes_log_unobserved_factors_kernels[i], a_min=jnp.log(1e-2))*(parent_vector[i] != -1) + log_kernel*(parent_vector[i] == -1))
             ent = - diag_gaussian_logpdf(nodes_unobserved_factors[i], unobserved_means[i], unobserved_log_stds[i])
             kl = kl + pl + ent
 
             # Penalize copied unobserved_factors
             pl = diag_gaussian_logpdf(nodes_unobserved_factors[parent_vector[i]],
                         (parent_vector[i] != -1) * nodes_unobserved_factors[parent_vector[i]],
-                        nodes_log_unobserved_factors_kernels[i]*(parent_vector[i] != -1) + log_kernel*(parent_vector[i] == -1))
+                        jnp.clip(nodes_log_unobserved_factors_kernels[i], a_min=jnp.log(1e-2))*(parent_vector[i] != -1) + log_kernel*(parent_vector[i] == -1))
             ent = - diag_gaussian_logpdf(nodes_unobserved_factors[parent_vector[i]], unobserved_means[i], unobserved_log_stds[i])
             kl -= (parent_vector[i] != -1) * jnp.all(tssb_indices[i] == tssb_indices[parent_vector[i]]) * (pl + ent)
 
