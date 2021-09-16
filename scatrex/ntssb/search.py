@@ -326,10 +326,10 @@ class StructureSearch(object):
             node_idx = np.random.choice(range(len(nodes[1:])), p=[1./len(nodes[1:])]*len(nodes[1:]))
             nodeA = nodes[1:][node_idx]
 
-            # Get parent and siblings
+            # Get parent and siblings in the same subtree
             parent = nodeA.parent()
             nodes = parent.children()
-            nodes = [s for s in nodes if s != nodeA]
+            nodes = [s for s in nodes if s != nodeA and nodeA.tssb == s.tssb]
             nodes.append(parent)
             sims = [1./(np.mean(np.abs(nodeA.node_mean - node.node_mean)) + 1e-8) for node in nodes]
 
