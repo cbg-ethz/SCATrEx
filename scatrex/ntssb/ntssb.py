@@ -1630,9 +1630,9 @@ class NTSSB(object):
             if numDataA > numDataB:
                 nodeB.variational_parameters['locals']['unobserved_factors_mean'] = nodeA.variational_parameters['locals']['unobserved_factors_mean']
                 nodeB.variational_parameters['locals']['unobserved_factors_log_std'] = nodeA.variational_parameters['locals']['unobserved_factors_log_std']
-                # We should always keep the top kernel
-                # nodeB.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = nodeA.variational_parameters['locals']['unobserved_factors_kernel_log_mean']
-                # nodeB.variational_parameters['locals']['unobserved_factors_kernel_log_std'] = nodeA.variational_parameters['locals']['unobserved_factors_kernel_log_std']
+                # Merge kernels
+                nodeB.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.log(np.exp(nodeA.variational_parameters['locals']['unobserved_factors_kernel_log_mean']) + np.exp(nodeB.variational_parameters['locals']['unobserved_factors_kernel_log_mean']))
+                nodeB.variational_parameters['locals']['unobserved_factors_kernel_log_std'] = np.log(np.exp(nodeA.variational_parameters['locals']['unobserved_factors_kernel_log_std']) + np.exp(nodeB.variational_parameters['locals']['unobserved_factors_kernel_log_std']))
                 nodeB.variational_parameters['locals']['nu_log_mean'] = nodeA.variational_parameters['locals']['nu_log_mean']
                 nodeB.variational_parameters['locals']['nu_log_std'] = nodeA.variational_parameters['locals']['nu_log_std']
                 nodeB.variational_parameters['locals']['psi_log_mean'] = nodeA.variational_parameters['locals']['psi_log_mean']
