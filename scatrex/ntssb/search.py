@@ -328,9 +328,9 @@ class StructureSearch(object):
 
             # Get parent and siblings
             parent = nodeA.parent()
-            siblings = parent.children()
-            siblings = [s for s in siblings if s != nodeA]
-            nodes = siblings.append(parent)
+            nodes = parent.children()
+            nodes = [s for s in nodes if s != nodeA]
+            nodes.append(parent)
             sims = [1./(np.mean(np.abs(nodeA.node_mean - node.node_mean)) + 1e-8) for node in nodes]
 
             # Choose nodeB proportionally to similarities
