@@ -334,8 +334,7 @@ class StructureSearch(object):
             sims = [1./(np.mean(np.abs(nodeA.node_mean - node.node_mean)) + 1e-8) for node in nodes]
 
             # Choose nodeB proportionally to similarities
-            nodeB_root = np.random.choice(nodes, p=sims/np.sum(sims))
-            nodeB = nodeB_root['node']
+            nodeB = np.random.choice(nodes, p=sims/np.sum(sims))
 
             if verbose:
                 print(f"Trying to merge {nodeA.label} to {nodeB.label}...")
