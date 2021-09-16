@@ -345,7 +345,7 @@ class StructureSearch(object):
                 local_node = nodeB
             self.tree.optimize_elbo(unique_node=None, root_node=local_node, run=True, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback)
             if verbose:
-                print(f"{init_elbo} -> {ntree.elbo}")
+                print(f"{init_elbo} -> {self.tree.elbo}")
 
         return init_root, init_elbo
 
