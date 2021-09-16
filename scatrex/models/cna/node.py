@@ -534,7 +534,7 @@ class Node(AbstractNode):
             # # unobserved_factors_kernel -- USING JUST A SPARSE GAMMA DOES NOT PENALIZE KERNELS EQUAL TO ZERO
             pl = diag_gamma_logpdf(jnp.clip(jnp.exp(nodes_log_unobserved_factors_kernels[i]), a_min=1e-2), broadcasted_concentration,
                                     (parent_vector[i] != -1)*(log_rate + jnp.abs(nodes_unobserved_factors[parent_vector[i]])))
-            ent = - diag_gaussian_logpdf(nodes_log_unobserved_factors_kernels[i], log_unobserved_factors_kernel_means[i], log_unobserved_factors_kernel_log_stds[i])
+            ent = - diag_gaussian_logpdf(jnp.clip(nodes_log_unobserved_factors_kernels[i], a_min=jnp.log(1e-2)), log_unobserved_factors_kernel_means[i], log_unobserved_factors_kernel_log_stds[i])
             kl = (parent_vector[i] != -1) * (pl + ent)
 
             # Penalize copies in unobserved nodes
