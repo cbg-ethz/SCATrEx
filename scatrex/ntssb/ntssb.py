@@ -656,10 +656,6 @@ class NTSSB(object):
 
     # ========= Functions to update tree parameters given data. =========
 
-    def init_opt_params(self):
-        self.tssb_weights = np.array()
-
-
     def get_node_mean(self, log_baseline, unobserved_factors, noise, cnvs):
         node_mean = jnp.exp(log_baseline + unobserved_factors + noise + jnp.log(cnvs/2))
         sum = jnp.sum(node_mean, axis=1).reshape(self.num_data, 1)
