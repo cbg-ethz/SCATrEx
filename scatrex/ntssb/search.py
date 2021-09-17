@@ -221,7 +221,6 @@ class StructureSearch(object):
                         print(f'New best! {self.best_elbo}')
 
             score = self.tree.elbo if score_type == 'elbo' else self.tree.ll
-            self.tree.plot_tree(super_only=False)
             self.traces['elbo'].append(self.tree.elbo)
             self.traces['score'].append(score)
             self.traces['move'].append(move_id)
@@ -241,6 +240,7 @@ class StructureSearch(object):
             if T == 0:
                 break
 
+        self.tree.plot_tree(super_only=False)
         self.best_tree.plot_tree(super_only=False)
         return self.best_tree
 
