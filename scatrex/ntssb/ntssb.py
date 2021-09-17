@@ -1082,7 +1082,10 @@ class NTSSB(object):
                 data_mask_subset = jnp.array(data_mask)[minibatch_idx]
                 # minibatch_idx = np.arange(self.num_data)
                 # data_mask_subset = data_mask
+                start = time.time()
                 opt_state, g, params, elbo = self.update(obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, node_mask, data_mask_subset, minibatch_idx, do_global, global_only, sticks_only, num_samples, t, opt_state, opt_update, get_params)
+                end = time.time()
+                print(f"update: {end-start}")
                 elbos.append(-elbo)
                 try:
                     callback(elbos, **callback_kwargs)
