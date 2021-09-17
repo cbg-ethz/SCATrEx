@@ -59,8 +59,8 @@ class SCATrEx(object):
         if self.adata is not None:
             self.adata.uns['obs_node_colors'] = [self.observed_tree.tree_dict[node]['color'] for node in self.observed_tree.tree_dict]
             try:
-                labels = [self.observed_tree.tree_dict[node]['label'] for node in self.observed_tree.tree_dict if self.observed_tree.tree_dict[node]['size'] > 0]
-                sizes = [self.observed_tree.tree_dict[node]['size'] for node in self.observed_tree.tree_dict if self.observed_tree.tree_dict[node]['size'] > 0]
+                labels = list(self.observed_tree.tree_dict.keys())
+                sizes = [self.observed_tree.tree_dict[node]['size'] for node in self.observed_tree.tree_dict]
                 self.adata.uns['observed_frequencies'] = dict(zip(labels,sizes))
             except KeyError:
                 pass
