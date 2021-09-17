@@ -1127,9 +1127,12 @@ class NTSSB(object):
             # print(f"New ELBO: {new_elbo:.5f}")
             # print(f"New ELBO improvement: {(new_elbo - current_elbo)/np.abs(current_elbo) * 100:.3f}%\n")
 
+            start = time.time()
             self.set_node_means(get_params(opt_state), nodes, local_names, global_names)
             self.update_ass_logits(variational=True)
             self.assign_to_best()
+            end = time.time()
+            print(f"last part: {end-start}")
             return elbos
         else:
             ret = self.batch_objective(obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, all_nodes_mask,
