@@ -656,6 +656,10 @@ class NTSSB(object):
 
     # ========= Functions to update tree parameters given data. =========
 
+    def init_opt_params(self):
+        self.tssb_weights = np.array()
+
+
     def get_node_mean(self, log_baseline, unobserved_factors, noise, cnvs):
         node_mean = jnp.exp(log_baseline + unobserved_factors + noise + jnp.log(cnvs/2))
         sum = jnp.sum(node_mean, axis=1).reshape(self.num_data, 1)
@@ -712,7 +716,7 @@ class NTSSB(object):
     def get_children_vector(self, parent_vector):
         def f(i):
             return jnp.where(parent_vector == i, size=self.max_nodes, fill_value=-1)[0]
-        return jax.vmap(f)(jnp.arange(len(self.max_nodes)))
+        return jax.vmap(f)(jnp.arange(self.max_nodes))
 
     def get_ancestor_indices(self, nodes, parent_vector, inclusive=False):
         start = time.time()
