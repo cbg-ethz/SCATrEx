@@ -696,17 +696,17 @@ class NTSSB(object):
             return below_root
         return np.array(descend(root_idx))
 
-    def get_children_vector(self, parent_vector):
-        start = time.time()
-        max_len = self.max_nodes
-        children_vector = np.ones((len(parent_vector), max_len)) * -1
-        for i in range(len(parent_vector)):
-            children = jnp.where(parent_vector == i)[0]
-            children_vector[i][:len(children)] = children
-        children_vector = jnp.array(children_vector).astype(int)
-        end = time.time()
-        print(f"get_children_vector: {end-start}")
-        return children_vector
+    # def get_children_vector(self, parent_vector):
+    #     start = time.time()
+    #     max_len = self.max_nodes
+    #     children_vector = np.ones((len(parent_vector), max_len)) * -1
+    #     for i in range(len(parent_vector)):
+    #         children = jnp.where(parent_vector == i)[0]
+    #         children_vector[i][:len(children)] = children
+    #     children_vector = jnp.array(children_vector).astype(int)
+    #     end = time.time()
+    #     print(f"get_children_vector: {end-start}")
+    #     return children_vector
 
     @partial(jax.jit, static_argnums=0)
     def get_children_vector(self, parent_vector):
@@ -910,6 +910,9 @@ class NTSSB(object):
         # Var params of nodes below root
         nodes, parent_vector = self.get_nodes(root_node=None, parent_vector=True)
 
+        n_nodes = len(nodes)
+        rem = self.max_nodes - n_nodes
+
         # Root node label
         data_indices = list(range(self.num_data))
         do_global = False
@@ -945,6 +948,7 @@ class NTSSB(object):
         data_mask = data_mask.astype(int)
 
         parent_vector = jnp.array(np.array(parent_vector))
+        parent_vector = jnp.concatenate([parent_vector, -2*jnp.ones((rem,))]).astype(int)
         tssbs = [node.tssb.label for node in nodes]
         tssb_indices = self.get_tssb_indices(nodes, tssbs)
         start3 = time.time()
@@ -997,8 +1001,7 @@ class NTSSB(object):
         # init_pivot_ass_logits = init_pivot_ass_logits - jnp.mean(init_pivot_ass_logits, axis=1).reshape(-1,1)
 
         # Pad all of the arrays up to a maximum number of nodes in order to avoid recompiling the ELBO with every structure update
-        n_nodes = len(nodes)
-        rem = self.max_nodes - n_nodes
+
         # global_params =
 
         tssb_weights = jnp.concatenate([tssb_weights, 10*jnp.ones((rem,))])
@@ -1008,7 +1011,6 @@ class NTSSB(object):
         ancestor_nodes_indices = jnp.concatenate([ancestor_nodes_indices, -1*jnp.ones((rem, ancestor_nodes_indices.shape[1]))], axis=0).astype(int)
         # children_vector = jnp.concatenate([children_vector, -1*jnp.ones((rem, children_vector.shape[1]))], axis=0).astype(int)
         tssb_indices = jnp.concatenate([tssb_indices, -1*jnp.ones((rem, tssb_indices.shape[1]))], axis=0).astype(int)
-        parent_vector = jnp.concatenate([parent_vector, -2*jnp.ones((rem,))]).astype(int)
         obs_params = jnp.concatenate([obs_params, jnp.zeros((rem, nodes[0].observed_parameters.size))], axis=0)
         node_mask = jnp.concatenate([jnp.array(node_mask), -2*jnp.ones((rem,))]).astype(int)
         all_nodes_mask = np.ones(len(node_mask)) * -2
