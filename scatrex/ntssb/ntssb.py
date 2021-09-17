@@ -1041,7 +1041,7 @@ class NTSSB(object):
         init_params = local_params_list + global_params
 
         end2 = time.time()
-        print(f"Getting parameters: {end-start}")
+        print(f"Getting parameters: {end2-start2}")
 
         if opt_triplet is None:
             if opt is None:
