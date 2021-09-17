@@ -321,7 +321,8 @@ class Node(AbstractNode):
             unobs_factors = self.variational_parameters['locals']['unobserved_factors_mean']
             baseline = np.append(1, np.exp(self.log_baseline_caller(variational=True)))
         node_mean = self.get_mean(baseline=baseline, unobserved_factors=unobs_factors, noise=noise)
-        return jit(jax.scipy.stats.poisson.logpmf)(jnp.array(self.tssb.ntssb.data[n]),  self.lib_sizes_caller()[n] * node_mean)
+        lib_sizes = self.lib_sizes_caller()[n]
+        return jit(poisson_lpmf)(jnp.array(self.tssb.ntssb.data[n]),  lib_sizes * node_mean)
 
     def complete_loglh(self):
         return self.loglh(list(self.data))
