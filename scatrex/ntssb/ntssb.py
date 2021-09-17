@@ -1003,7 +1003,7 @@ class NTSSB(object):
         dp_alphas = jnp.concatenate([dp_alphas, 1*jnp.ones((rem,))])
         previous_branches_indices = jnp.concatenate([previous_branches_indices, -1*jnp.ones((rem, previous_branches_indices.shape[1]))], axis=0).astype(int)
         ancestor_nodes_indices = jnp.concatenate([ancestor_nodes_indices, -1*jnp.ones((rem, ancestor_nodes_indices.shape[1]))], axis=0).astype(int)
-        children_vector = jnp.concatenate([children_vector, -1*jnp.ones((rem, children_vector.shape[1]))], axis=0).astype(int)
+        # children_vector = jnp.concatenate([children_vector, -1*jnp.ones((rem, children_vector.shape[1]))], axis=0).astype(int)
         tssb_indices = jnp.concatenate([tssb_indices, -1*jnp.ones((rem, tssb_indices.shape[1]))], axis=0).astype(int)
         parent_vector = jnp.concatenate([parent_vector, -2*jnp.ones((rem,))]).astype(int)
         obs_params = jnp.concatenate([obs_params, jnp.zeros((rem, nodes[0].observed_parameters.size))], axis=0)
