@@ -969,6 +969,8 @@ class NTSSB(object):
             data_mask = data_mask.astype(int)
             sticks_only = True
 
+
+        start2 = time.time()
         node_mask = np.zeros((len(nodes),))
         node_mask[node_mask_idx] = 1
 
@@ -1037,6 +1039,9 @@ class NTSSB(object):
         sticks_only = sticks_only * jnp.array(1.)
 
         init_params = local_params_list + global_params
+
+        end2 = time.time()
+        print(f"Getting parameters: {end-start}")
 
         if opt_triplet is None:
             if opt is None:
