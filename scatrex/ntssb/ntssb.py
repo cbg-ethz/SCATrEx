@@ -667,14 +667,14 @@ class NTSSB(object):
         max_len = self.max_nodes
         tssb_indices = []
         for node in nodes:
-            tssb_indices.append(jnp.array([i for i, tssb in enumerate(tssbs) if tssb == node.tssb.label]))
+            tssb_indices.append(np.array([i for i, tssb in enumerate(tssbs) if tssb == node.tssb.label]))
             # if len(tssb_indices[-1].shape[0]) > max_len:
             #     max_len = len(tssb_indices[-1].shape[0])
 
         for i, c in enumerate(tssb_indices):
             l = c.shape[0]
             if l < max_len:
-                c = jnp.concatenate([c, jnp.array([-1]*(max_len-l))])
+                c = np.concatenate([c, np.array([-1]*(max_len-l))])
                 tssb_indices[i] = c
         tssb_indices = jnp.array(tssb_indices).astype(int)
         end = time.time()
@@ -696,18 +696,6 @@ class NTSSB(object):
             return below_root
         return np.array(descend(root_idx))
 
-    # def get_children_vector(self, parent_vector):
-    #     start = time.time()
-    #     max_len = self.max_nodes
-    #     children_vector = np.ones((len(parent_vector), max_len)) * -1
-    #     for i in range(len(parent_vector)):
-    #         children = jnp.where(parent_vector == i)[0]
-    #         children_vector[i][:len(children)] = children
-    #     children_vector = jnp.array(children_vector).astype(int)
-    #     end = time.time()
-    #     print(f"get_children_vector: {end-start}")
-    #     return children_vector
-
     @partial(jax.jit, static_argnums=0)
     def get_children_vector(self, parent_vector):
         def f(i):
@@ -727,7 +715,7 @@ class NTSSB(object):
                     indices.append(p)
                 p = parent_vector[p]
 
-            indices = jnp.array(indices)
+            indices = np.array(indices)
             ancestor_indices.append(indices)
             # if len(indices) > max_len:
             #     max_len = len(indices)
@@ -735,7 +723,7 @@ class NTSSB(object):
         for i, c in enumerate(ancestor_indices):
             l = c.shape[0]
             if l < max_len:
-                c = jnp.concatenate([c, jnp.array([-1]*(max_len-l))])
+                c = np.concatenate([c, np.array([-1]*(max_len-l))])
                 ancestor_indices[i] = c
         ancestor_indices = jnp.array(ancestor_indices).astype(int)
         end = time.time()
@@ -759,14 +747,14 @@ class NTSSB(object):
                         if n_ == prev_child:
                             indices.append(idx)
                             break
-            previous_branches_indices.append(jnp.array(indices))
+            previous_branches_indices.append(np.array(indices))
             # if len(indices) > max_len:
             #     max_len = len(indices)
 
         for i, c in enumerate(previous_branches_indices):
             l = c.shape[0]
             if l < max_len:
-                c = jnp.concatenate([c, jnp.array([-1]*(max_len-l))])
+                c = np.concatenate([c, np.array([-1]*(max_len-l))])
                 previous_branches_indices[i] = c
         previous_branches_indices = jnp.array(previous_branches_indices).astype(int)
         end = time.time()
@@ -980,9 +968,9 @@ class NTSSB(object):
         node_mask = np.zeros((len(nodes),))
         node_mask[node_mask_idx] = 1
 
-        dp_alphas = jnp.array([node.tssb.dp_alpha for node in nodes])
-        dp_gammas = jnp.array([node.tssb.dp_gamma for node in nodes])
-        tssb_weights = jnp.array([node.tssb.weight for node in nodes])
+        dp_alphas = np.array([node.tssb.dp_alpha for node in nodes])
+        dp_gammas = np.array([node.tssb.dp_gamma for node in nodes])
+        tssb_weights = np.array([node.tssb.weight for node in nodes])
 
         global_params = list(nodes[0].variational_parameters['globals'].values())
         global_params = list(map(lambda arr: jnp.array(arr), global_params))
@@ -991,7 +979,7 @@ class NTSSB(object):
         local_params = [list(node.variational_parameters['locals'].values()) for node in nodes]
         local_names = list(nodes[0].variational_parameters['locals'].keys())
 
-        obs_params = jnp.array(np.array([node.observed_parameters for node in nodes]))
+        obs_params = np.array([node.observed_parameters for node in nodes])
         # local_params_names = [list(local_param.keys()) for local_param in local_params]
         # local_params = [list(local_param.values()) for local_param in local_params]
         # params = global_params + local_params
@@ -1004,15 +992,15 @@ class NTSSB(object):
 
         # global_params =
 
-        tssb_weights = jnp.concatenate([tssb_weights, 10*jnp.ones((rem,))])
-        dp_gammas = jnp.concatenate([dp_gammas, 1*jnp.ones((rem,))])
-        dp_alphas = jnp.concatenate([dp_alphas, 1*jnp.ones((rem,))])
-        previous_branches_indices = jnp.concatenate([previous_branches_indices, -1*jnp.ones((rem, previous_branches_indices.shape[1]))], axis=0).astype(int)
-        ancestor_nodes_indices = jnp.concatenate([ancestor_nodes_indices, -1*jnp.ones((rem, ancestor_nodes_indices.shape[1]))], axis=0).astype(int)
+        tssb_weights = jnp.array(np.concatenate([tssb_weights, 10*np.ones((rem,))]))
+        dp_gammas = jnp.array(np.concatenate([dp_gammas, 1*np.ones((rem,))]))
+        dp_alphas = jnp.array(np.concatenate([dp_alphas, 1*np.ones((rem,))]))
+        previous_branches_indices = jnp.array(np.concatenate([previous_branches_indices, -1*np.ones((rem, previous_branches_indices.shape[1]))], axis=0)).astype(int)
+        ancestor_nodes_indices = jnp.array(np.concatenate([ancestor_nodes_indices, -1*np.ones((rem, ancestor_nodes_indices.shape[1]))], axis=0)).astype(int)
         # children_vector = jnp.concatenate([children_vector, -1*jnp.ones((rem, children_vector.shape[1]))], axis=0).astype(int)
-        tssb_indices = jnp.concatenate([tssb_indices, -1*jnp.ones((rem, tssb_indices.shape[1]))], axis=0).astype(int)
-        obs_params = jnp.concatenate([obs_params, jnp.zeros((rem, nodes[0].observed_parameters.size))], axis=0)
-        node_mask = jnp.concatenate([jnp.array(node_mask), -2*jnp.ones((rem,))]).astype(int)
+        tssb_indices = jn.array(np.concatenate([tssb_indices, -1*np.ones((rem, tssb_indices.shape[1]))], axis=0)).astype(int)
+        obs_params = jnp.array(np.concatenate([obs_params, np.zeros((rem, nodes[0].observed_parameters.size))], axis=0))
+        node_mask = jnp.array(np.concatenate([node_mask, -2*np.ones((rem,))])).astype(int)
         all_nodes_mask = np.ones(len(node_mask)) * -2
         all_nodes_mask[np.where(node_mask >= 0)[0]] = 1
         all_nodes_mask = jnp.array(all_nodes_mask)
@@ -1021,9 +1009,9 @@ class NTSSB(object):
             l = []
             for node_idx in range(len(nodes)):
                 l.append(local_params[node_idx][param_idx])
-            l = np.hstack(l).reshape(len(nodes), -1)
+            l = np.vstack(l)
 
-            # Add dummies
+            # Add dummy nodes
             param_shape = l[0].shape[0]
             l = jnp.array(np.concatenate([l, np.zeros((rem, param_shape))], axis=0))
 
