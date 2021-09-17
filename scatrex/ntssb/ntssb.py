@@ -998,7 +998,7 @@ class NTSSB(object):
         previous_branches_indices = jnp.array(np.concatenate([previous_branches_indices, -1*np.ones((rem, previous_branches_indices.shape[1]))], axis=0)).astype(int)
         ancestor_nodes_indices = jnp.array(np.concatenate([ancestor_nodes_indices, -1*np.ones((rem, ancestor_nodes_indices.shape[1]))], axis=0)).astype(int)
         # children_vector = jnp.concatenate([children_vector, -1*jnp.ones((rem, children_vector.shape[1]))], axis=0).astype(int)
-        tssb_indices = jn.array(np.concatenate([tssb_indices, -1*np.ones((rem, tssb_indices.shape[1]))], axis=0)).astype(int)
+        tssb_indices = jnp.array(np.concatenate([tssb_indices, -1*np.ones((rem, tssb_indices.shape[1]))], axis=0)).astype(int)
         obs_params = jnp.array(np.concatenate([obs_params, np.zeros((rem, nodes[0].observed_parameters.size))], axis=0))
         node_mask = jnp.array(np.concatenate([node_mask, -2*np.ones((rem,))])).astype(int)
         all_nodes_mask = np.ones(len(node_mask)) * -2
