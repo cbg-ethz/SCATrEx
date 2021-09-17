@@ -947,7 +947,10 @@ class NTSSB(object):
         parent_vector = jnp.array(np.array(parent_vector))
         tssbs = [node.tssb.label for node in nodes]
         tssb_indices = self.get_tssb_indices(nodes, tssbs)
+        start3 = time.time()
         children_vector = self.get_children_vector(parent_vector)
+        end3 = time.time()
+        print(f"get_children_vector: {end3-start3}")
         ancestor_nodes_indices = self.get_ancestor_indices(nodes, parent_vector)
         previous_branches_indices = self.get_previous_branches_indices(nodes)
         node_idx = np.where(np.array(nodes)==root_node)[0][0]
