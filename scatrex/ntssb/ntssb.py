@@ -696,20 +696,13 @@ class NTSSB(object):
             return below_root
         return np.array(descend(root_idx))
 
-    def get_children_vector(self, nodes, parent_vector):
+    def get_children_vector(self, parent_vector):
         start = time.time()
-        children_vector = []
         max_len = self.max_nodes
-        for i, node in enumerate(nodes):
-            children_vector.append(jnp.where(parent_vector == i)[0])
-            # if children_vector[-1].shape[0] > max_len:
-            #     max_len = children_vector[-1].shape[0]
-
-        for i, c in enumerate(children_vector):
-            l = c.shape[0]
-            if l < max_len:
-                c = jnp.concatenate([c, jnp.array([-1]*(max_len-l))])
-                children_vector[i] = c
+        children_vector = np.ones((len(parent_vector), max_len)) * -1
+        for i in range(len(parent_vector)):
+            children = jnp.where(parent_vector == i)[0]
+            children_vector[i][:len(children)] = children
         children_vector = jnp.array(children_vector).astype(int)
         end = time.time()
         print(f"get_children_vector: {end-start}")
@@ -948,7 +941,7 @@ class NTSSB(object):
         parent_vector = jnp.array(np.array(parent_vector))
         tssbs = [node.tssb.label for node in nodes]
         tssb_indices = self.get_tssb_indices(nodes, tssbs)
-        children_vector = self.get_children_vector(nodes, parent_vector)
+        children_vector = self.get_children_vector(parent_vector)
         ancestor_nodes_indices = self.get_ancestor_indices(nodes, parent_vector)
         previous_branches_indices = self.get_previous_branches_indices(nodes)
         node_idx = np.where(np.array(nodes)==root_node)[0][0]
