@@ -213,7 +213,7 @@ def poisson_sample(loc, size=None):
     return s
 
 def poisson_lpmf(x, loc, axis=None):
-    return jnp.sum(scipy.stats.poisson.logpmf(x.astype(int), loc), axis=axis)
+    return jnp.sum(jax.scipy.stats.poisson.logpmf(x.astype(int), loc), axis=axis)
 
 def normal_sample(loc, scale, size=None):
     s = numpy.random.normal(loc, scale, size=size)
