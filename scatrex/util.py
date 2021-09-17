@@ -8,7 +8,7 @@ from jax.api import vmap
 from jax import random
 import jax.numpy as jnp
 import jax.nn as jnn
-from jax.scipy.stats import norm, gamma, laplace, beta
+from jax.scipy.stats import norm, gamma, laplace, beta, dirichlet, poisson
 from jax.scipy.special import digamma, betaln
 
 def relative_difference(current, prev, eps=1e-6):
@@ -23,6 +23,12 @@ def diag_gamma_sample(rng, log_alpha, log_beta):
 def diag_gamma_logpdf(x, log_alpha, log_beta):
     # part = partial(gamma.logpdf, scale=jnp.exp(-log_beta))
     return jnp.sum(vmap(gamma.logpdf)(x=x, a=jnp.exp(log_alpha), scale=jnp.exp(-log_beta)))
+
+def dirichlet_sample(rng, log_alpha):
+    return random.dirichlet(rng, jnp.exp(log_alpha))
+
+def dirichlet_logpdf(x, log_alpha):
+    return dirichlet.logpdf(x, jnp.exp(log_alpha))
 
 def diag_gaussian_sample(rng, mean, log_std):
     # Take a single sample from a diagonal multivariate Gaussian.
@@ -94,7 +100,7 @@ def negative_binomial_lpmf(counts, mu, theta):
     return jnp.sum(nbinom.logpmf(counts, *convert_nb_params(mu, theta)))
 
 def negative_binomial_sample(mu, theta, size=None):
-    return jnp.random.negative_binomial(*convert_nb_params(mu, theta), size=size)
+    return numpy.random.negative_binomial(*convert_nb_params(mu, theta), size=size)
 
 def is_diag(M):
     i, j = np.nonzero(M)
@@ -213,7 +219,7 @@ def poisson_sample(loc, size=None):
     return s
 
 def poisson_lpmf(x, loc, axis=None):
-    return jnp.sum(jax.scipy.stats.poisson.logpmf(x.astype(int), loc), axis=axis)
+    return jnp.sum(poisson.logpmf(x.astype(int), loc), axis=axis)
 
 def normal_sample(loc, scale, size=None):
     s = numpy.random.normal(loc, scale, size=size)
@@ -296,9 +302,9 @@ def boundbeta(a,b):
 
 def lnbetafunc(a):
     return numpy.sum(gammaln(a)) - gammaln(numpy.sum(a))
-
-def dirichlet_sample(concentration, size=None):
-    return numpy.random.dirichlet(concentration, size=size)
+#
+# def dirichlet_sample(concentration, size=None):
+#     return numpy.random.dirichlet(concentration, size=size)
 
 def dirichletpdfln(p, a):
     p[p==0.0] = 1e-200
