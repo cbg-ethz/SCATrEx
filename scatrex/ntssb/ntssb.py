@@ -1169,22 +1169,23 @@ class NTSSB(object):
             node_lls = node_lls + np.log(weights[i] + 1e-6) if prior else node_lls
             node.data_ass_logits[indices] = node_lls
 
-    def assign_to_best(self):
-        nodes = self.get_nodes()
+    def assign_to_best(self, nodes=None):
+        if nodes is None:
+            nodes = self.get_nodes()
+
         assignment_logits = np.array([node.data_ass_logits for node in nodes]).T
-        assignment_probs = np.array(jnn.softmax(assignment_logits, axis=1))
+        @jit
+        def get_assignments():
+            assignment_probs = jnp.array(jnn.softmax(assignment_logits, axis=1))
+            return jax.vmap(jnp.argmax)(assignment_probs)
+        assignments = get_assignments()
 
         # Clear all
-        for node in nodes:
+        for i, node in enumerate(nodes):
             node.remove_data()
+            node.add_data(np.where(assignments==i)[0])
 
-        for n in range(self.num_data):
-            new_node = nodes[np.argmax(assignment_probs[n])]
-
-            # if new_node != self.assignments[n]['node']:
-            #     self.assignments[n]['node'].remove_datum(n)
-            new_node.add_datum(n)
-            self.assignments[n] = new_node
+        self.assignments = list(np.array(nodes)[assignments])
 
     # ========= Functions to update tree structure. =========
 
