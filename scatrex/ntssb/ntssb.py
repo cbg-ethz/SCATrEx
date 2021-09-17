@@ -23,6 +23,7 @@ from ..util import *
 from ..callbacks import elbos_callback
 from .tssb import TSSB
 
+import time
 
 class NTSSB(object):
     """
