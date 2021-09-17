@@ -708,6 +708,12 @@ class NTSSB(object):
         print(f"get_children_vector: {end-start}")
         return children_vector
 
+    @partial(jax.jit, static_argnums=0)
+    def get_children_vector(self, parent_vector):
+        def f(i):
+            return jnp.where(parent_vector == i, size=self.max_nodes, fill_value=-1)[0]
+        return jax.vmap(f)(jnp.arange(len(self.max_nodes)))
+
     def get_ancestor_indices(self, nodes, parent_vector, inclusive=False):
         start = time.time()
         ancestor_indices = []
