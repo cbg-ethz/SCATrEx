@@ -662,6 +662,7 @@ class NTSSB(object):
         return node_mean
 
     def get_tssb_indices(self, nodes, tssbs):
+        start = time.time()
         max_len = self.max_nodes
         tssb_indices = []
         for node in nodes:
@@ -675,6 +676,8 @@ class NTSSB(object):
                 c = jnp.concatenate([c, jnp.array([-1]*(max_len-l))])
                 tssb_indices[i] = c
         tssb_indices = jnp.array(tssb_indices).astype(int)
+        end = time.time()
+        print(f"get_tssb_indices: {end-start}")
         return tssb_indices
 
     def get_below_root(self, root_idx, children_vector, tssbs=None):
@@ -693,6 +696,7 @@ class NTSSB(object):
         return np.array(descend(root_idx))
 
     def get_children_vector(self, nodes, parent_vector):
+        start = time.time()
         children_vector = []
         max_len = self.max_nodes
         for i, node in enumerate(nodes):
@@ -706,9 +710,12 @@ class NTSSB(object):
                 c = jnp.concatenate([c, jnp.array([-1]*(max_len-l))])
                 children_vector[i] = c
         children_vector = jnp.array(children_vector).astype(int)
+        end = time.time()
+        print(f"get_children_vector: {end-start}")
         return children_vector
 
     def get_ancestor_indices(self, nodes, parent_vector, inclusive=False):
+        start = time.time()
         ancestor_indices = []
         max_len = self.max_nodes
         for i in range(len(nodes)):
@@ -731,9 +738,12 @@ class NTSSB(object):
                 c = jnp.concatenate([c, jnp.array([-1]*(max_len-l))])
                 ancestor_indices[i] = c
         ancestor_indices = jnp.array(ancestor_indices).astype(int)
+        end = time.time()
+        print(f"get_ancestor_indices: {end-start}")
         return ancestor_indices
 
     def get_previous_branches_indices(self, nodes):
+        start = time.time()
         previous_branches_indices = []
         max_len = self.max_nodes
         for node in nodes:
@@ -759,6 +769,8 @@ class NTSSB(object):
                 c = jnp.concatenate([c, jnp.array([-1]*(max_len-l))])
                 previous_branches_indices[i] = c
         previous_branches_indices = jnp.array(previous_branches_indices).astype(int)
+        end = time.time()
+        print(f"get_previous_branches_indices: {end-start}")
         return previous_branches_indices
 
     def Eq_log_p_nu(self, dp_alpha, nu_sticks_alpha, nu_sticks_beta):
@@ -891,6 +903,7 @@ class NTSSB(object):
         return opt_state, gradient, params, value
 
     def optimize_elbo(self, root_node=None, local_node=None, global_only=False, sticks_only=False, unique_node=None, num_samples=10, n_iters=100, thin=10, step_size=0.05, debug=False, tol=1e-5, run=True, max_nodes=5, init=False, opt=None, opt_triplet=None, mb_size=100, callback=None, **callback_kwargs):
+        start = time.time()
         self.max_nodes = len(self.input_tree_dict.keys()) * max_nodes # upper bound on number of nodes
         self.data = jnp.array(self.data, dtype='float32')
 
@@ -1051,6 +1064,8 @@ class NTSSB(object):
         data_mask_subset = jnp.array(data_mask)
         current_elbo = self.elbo
 
+        end = time.time()
+        print(f"before run: {end-start}")
         if run:
             # Main loop.
             current_elbo = self.elbo
@@ -1079,8 +1094,11 @@ class NTSSB(object):
 
 
             # Without node mask
+            start = time.time()
             ret = self.batch_objective(obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, all_nodes_mask,
                                     jnp.array(1.), jnp.array(0.), jnp.array(0.), num_samples, get_params(opt_state), 10)
+            end = time.time()
+            print(f"batch_objective: {end-start}")
             self.elbo = np.array(ret[0])
             self.ll = np.array(ret[1])
             self.kl = np.array(ret[2])
