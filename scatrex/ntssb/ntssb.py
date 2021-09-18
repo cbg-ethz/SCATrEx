@@ -1158,13 +1158,13 @@ class NTSSB(object):
                     self.root['node'].root['node'].variational_parameters['globals'][global_param] = np.array(params[params_idx])
 
         if node_mask is None:
-            node_mask = np.ones((len(nodes),))
-        node_mask = node_mask[:len(nodes)]
-        for node_idx, node in enumerate(nodes):
-            if node_mask[node_idx] == 1:
-                for i, local_param in enumerate(local_names):
-                    node.variational_parameters['locals'][local_param] = np.array(params[i][node_idx])
-                node.set_mean(variational=True)
+            node_indices = np.arange(len(nodes))
+        else:
+            node_indices = np.where(node_mask==1)[0]
+        for node_idx in node_indices:
+            for i, local_param in enumerate(local_names):
+                nodes[node_idx].variational_parameters['locals'][local_param] = np.array(params[i][node_idx])
+            nodes[node_idx].set_mean(variational=True)
 
     def update_ass_logits(self, indices=None, variational=False, prior=True):
         if indices is None:
