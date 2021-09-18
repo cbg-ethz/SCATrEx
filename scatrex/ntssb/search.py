@@ -64,10 +64,10 @@ class StructureSearch(object):
             # Compute score of initial tree
             self.tree.reset_variational_parameters()
             self.tree.root['node'].root['node'].variational_parameters['globals']['log_baseline_mean'] = init_log_baseline
-            self.tree.optimize_elbo(root_node=None, sticks_only=True, num_samples=num_samples, n_iters=n_iters_elbo*10, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback, **callback_kwargs)
+            self.tree.optimize_elbo(root_node=None, sticks_only=True, num_samples=num_samples, n_iters=n_iters_elbo*10, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback)
 
             # full update
-            self.tree.optimize_elbo(root_node=None, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback, **callback_kwargs)
+            self.tree.optimize_elbo(root_node=None, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback)
             self.tree.plot_tree(super_only=False)
             self.tree.update_ass_logits(variational=True)
             self.tree.assign_to_best()
