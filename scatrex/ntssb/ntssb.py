@@ -1123,7 +1123,7 @@ class NTSSB(object):
             # print(f"New ELBO improvement: {(new_elbo - current_elbo)/np.abs(current_elbo) * 100:.3f}%\n")
 
             start = time.time()
-            self.set_node_means(get_params(opt_state), nodes, local_names, global_names)
+            self.set_node_means(get_params(opt_state), nodes, local_names, global_names, node_mask=node_mask, do_global=do_global)
             self.update_ass_logits(variational=True)
             self.assign_to_best(nodes=nodes)
             end = time.time()
