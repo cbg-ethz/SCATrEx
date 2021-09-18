@@ -21,8 +21,8 @@ def elbos_callback(elbos, window=200, every=50, threshold=1e-3):
     if i % every or i <= 2*window:
         return
 
-    prev_avg = np.mean(elbos[-2*window:-window])
-    latest_avg = np.mean(elbos[-window:])
+    prev_avg = np.median(elbos[-2*window:-window])
+    latest_avg = np.median(elbos[-window:])
     error = _diff['relative'](latest_avg, prev_avg)
     if error < threshold:
         raise StopIteration(f"Convergence achieved at {i}")
