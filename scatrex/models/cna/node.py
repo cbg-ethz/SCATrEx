@@ -258,7 +258,7 @@ class Node(AbstractNode):
             else:
                 sum = np.sum(node_mean, axis=1)
             if len(sum.shape) > 0:
-                sum = sum.reshape(self.tssb.ntssb.num_data, 1)
+                sum = sum.reshape(-1, 1)
             node_mean = node_mean / sum
         return node_mean
 
