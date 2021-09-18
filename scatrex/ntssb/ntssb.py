@@ -1176,12 +1176,12 @@ class NTSSB(object):
         if nodes is None:
             nodes = self.get_nodes()
 
-        assignment_logits = np.array([node.data_ass_logits for node in nodes]).T
+        assignment_logits = jnp.array([node.data_ass_logits for node in nodes]).T
         @jit
-        def get_assignments():
+        def get_assignments(assignment_logits):
             assignment_probs = jnp.array(jnn.softmax(assignment_logits, axis=1))
             return jax.vmap(jnp.argmax)(assignment_probs)
-        assignments = get_assignments()
+        assignments = get_assignments(assignment_logits)
 
         # Clear all
         for i, node in enumerate(nodes):
