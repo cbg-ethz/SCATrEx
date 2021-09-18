@@ -284,8 +284,12 @@ class StructureSearch(object):
 
         if from_factor:
             # Remove factor
+            self.tree.root['node'].root['node'].variational_parameters['globals']['factor_precision_log_means'][factor_idx] = np.log(self.tree.root['node'].root['node'].global_noise_factors_precisions_shape)
+            self.tree.root['node'].root['node'].variational_parameters['globals']['factor_precision_log_stds'][factor_idx] = -1.
             self.tree.root['node'].root['node'].variational_parameters['globals']['noise_factors_mean'][factor_idx] *= 0.0
-            self.tree.root['node'].root['node'].variational_parameters['globals']['cell_noise_mean'][:,factor_idx] *= 0.0
+            self.tree.root['node'].root['node'].variational_parameters['globals']['noise_factors_log_std'][factor_idx] = -1
+            self.tree.root['node'].root['node'].variational_parameters['globals']['cell_noise_mean'][:,factor_idx] = 0.0
+            self.tree.root['node'].root['node'].variational_parameters['globals']['cell_noise_log_std'][:,factor_idx] = -1
             self.tree.optimize_elbo(local_node=None, root_node=None, num_samples=num_samples, n_iters=2*n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback, **callback_kwargs)
         else:
             self.tree.optimize_elbo(local_node=local_node, root_node=None, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback, **callback_kwargs)
