@@ -1149,17 +1149,22 @@ class NTSSB(object):
             self.assign_to_best(nodes=nodes)
             return None
 
-    def set_node_means(self, params, nodes, local_names, global_names):
-        globals_start = len(local_names)
-        params_idx = 0
-        for i, global_param in enumerate(global_names):
-                params_idx = globals_start + i
-                self.root['node'].root['node'].variational_parameters['globals'][global_param] = np.array(params[params_idx])
+    def set_node_means(self, params, nodes, local_names, global_names, node_mask=None, do_global=True):
+        if do_global:
+            globals_start = len(local_names)
+            params_idx = 0
+            for i, global_param in enumerate(global_names):
+                    params_idx = globals_start + i
+                    self.root['node'].root['node'].variational_parameters['globals'][global_param] = np.array(params[params_idx])
 
+        if node_mask is None:
+            node_mask = np.ones((len(nodes),))
+        node_mask = node_mask[:len(nodes)]
         for node_idx, node in enumerate(nodes):
-            for i, local_param in enumerate(local_names):
-                node.variational_parameters['locals'][local_param] = np.array(params[i][node_idx])
-            node.set_mean(variational=True)
+            if node_mask[node_idx] == 1:
+                for i, local_param in enumerate(local_names):
+                    node.variational_parameters['locals'][local_param] = np.array(params[i][node_idx])
+                node.set_mean(variational=True)
 
     def update_ass_logits(self, indices=None, variational=False, prior=True):
         if indices is None:
