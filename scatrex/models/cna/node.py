@@ -322,7 +322,7 @@ class Node(AbstractNode):
             baseline = np.append(1, np.exp(self.log_baseline_caller(variational=True)))
         node_mean = self.get_mean(baseline=baseline, unobserved_factors=unobs_factors, noise=noise)
         lib_sizes = self.lib_sizes_caller()[n]
-        return jit(poisson_lpmf)(jnp.array(self.tssb.ntssb.data[n]),  lib_sizes * node_mean)
+        return jax.partial(jit, static_argnums=2)(poisson_lpmf)(jnp.array(self.tssb.ntssb.data[n]),  lib_sizes * node_mean, axis=1)
 
     def complete_loglh(self):
         return self.loglh(list(self.data))
