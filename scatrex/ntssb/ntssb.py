@@ -926,7 +926,10 @@ class NTSSB(object):
             root_node = local_node.parent()
             root_label = root_node.label
             init_ass_logits = np.array([node.data_ass_logits for node in nodes]).T
-            init_ass_probs = jax.jit(jnn.softmax)(init_ass_logits, axis=1)
+            @jax.jit
+            def f(a):
+                return jnn.softmax(a, axis=1)
+            init_ass_probs = f(init_ass_logits)
             data_indices = list(np.where(init_ass_probs[:,np.where(root_node == np.array(nodes))[0][0]] > 1./np.sqrt(len(nodes)))[0])
             if len(data_indices) == 0:
                 data_indices = np.arange(self.num_data)
