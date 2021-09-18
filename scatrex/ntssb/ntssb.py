@@ -1125,7 +1125,7 @@ class NTSSB(object):
             start = time.time()
             self.set_node_means(get_params(opt_state), nodes, local_names, global_names)
             self.update_ass_logits(variational=True)
-            self.assign_to_best()
+            self.assign_to_best(nodes=nodes)
             end = time.time()
             print(f"last part: {end-start}")
             return elbos
@@ -1146,7 +1146,7 @@ class NTSSB(object):
                 node_idx = np.where(pivot_node == np.array(subnodes))[0][0]
                 self.elbo = self.elbo + np.log(prior_weights[node_idx])
             self.update_ass_logits(variational=True)
-            self.assign_to_best()
+            self.assign_to_best(nodes=nodes)
             return None
 
     def set_node_means(self, params, nodes, local_names, global_names):
