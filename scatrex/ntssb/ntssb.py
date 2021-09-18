@@ -1124,7 +1124,7 @@ class NTSSB(object):
 
             start = time.time()
             self.set_node_means(get_params(opt_state), nodes, local_names, global_names, node_mask=node_mask, do_global=do_global)
-            self.update_ass_logits(variational=True)
+            self.update_ass_logits(variational=True, node_mask=node_mask)
             self.assign_to_best(nodes=nodes)
             end = time.time()
             print(f"last part: {end-start}")
@@ -1166,16 +1166,21 @@ class NTSSB(object):
                 nodes[node_idx].variational_parameters['locals'][local_param] = np.array(params[i][node_idx])
             nodes[node_idx].set_mean(variational=True)
 
-    def update_ass_logits(self, indices=None, variational=False, prior=True):
+    def update_ass_logits(self, indices=None, variational=False, prior=True, node_mask=None):
         if indices is None:
             indices = list(range(self.num_data))
 
         nodes, weights = self.get_node_mixture()
 
-        for i, node in enumerate(nodes):
-            node_lls = node.loglh(np.array(indices), variational=variational, axis=1)
-            node_lls = node_lls + np.log(weights[i] + 1e-6) if prior else node_lls
-            node.data_ass_logits[indices] = node_lls
+        if node_mask is None:
+            node_indices = np.arange(len(nodes))
+        else:
+            node_indices = np.where(node_mask==1)[0]
+
+        for node_idx in node_indices:
+            node_lls = nodes[node_idx].loglh(np.array(indices), variational=variational, axis=1)
+            node_lls = node_lls + np.log(weights[node_idx] + 1e-6) if prior else node_lls
+            nodes[node_idx].data_ass_logits[indices] = node_lls
 
     def assign_to_best(self, nodes=None):
         if nodes is None:
