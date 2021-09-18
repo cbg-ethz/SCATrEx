@@ -150,15 +150,15 @@ class StructureSearch(object):
                 self.tree.root['node'].root['node'].variational_parameters['globals']['log_baseline_mean'] = init_log_baseline # reset to initial
                 self.tree.root['node'].root['node'].variational_parameters['locals']['unobserved_factors_mean'] *= 0. # reset to initial
                 # self.tree.root['node'].root['node'].variational_parameters['globals']['log_baseline_log_std'] *= 0. # allow more variation
-                self.tree.optimize_elbo(root_node=None, global_only=False, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=, **callback_kwargs)
+                self.tree.optimize_elbo(root_node=None, global_only=False, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=None, **callback_kwargs)
             elif move_id == 'globals':
                 init_root = deepcopy(self.tree.root)
                 init_elbo = self.tree.elbo
-                self.tree.optimize_elbo(root_node=None, global_only=True, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=, **callback_kwargs)
+                self.tree.optimize_elbo(root_node=None, global_only=True, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=None, **callback_kwargs)
             elif move_id == 'full':
                 init_root = deepcopy(self.tree.root)
                 init_elbo = self.tree.elbo
-                self.tree.optimize_elbo(root_node=None, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=, **callback_kwargs)
+                self.tree.optimize_elbo(root_node=None, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=None, **callback_kwargs)
 
             if np.isnan(self.tree.elbo):
                 print("Got NaN!")
@@ -286,9 +286,9 @@ class StructureSearch(object):
             # Remove factor
             self.tree.root['node'].root['node'].variational_parameters['globals']['noise_factors_mean'][factor_idx] *= 0.0
             self.tree.root['node'].root['node'].variational_parameters['globals']['cell_noise_mean'][:,factor_idx] *= 0.0
-            self.tree.optimize_elbo(local_node=None, root_node=None, num_samples=num_samples, n_iters=2*n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=, **callback_kwargs)
+            self.tree.optimize_elbo(local_node=None, root_node=None, num_samples=num_samples, n_iters=2*n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback, **callback_kwargs)
         else:
-            self.tree.optimize_elbo(local_node=local_node, root_node=None, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=, **callback_kwargs)
+            self.tree.optimize_elbo(local_node=local_node, root_node=None, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback, **callback_kwargs)
         if verbose:
             print(f"{init_elbo} -> {self.tree.elbo}")
 
@@ -300,7 +300,7 @@ class StructureSearch(object):
         init_root = deepcopy(self.tree.root)
         init_elbo = self.tree.elbo
             # self.tree.merge_nodes(pair[0], pair[1])
-            # self.tree.optimize_elbo(unique_node=None, root_node=pair[1], run=True, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=, **callback_kwargs)
+            # self.tree.optimize_elbo(unique_node=None, root_node=pair[1], run=True, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback, **callback_kwargs)
 
 
         # Choose a subtree
@@ -343,7 +343,7 @@ class StructureSearch(object):
             local_node = None
             if local:
                 local_node = nodeB
-            self.tree.optimize_elbo(unique_node=None, root_node=local_node, run=True, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=, **callback_kwargs)
+            self.tree.optimize_elbo(unique_node=None, root_node=local_node, run=True, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback, **callback_kwargs)
             if verbose:
                 print(f"{init_elbo} -> {self.tree.elbo}")
 
@@ -385,7 +385,7 @@ class StructureSearch(object):
             if len(init_pivot_node.data) == 0 and init_pivot_node_parent is not None and len(init_pivot_node.children()) == 0:
                 print(f"Also removing initial pivot ({init_pivot_node.label}) from tree")
                 self.tree.merge_nodes(init_pivot_node, init_pivot_node_parent)
-                # self.tree.optimize_elbo(sticks_only=True, root_node=init_pivot_node_parent, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=, **callback_kwargs)
+                # self.tree.optimize_elbo(sticks_only=True, root_node=init_pivot_node_parent, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback, **callback_kwargs)
                 removed_pivot = True
 
             root_node = None
@@ -393,7 +393,7 @@ class StructureSearch(object):
                 root_node = subtree.root['node']
                 if removed_pivot:
                     root_node = init_pivot_node_parent
-            self.tree.optimize_elbo(root_node=root_node, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=, **callback_kwargs)
+            self.tree.optimize_elbo(root_node=root_node, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback, **callback_kwargs)
             if verbose:
                 print(f"{init_elbo} -> {self.tree.elbo}")
 
@@ -435,7 +435,7 @@ class StructureSearch(object):
         root_node = None
         if local:
             root_node = pivot_node
-        self.tree.optimize_elbo(root_node=root_node, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=, **callback_kwargs)
+        self.tree.optimize_elbo(root_node=root_node, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback, **callback_kwargs)
         if verbose:
             print(f"{init_elbo} -> {self.tree.elbo}")
 
@@ -458,7 +458,7 @@ class StructureSearch(object):
         root_node = None
         if local:
             root_node = subtree.root['node'].parent()
-        self.tree.optimize_elbo(root_node=root_node, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=, **callback_kwargs)
+        self.tree.optimize_elbo(root_node=root_node, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback, **callback_kwargs)
         if verbose:
             print(f"{init_elbo} -> {self.tree.elbo}")
 
@@ -533,7 +533,7 @@ class StructureSearch(object):
             root_node = None
             if local:
                 root_node = roots[nodeA_idx]['node']
-            self.tree.optimize_elbo(root_node=root_node, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=, **callback_kwargs)
+            self.tree.optimize_elbo(root_node=root_node, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback, **callback_kwargs)
 
             if verbose:
                 print(f"{init_elbo} -> {self.tree.elbo}")
@@ -580,7 +580,7 @@ class StructureSearch(object):
                         if root_node.parent() is None:
                             root_node = None # Update everything!
                             n_iters *= 12 # Big change, so give time to converge
-                    ntree.optimize_elbo(root_node=root_node, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=, **callback_kwargs)
+                    ntree.optimize_elbo(root_node=root_node, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback, **callback_kwargs)
                     if verbose:
                         print(f"{init_elbo} -> {ntree.elbo}")
 
@@ -633,7 +633,7 @@ class StructureSearch(object):
                         root_node = self.tree.root['node'].root['node']
                 if not local:
                     root_node = None
-                self.tree.optimize_elbo(root_node=root_node, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=, **callback_kwargs)
+                self.tree.optimize_elbo(root_node=root_node, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback, **callback_kwargs)
                 if verbose:
                     print(f"{init_elbo} -> {self.tree.elbo}")
 
@@ -671,7 +671,7 @@ class StructureSearch(object):
         root_node = node
         if not local:
             root_node = None
-        self.tree.optimize_elbo(root_node=root_node, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=, **callback_kwargs)
+        self.tree.optimize_elbo(root_node=root_node, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback, **callback_kwargs)
 
         if verbose:
             print(f"{init_elbo} -> {self.tree.elbo}")
