@@ -1150,6 +1150,7 @@ class NTSSB(object):
             return None
 
     def set_node_means(self, params, nodes, local_names, global_names, node_mask=None, do_global=True):
+        start = time.time()
         if do_global:
             globals_start = len(local_names)
             params_idx = 0
@@ -1165,8 +1166,10 @@ class NTSSB(object):
             for i, local_param in enumerate(local_names):
                 nodes[node_idx].variational_parameters['locals'][local_param] = np.array(params[i][node_idx])
             nodes[node_idx].set_mean(variational=True)
+        print(f"set_node_means: {time.time()-start}")
 
     def update_ass_logits(self, indices=None, variational=False, prior=True, node_mask=None):
+        start = time.time()
         if indices is None:
             indices = list(range(self.num_data))
 
@@ -1181,8 +1184,10 @@ class NTSSB(object):
             node_lls = nodes[node_idx].loglh(np.array(indices), variational=variational, axis=1)
             node_lls = node_lls + np.log(weights[node_idx] + 1e-6) if prior else node_lls
             nodes[node_idx].data_ass_logits[indices] = node_lls
+        print(f"update_ass_logits: {time.time()-start}")
 
     def assign_to_best(self, nodes=None):
+        start = time.time()
         if nodes is None:
             nodes = self.get_nodes()
 
@@ -1199,6 +1204,8 @@ class NTSSB(object):
             node.add_data(np.where(assignments==i)[0])
 
         self.assignments = list(np.array(nodes)[assignments])
+
+        print(f"assign_to_best: {time.time()-start}")
 
     # ========= Functions to update tree structure. =========
 
