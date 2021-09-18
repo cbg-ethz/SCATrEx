@@ -935,8 +935,8 @@ class NTSSB(object):
         data_mask[data_indices] = 1.
         data_mask = data_mask.astype(int)
 
-        parent_vector = jnp.array(np.array(parent_vector))
-        parent_vector = jnp.concatenate([parent_vector, -2*jnp.ones((rem,))]).astype(int)
+        parent_vector = np.array(parent_vector)
+        parent_vector = jnp.array(np.concatenate([parent_vector, -2*np.ones((rem,))])).astype(int)
         tssbs = [node.tssb.label for node in nodes]
         tssb_indices = self.get_tssb_indices(nodes, tssbs)
         start3 = time.time()
