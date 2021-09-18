@@ -1060,6 +1060,7 @@ class NTSSB(object):
         # print(all_nodes_mask)
         full_data_indices = jnp.array(np.arange(self.num_data))
         data_mask_subset = jnp.array(data_mask)
+        sub_data_indices = np.where(data_mask)[0]
         current_elbo = self.elbo
 
         end = time.time()
@@ -1074,7 +1075,7 @@ class NTSSB(object):
             elbos = []
             means = []
             minibatch_probs = np.ones((self.num_data,))
-            minibatch_probs[np.where(data_mask)[0]] = 1e6
+            minibatch_probs[sub_data_indices] = 1e6
             minibatch_probs = minibatch_probs/np.sum(minibatch_probs)
             for t in range(n_iters):
                 minibatch_idx = np.random.choice(self.num_data, p=minibatch_probs, size=mb_size, replace=False)
@@ -1124,7 +1125,7 @@ class NTSSB(object):
 
             start = time.time()
             self.set_node_means(get_params(opt_state), nodes, local_names, global_names, node_mask=node_mask, do_global=do_global)
-            self.update_ass_logits(variational=True, node_mask=node_mask)
+            self.update_ass_logits(indices=sub_data_indices, variational=True, node_mask=node_mask)
             self.assign_to_best(nodes=nodes)
             end = time.time()
             print(f"last part: {end-start}")
@@ -1183,7 +1184,7 @@ class NTSSB(object):
         for node_idx in node_indices:
             node_lls = nodes[node_idx].loglh(np.array(indices), variational=variational, axis=1)
             node_lls = node_lls + np.log(weights[node_idx] + 1e-6) if prior else node_lls
-            nodes[node_idx].data_ass_logits[indices] = node_lls
+            nodes[node_idx].data_ass_logits[np.array(indices)] = node_lls
         print(f"update_ass_logits: {time.time()-start}")
 
     def assign_to_best(self, nodes=None):
