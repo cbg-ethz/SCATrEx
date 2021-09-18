@@ -440,11 +440,14 @@ class Node(AbstractNode):
         log_baseline = diag_gaussian_sample(rng, log_baseline_mean, log_baseline_log_std)
 
         # noise
-        factor_precision_log_means = jnp.clip(factor_precision_log_means, a_min=jnp.log(1e-3), a_max=jnp.log(1e3))
+        factor_precision_log_means = jnp.clip(factor_precision_log_means, a_min=jnp.log(1e-3), a_max=jnp.log(1e2))
+        factor_precision_log_stds = jnp.clip(factor_precision_log_stds, a_min=jnp.log(1e-2), a_max=jnp.log(1e2))
         log_factors_precisions = diag_gaussian_sample(rng, factor_precision_log_means, factor_precision_log_stds)
         noise_factors_mean = jnp.clip(noise_factors_mean, a_min=-10., a_max=10.)
+        noise_factors_log_std = jnp.clip(noise_factors_log_std, a_min=jnp.log(1e-2), a_max=jnp.log(1e2))
         noise_factors = diag_gaussian_sample(rng, noise_factors_mean, noise_factors_log_std)
         cell_noise_mean = jnp.clip(cell_noise_mean, a_min=-10., a_max=10.)
+        cell_noise_log_std = jnp.clip(cell_noise_log_std, a_min=jnp.log(1e-2), a_max=jnp.log(1e2))
         cell_noise = diag_gaussian_sample(rng, cell_noise_mean[indices], cell_noise_log_std[indices])
         noise = jnp.dot(cell_noise, noise_factors)
 
