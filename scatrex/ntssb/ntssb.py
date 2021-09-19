@@ -75,6 +75,7 @@ class NTSSB(object):
         self.elbo = -np.inf
         self.ll = -np.inf
         self.kl = -np.inf
+        self.node_kl = -np.inf
         self.data = None
         self.num_data = None
 
@@ -873,11 +874,12 @@ class NTSSB(object):
         init = [0]
         init.extend([None] * (15 + len(params)))
         vectorized_elbo = vmap(self.root['node'].root['node']._compute_elbo, in_axes=init)
-        elbos, lls, kls = vectorized_elbo(rngs, obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, node_mask, jnp.ones((self.num_data,)), jnp.arange(self.num_data), do_global, global_only, sticks_only, *params)
+        elbos, lls, kls, node_kls = vectorized_elbo(rngs, obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, node_mask, jnp.ones((self.num_data,)), jnp.arange(self.num_data), do_global, global_only, sticks_only, *params)
         elbo = jnp.mean(elbos)
         ll = jnp.mean(lls)
         kl = jnp.mean(kls)
-        return elbo, ll, kl
+        node_kl = jnp.mean(node_kls)
+        return elbo, ll, kl, node_kl
 
     @partial(jit, static_argnums=(0,16))
     def do_grad(self, obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, node_mask, data_mask_subset, indices, do_global, global_only, sticks_only, num_samples, params, i):
@@ -1107,6 +1109,7 @@ class NTSSB(object):
             self.elbo = np.array(ret[0])
             self.ll = np.array(ret[1])
             self.kl = np.array(ret[2])
+            self.node_kl = np.array(ret[3])
 
             # Weigh by tree prior
             subtrees = self.get_mixture()[1][1:] # without the root
@@ -1139,6 +1142,7 @@ class NTSSB(object):
             self.elbo = np.array(ret[0])
             self.ll = np.array(ret[1])
             self.kl = np.array(ret[2])
+            self.node_kl = np.array(ret[3])
 
             # Weigh by tree prior
             subtrees = self.get_mixture()[1][1:] # without the root

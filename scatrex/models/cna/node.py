@@ -351,7 +351,7 @@ class Node(AbstractNode):
                 nu_sticks_log_means, nu_sticks_log_stds,
                 psi_sticks_log_means, psi_sticks_log_stds, unobserved_means, unobserved_log_stds, log_unobserved_factors_kernel_means, log_unobserved_factors_kernel_log_stds,
                 log_baseline_mean, log_baseline_log_std, cell_noise_mean, cell_noise_log_std, noise_factors_mean, noise_factors_log_std, factor_precision_log_means, factor_precision_log_stds):
-        elbo, ll, kl = self._compute_elbo(rng, cnvs, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, node_mask, data_mask_subset, indices, do_global, global_only, sticks_only,
+        elbo, ll, kl, node_kl = self._compute_elbo(rng, cnvs, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, node_mask, data_mask_subset, indices, do_global, global_only, sticks_only,
                     nu_sticks_log_means, nu_sticks_log_stds,
                     psi_sticks_log_means, psi_sticks_log_stds, unobserved_means, unobserved_log_stds, log_unobserved_factors_kernel_means, log_unobserved_factors_kernel_log_stds,
                     log_baseline_mean, log_baseline_log_std, cell_noise_mean, cell_noise_log_std, noise_factors_mean, noise_factors_log_std, factor_precision_log_means, factor_precision_log_stds)
@@ -595,7 +595,7 @@ class Node(AbstractNode):
 
         elbo_val = l + total_kl
 
-        return elbo_val, l, total_kl
+        return elbo_val, l, total_kl, node_kl
 
     # ========= Functions to acess root's parameters. =========
     def node_hyperparams_caller(self):
