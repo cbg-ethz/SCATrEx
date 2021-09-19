@@ -576,7 +576,7 @@ class Node(AbstractNode):
         def get_node_kl(i):
             return jnp.where(node_mask[i] == 1, compute_node_kl(jnp.where(node_mask[i] == 1, i, 0)), 0.)
         node_kls = vmap(get_node_kl)(jnp.arange(len(parent_vector)))
-        node_kl = jnp.sum(node_kl)
+        node_kl = jnp.sum(node_kls)
 
         # Global vars KL
         baseline_kl = diag_gaussian_logpdf(log_baseline, zeros_vec[1:], zeros_vec[1:]) - diag_gaussian_logpdf(log_baseline, log_baseline_mean, log_baseline_log_std)
