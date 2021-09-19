@@ -878,7 +878,7 @@ class NTSSB(object):
         elbo = jnp.mean(elbos)
         ll = jnp.mean(lls)
         kl = jnp.mean(kls)
-        node_kl = jnp.mean(node_kls)
+        node_kl = node_kls
         return elbo, ll, kl, node_kl
 
     @partial(jit, static_argnums=(0,16))
