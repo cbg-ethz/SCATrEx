@@ -575,7 +575,8 @@ class Node(AbstractNode):
 
         def get_node_kl(i):
             return jnp.where(node_mask[i] == 1, compute_node_kl(jnp.where(node_mask[i] == 1, i, 0)), 0.)
-        node_kl = jnp.sum(vmap(get_node_kl)(jnp.arange(len(parent_vector))))
+        node_kls = vmap(get_node_kl)(jnp.arange(len(parent_vector)))
+        node_kl = jnp.sum(node_kl)
 
         # Global vars KL
         baseline_kl = diag_gaussian_logpdf(log_baseline, zeros_vec[1:], zeros_vec[1:]) - diag_gaussian_logpdf(log_baseline, log_baseline_mean, log_baseline_log_std)
@@ -595,7 +596,7 @@ class Node(AbstractNode):
 
         elbo_val = l + total_kl
 
-        return elbo_val, l, total_kl, node_kl
+        return elbo_val, l, total_kl, node_kls
 
     # ========= Functions to acess root's parameters. =========
     def node_hyperparams_caller(self):
