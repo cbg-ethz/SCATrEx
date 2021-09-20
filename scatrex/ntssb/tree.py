@@ -256,7 +256,7 @@ class Tree(ABC):
             )
             if sizes:
                 self.tree_dict[node]['size'] = int(tree_dict[node][input_sizes_key])
-                self.tree_dict[node]['weight'] = tree_dict[node][input_sizes_key]/sum(sizes) + 1e-6
+                self.tree_dict[node]['weight'] = tree_dict[node][input_sizes_key]/sum(sizes) + 1e-10
 
         for i in self.tree_dict:
             for j in self.tree_dict:
@@ -274,7 +274,7 @@ class Tree(ABC):
         total = np.sum([self.tree_dict[node]['size'] for node in self.tree_dict])
         for node in self.tree_dict:
             self.tree_dict[node]['size'] = int(self.tree_dict[node]['size'])
-            self.tree_dict[node]['weight'] = self.tree_dict[node]['size']/total + 1e-6
+            self.tree_dict[node]['weight'] = self.tree_dict[node]['size']/total + 1e-10
             if uniform:
                 self.tree_dict[node]['weight'] = 1.0/len(list(self.tree_dict.keys()))
 
