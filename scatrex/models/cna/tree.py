@@ -104,7 +104,7 @@ class ObservedTree(Tree):
 
     def set_neutral_nodes(self, thres=0.95, neutral_level=2):
         for node in self.tree_dict:
-            self.tree_dict['is_neutral'] = False
+            self.tree_dict[node]['is_neutral'] = False
             cnvs = self.tree_dict[node]['params'].ravel()
             frac_neutral = np.sum(cnvs==neutral_level)/cnvs.size
             if frac_neutral > thres:
