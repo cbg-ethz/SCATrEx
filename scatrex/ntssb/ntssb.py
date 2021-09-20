@@ -1204,7 +1204,7 @@ class NTSSB(object):
         def get_assignments(assignment_logits):
             assignment_probs = jnp.array(jnn.softmax(assignment_logits, axis=1))
             return jax.vmap(jnp.argmax)(assignment_probs)
-        assignments = get_assignments(assignment_logits)
+        assignments = np.array(get_assignments(assignment_logits))
 
         # Clear all
         for i, node in enumerate(nodes):
