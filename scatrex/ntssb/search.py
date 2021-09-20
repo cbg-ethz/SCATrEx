@@ -171,6 +171,10 @@ class StructureSearch(object):
                 self.tree.elbo = init_elbo
                 print("Proceeding with previous tree, reducing step size and doing `reset_globals`.")
                 step_size = step_size * 0.1
+                if step_size < 1e-4:
+                    print("Step size is becoming small. Fetching best tree.")
+                    self.tree.root = deepcopy(self.best_tree.root)
+                    self.tree.elbo = self.best_elbo
                 if step_size < 1e-6:
                     raise ValueError("Step size became too small due to too many NaNs!")
                 self.init_optimizer(step_size=step_size)
