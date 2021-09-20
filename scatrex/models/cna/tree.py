@@ -102,6 +102,19 @@ class ObservedTree(Tree):
                 if np.all(self.tree_dict[node]['params'][all_affected_genes] >= min_cn):
                     break
 
+    def set_neutral_nodes(self, thres=0.95, neutral_level=2):
+        for node in self.tree_dict:
+            self.tree_dict['is_neutral'] = False
+            cnvs = self.tree_dict[node]['params'].ravel()
+            frac_neutral = np.sum(cnvs==neutral_level)/cnvs.size
+            if frac_neutral > thres:
+                self.tree_dict[node]['is_neutral'] = True
+
+    def set_neutral_weights(self, weight=1e-6):
+        for node in self.tree_dict:
+            if self.tree_dict[node]['is_neutral']:
+                self.tree_dict[node]['weight'] = weight
+
     def plot_heatmap(self, var_names=None, cmap=None, **kwds):
         if var_names is None:
             var_names = self.adata.var_names
