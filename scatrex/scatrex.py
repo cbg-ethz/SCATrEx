@@ -157,8 +157,6 @@ class SCATrEx(object):
         if filter_genes:
             adata.raw = adata.copy()
             rna_filtered = np.array(adata.X)
-            for node in observed_tree_filtered.tree_dict:
-                observed_tree_filtered.tree_dict[node]['params'] = observed_tree_filtered.tree_dict[node]['params'][var_genes]
 
             # Subset the data to the highest variable genes
             sc.pp.normalize_total(adata, target_sum=1e4)
