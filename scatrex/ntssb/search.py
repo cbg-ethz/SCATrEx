@@ -41,6 +41,8 @@ class StructureSearch(object):
 
         self.init_optimizer(step_size=step_size, opt=opt)
 
+        mb_size = np.min([self.tree.data.shape[0], mb_size])
+
         score_type = 'elbo'
         if posterior_delay > 0:
             score_type = 'll'
