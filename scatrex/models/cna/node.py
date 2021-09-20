@@ -536,40 +536,41 @@ class Node(AbstractNode):
         broadcasted_rate = log_rate * ones_vec
 
         def compute_node_kl(i):
+            kl = 0.
             # # unobserved_factors_kernel -- USING JUST A SPARSE GAMMA DOES NOT PENALIZE KERNELS EQUAL TO ZERO
             pl = diag_gamma_logpdf(jnp.clip(jnp.exp(nodes_log_unobserved_factors_kernels[i]), a_min=1e-2), broadcasted_concentration,
                                     (parent_vector[i] != -1)*(log_rate + jnp.abs(nodes_unobserved_factors[parent_vector[i]])))
             ent = - diag_gaussian_logpdf(jnp.clip(nodes_log_unobserved_factors_kernels[i], a_min=jnp.log(1e-2)), log_unobserved_factors_kernel_means[i], log_unobserved_factors_kernel_log_stds[i])
-            kl = (parent_vector[i] != -1) * (pl + ent)
+            kl += (parent_vector[i] != -1) * (pl + ent)
 
             # Penalize copies in unobserved nodes
-            pl = diag_gamma_logpdf(1e-2 * np.ones(broadcasted_concentration.shape), broadcasted_concentration,
+            pl = diag_gamma_logpdf(1e-2 * jnp.ones(broadcasted_concentration.shape), broadcasted_concentration,
                                     (parent_vector[i] != -1)*(log_rate + jnp.abs(nodes_unobserved_factors[parent_vector[i]])))
-            ent = - diag_gaussian_logpdf(jnp.log(1e-2 * np.ones(broadcasted_concentration.shape)), log_unobserved_factors_kernel_means[i], log_unobserved_factors_kernel_log_stds[i])
-            kl -= (parent_vector[i] != -1) * jnp.all(tssb_indices[i] == tssb_indices[parent_vector[i]]) * (pl + ent)
+            # ent = - diag_gaussian_logpdf(jnp.log(1e-2 * jnp.ones(broadcasted_concentration.shape)), log_unobserved_factors_kernel_means[i], log_unobserved_factors_kernel_log_stds[i])
+            kl -= (parent_vector[i] != -1) * jnp.all(tssb_indices[i] == tssb_indices[parent_vector[i]]) * (pl + 0*ent)
 
             # unobserved_factors
             pl = diag_gaussian_logpdf(nodes_unobserved_factors[i],
                         (parent_vector[i] != -1) * nodes_unobserved_factors[parent_vector[i]],
                         jnp.clip(nodes_log_unobserved_factors_kernels[i], a_min=jnp.log(1e-2))*(parent_vector[i] != -1) + log_kernel*(parent_vector[i] == -1))
             ent = - diag_gaussian_logpdf(nodes_unobserved_factors[i], unobserved_means[i], unobserved_log_stds[i])
-            kl = kl + pl + ent
+            kl += pl + ent
 
             # Penalize copied unobserved_factors
             pl = diag_gaussian_logpdf(nodes_unobserved_factors[parent_vector[i]],
                         (parent_vector[i] != -1) * nodes_unobserved_factors[parent_vector[i]],
                         jnp.clip(nodes_log_unobserved_factors_kernels[i], a_min=jnp.log(1e-2))*(parent_vector[i] != -1) + log_kernel*(parent_vector[i] == -1))
-            ent = - diag_gaussian_logpdf(nodes_unobserved_factors[parent_vector[i]], unobserved_means[i], unobserved_log_stds[i])
-            kl -= (parent_vector[i] != -1) * jnp.all(tssb_indices[i] == tssb_indices[parent_vector[i]]) * (pl + ent)
+            # ent = - diag_gaussian_logpdf(nodes_unobserved_factors[parent_vector[i]], unobserved_means[i], unobserved_log_stds[i])
+            kl -= (parent_vector[i] != -1) * jnp.all(tssb_indices[i] == tssb_indices[parent_vector[i]]) * (pl + 0*ent)
 
             # sticks
             nu_pl = has_children(i) * beta_logpdf(nu_sticks[i], jnp.log(jnp.array([1.])), jnp.log(jnp.array([dp_alphas[i]])))
             nu_ent = has_children(i) * - diag_gaussian_logpdf(log_nu_sticks[i], nu_sticks_log_means[i], nu_sticks_log_stds[i])
-            kl = kl + nu_pl + nu_ent
+            kl += nu_pl + nu_ent
 
             psi_pl = has_next_branch(i) * beta_logpdf(psi_sticks[i], jnp.log(jnp.array([1.])), jnp.log(jnp.array([dp_gammas[i]])))
             psi_ent = has_next_branch(i) * - diag_gaussian_logpdf(log_psi_sticks[i], psi_sticks_log_means[i], psi_sticks_log_stds[i])
-            kl = kl + psi_pl + psi_ent
+            kl += psi_pl + psi_ent
 
             return kl
 
