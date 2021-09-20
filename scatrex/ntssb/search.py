@@ -140,7 +140,7 @@ class StructureSearch(object):
                 init_root, init_elbo = self.swap_nodes(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, debug=debug, mb_size=mb_size, max_nodes=max_nodes, opt=opt, callback=callback, **callback_kwargs)
             elif move_id == 'subtree_reattach':
                 init_root, init_elbo = self.subtree_reattach(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, debug=debug, mb_size=mb_size, max_nodes=max_nodes, opt=opt, callback=callback, **callback_kwargs)
-            elif move_id == 'push_subtree':
+            elif move_id == 'push_subtree' and self.tree.n_nodes < self.tree.max_nodes-1:
                 init_root, init_elbo = self.push_subtree(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, debug=debug, mb_size=mb_size, max_nodes=max_nodes, opt=opt, callback=callback, **callback_kwargs)
             elif move_id == 'perturb_node':
                 init_root, init_elbo = self.perturb_node(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, debug=debug, mb_size=mb_size, max_nodes=max_nodes, opt=opt, callback=callback, **callback_kwargs)
@@ -215,12 +215,13 @@ class StructureSearch(object):
                     self.tree.root = deepcopy(init_root)
                     self.tree.elbo = init_elbo
                     accepted = False
-                else:                                                         # Accepted
-                    print(f'*Move ({move_id}) accepted. ({init_elbo} -> {self.tree.elbo})*')
-                    if self.tree.elbo > self.best_elbo:
-                        self.best_elbo = self.tree.elbo
-                        self.best_tree = deepcopy(self.tree)
-                        print(f'New best! {self.best_elbo}')
+                else:
+                    if self.tree.n_nodes < self.tree.max_nodes:                                                         # Accepted
+                        print(f'*Move ({move_id}) accepted. ({init_elbo} -> {self.tree.elbo})*')
+                        if self.tree.elbo > self.best_elbo:
+                            self.best_elbo = self.tree.elbo
+                            self.best_tree = deepcopy(self.tree)
+                            print(f'New best! {self.best_elbo}')
 
             score = self.tree.elbo if score_type == 'elbo' else self.tree.ll
             self.traces['elbo'].append(self.tree.elbo)
