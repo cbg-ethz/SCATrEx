@@ -130,7 +130,7 @@ class SCATrEx(object):
 
         return (observations, assignments_labels) if copy else None
 
-    def learn_tree(self, observed_tree=None, reset=True, cell_filter=None, search_kwargs=dict()):
+    def learn_tree(self, observed_tree=None, reset=True, cell_filter=None, filter_genes=False, max_genes=1000, search_kwargs=dict()):
         if not self.observed_tree and observed_tree is None:
             raise ValueError("No observed tree available. Please pass an observed tree object.")
 
@@ -148,9 +148,35 @@ class SCATrEx(object):
             cell_idx = np.where(np.array([cell_filter in celltype for celltype in self.adata.obs['celltype_major']]))[0]
             others_idx = np.where(np.array([cell_filter not in celltype for celltype in self.adata.obs['celltype_major']]))[0]
 
+        adata = self.adata.raw.to_adata()
+        adata = adata[cell_idx]
+        clones_filtered = np.array(clones)
+        rna_filtered = np.array(adata.X)
+        observed_tree_filtered = deepcopy(self.observed_tree)
+
+        if filter_genes:
+            adata.raw = adata.copy()
+            rna_filtered = np.array(adata.X)
+            for node in observed_tree_filtered.tree_dict:
+                observed_tree_filtered.tree_dict[node]['params'] = observed_tree_filtered.tree_dict[node]['params'][var_genes]
+
+            # Subset the data to the highest variable genes
+            sc.pp.normalize_total(adata, target_sum=1e4)
+            sc.pp.log1p(adata)
+            sc.pp.highly_variable_genes(adata, n_top_genes=np.min([max_genes, adata.shape[1]]))
+
+            hvgenes = np.where(np.array(adata.var.highly_variable).ravel())[0]
+            clones_filtered = clones_filtered[:,hvgenes]
+            rna_filtered = np.array(rna_filtered[:,hvgenes])
+
+            for node in observed_tree_filtered.tree_dict:
+                observed_tree_filtered.tree_dict[node]['params'] = observed_tree_filtered.tree_dict[node]['params'][hvgenes]
+
+        print(f"Filtered scRNA data for clonemap shape: {rna_filtered.shape}")
+
         if reset:
-            self.ntssb = NTSSB(self.observed_tree, self.model.Node, node_hyperparams=self.model_args)
-            self.ntssb.add_data(self.adata.raw.X, to_root=True)
+            self.ntssb = NTSSB(observed_tree_filtered, self.model.Node, node_hyperparams=self.model_args)
+            self.ntssb.add_data(np.array(rna_filtered), to_root=True)
             self.ntssb.root['node'].root['node'].reset_data_parameters()
             self.ntssb.reset_variational_parameters()
             self.ntssb.update_ass_logits(variational=True)
@@ -261,7 +287,7 @@ class SCATrEx(object):
             cnv_mat[cells] = np.array(clones[clone_idx])
         self.adata.layers['corr_cnvs'] = np.array(cnv_mat)
 
-    def learn_clonemap(self, observed_tree=None, cell_filter=None, dna_diploid_threshold=0.95, filter_genes=True, filter_diploid_cells=False, **optimize_kwargs):
+    def learn_clonemap(self, observed_tree=None, cell_filter=None, dna_diploid_threshold=0.95, filter_genes=True, filter_diploid_cells=False, max_genes=500, **optimize_kwargs):
         """Provides an equivalent of clonealign (for CNV nodes) or cardelino (for SNV nodes)
         """
         if not self.observed_tree and observed_tree is None:
@@ -335,7 +361,7 @@ class SCATrEx(object):
             # Subset the data to the highest variable genes
             sc.pp.normalize_total(adata, target_sum=1e4)
             sc.pp.log1p(adata)
-            sc.pp.highly_variable_genes(adata, n_top_genes=np.min([500, adata.shape[1]]))
+            sc.pp.highly_variable_genes(adata, n_top_genes=np.min([max_genes, adata.shape[1]]))
 
             hvgenes = np.where(np.array(adata.var.highly_variable).ravel())[0]
             clones_filtered = clones_filtered[:,hvgenes]
