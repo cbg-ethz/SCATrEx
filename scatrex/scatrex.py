@@ -189,7 +189,7 @@ class SCATrEx(object):
         self.adata.obs['scatrex_node'] = np.array([assignment.label for assignment in self.ntssb.assignments])
         self.adata.obs['scatrex_obs_node'] = np.array([assignment.tssb.label for assignment in self.ntssb.assignments])
 
-        labels = [self.observed_tree.tree_dict[node]['label'] for node in self.observed_tree.tree_dict]
+        labels = list(self.observed_tree.tree_dict.keys())
         sizes = [np.count_nonzero(self.adata.obs['scatrex_obs_node']==label) for label in labels]
         self.adata.uns['scatrex_estimated_frequencies'] = dict(zip(labels,sizes))
 
@@ -197,6 +197,8 @@ class SCATrEx(object):
         for clone_id in np.unique(self.adata.obs['scatrex_obs_node'][cell_idx]):
             cells = np.where(self.adata.obs['scatrex_obs_node'][cell_idx]==clone_id)[0]
             cnv_mat[cells] = np.array(clones)[np.where(np.array(labels)==clone_id)[0]]
+            clone_idx = np.where(np.array(labels).astype(str)==str(clone_id))[0]
+            cnv_mat[cells] = np.array(clones)[clone_idx]
         self.adata.layers['scatrex_cnvs'] = cnv_mat
 
         self.ntssb.initialize_gene_node_colormaps()
