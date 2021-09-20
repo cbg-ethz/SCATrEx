@@ -113,6 +113,9 @@ class StructureSearch(object):
                 self.tree.root['node'].root['node'].init_noise_factors()
                 move_id = 'full'
 
+            if step_size < main_step_size:
+                move_id = 'reset_globals'
+
             if i > 10 and score_type == 'elbo' and np.var(self.traces['score'][-int(np.max([10, n_iters/10])):]) == 0:
                 print(f"Score hasn't changed in {int(np.max([10, n_iters/10]))} iterations. Using ll for 10 iterations.")
                 posterior_delay = i + 10
@@ -166,7 +169,7 @@ class StructureSearch(object):
                 print("Got NaN!")
                 self.tree.root = deepcopy(init_root)
                 self.tree.elbo = init_elbo
-                print("Proceeding with previous tree and reducing step size.")
+                print("Proceeding with previous tree, reducing step size and doing `reset_globals`.")
                 step_size = step_size * 0.1
                 if step_size < 1e-6:
                     raise ValueError("Step size became too small due to too many NaNs!")
