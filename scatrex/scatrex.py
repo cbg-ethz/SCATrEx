@@ -162,16 +162,16 @@ class SCATrEx(object):
 
         self.ntssb = self.search.run_search(**search_kwargs)
 
-        self.adata.obs['node'] = np.array([assignment.label for assignment in self.ntssb.assignments])
-        self.adata.obs['obs_node'] = np.array([assignment.tssb.label for assignment in self.ntssb.assignments])
+        self.adata.obs['scatrex_node'] = np.array([assignment.label for assignment in self.ntssb.assignments])
+        self.adata.obs['scatrex_obs_node'] = np.array([assignment.tssb.label for assignment in self.ntssb.assignments])
 
         labels = [self.observed_tree.tree_dict[node]['label'] for node in self.observed_tree.tree_dict]
-        sizes = [np.count_nonzero(self.adata.obs['obs_node']==label) for label in labels]
-        self.adata.uns['estimated_frequencies'] = dict(zip(labels,sizes))
+        sizes = [np.count_nonzero(self.adata.obs['scatrex_obs_node']==label) for label in labels]
+        self.adata.uns['scatrex_estimated_frequencies'] = dict(zip(labels,sizes))
 
-        cnv_mat = np.ones(self.adata.shape)
-        for clone_id in np.unique(self.adata.obs['obs_node'][cell_idx]):
-            cells = np.where(self.adata.obs['node'][cell_idx]==clone_id)[0]
+        cnv_mat = np.ones(self.adata.shape) * 2
+        for clone_id in np.unique(self.adata.obs['scatrex_obs_node'][cell_idx]):
+            cells = np.where(self.adata.obs['scatrex_obs_node'][cell_idx]==clone_id)[0]
             cnv_mat[cells] = np.array(clones)[np.where(np.array(labels)==clone_id)[0]]
         self.adata.layers['scatrex_cnvs'] = cnv_mat
 
