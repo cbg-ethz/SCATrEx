@@ -151,9 +151,13 @@ class StructureSearch(object):
                 init_root = deepcopy(self.tree.root)
                 init_elbo = self.tree.elbo
                 self.tree.root['node'].root['node'].variational_parameters['globals']['cell_noise_mean'] *= 0. # shrink
+                self.tree.root['node'].root['node'].variational_parameters['globals']['cell_noise_log_std'] *= 0. # shrink
                 self.tree.root['node'].root['node'].variational_parameters['globals']['noise_factors_mean'] *= 0. # shrink
+                self.tree.root['node'].root['node'].variational_parameters['globals']['noise_factors_log_std'] *= 0. # shrink
                 self.tree.root['node'].root['node'].variational_parameters['globals']['log_baseline_mean'] = init_log_baseline # reset to initial
+                self.tree.root['node'].root['node'].variational_parameters['globals']['log_baseline_log_std'] *= 0. # reset to initial
                 self.tree.root['node'].root['node'].variational_parameters['locals']['unobserved_factors_mean'] *= 0. # reset to initial
+                self.tree.root['node'].root['node'].variational_parameters['locals']['unobserved_factors_log_std'] *= 0. # reset to initial
                 # self.tree.root['node'].root['node'].variational_parameters['globals']['log_baseline_log_std'] *= 0. # allow more variation
                 self.tree.optimize_elbo(root_node=None, global_only=False, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=None, **callback_kwargs)
             elif move_id == 'globals':
