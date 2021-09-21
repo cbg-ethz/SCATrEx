@@ -199,8 +199,8 @@ class SCATrEx(object):
         obs_node_assignments = np.array([self.ntssb.root['node'].label] * self.adata.shape[0])
         obs_node_assignments[cell_idx] = np.array([assignment.tssb.label for assignment in self.ntssb.assignments])
 
-        self.adata.obs['scatrex_node'] = assignments.astype(str)
-        self.adata.obs['scatrex_obs_node'] = obs_assignments.astype(str)
+        self.adata.obs['scatrex_node'] = node_assignments.astype(str)
+        self.adata.obs['scatrex_obs_node'] = obs_node_assignments.astype(str)
 
         labels = list(self.observed_tree.tree_dict.keys())
         sizes = [np.count_nonzero(self.adata.obs['scatrex_obs_node']==label) for label in labels]
