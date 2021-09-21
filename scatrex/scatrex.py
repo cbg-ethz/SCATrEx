@@ -219,7 +219,7 @@ class SCATrEx(object):
         nodes_labels = np.array([node.label for node in nodes])
         for node_id in np.unique(self.adata.obs['scatrex_node'][cell_idx]):
             cells = np.where(self.adata.obs['scatrex_node'][cell_idx]==node_id)[0]
-            node = nodes[np.where(node_id==nodes_labels)[0]]
+            node = nodes[np.where(node_id==nodes_labels)[0][0]]
             xi_mat[cells,retained_genes_pos] = np.array(node.variational_parameters['locals']['unobserved_factors_mean'])
             om_mat[cells,retained_genes_pos] = np.array(np.exp(node.variational_parameters['locals']['unobserved_factors_kernel_log_mean']))
         self.adata.layers['scatrex_xi'] = xi_mat
