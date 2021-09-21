@@ -154,6 +154,9 @@ class SCATrEx(object):
         rna_filtered = np.array(adata.X)
         observed_tree_filtered = deepcopy(self.observed_tree)
 
+        retained_genes = adata.var_names
+        retained_genes_pos = np.arange(retained_genes.size)
+
         if filter_genes:
             adata.raw = adata.copy()
             rna_filtered = np.array(adata.X)
@@ -164,11 +167,15 @@ class SCATrEx(object):
             sc.pp.highly_variable_genes(adata, n_top_genes=np.min([max_genes, adata.shape[1]]))
 
             hvgenes = np.where(np.array(adata.var.highly_variable).ravel())[0]
+            retained_genes = adata.var.index[hvgenes]
+            retained_genes_pos = np.array(hvgenes)
             clones_filtered = clones_filtered[:,hvgenes]
             rna_filtered = np.array(rna_filtered[:,hvgenes])
 
             for node in observed_tree_filtered.tree_dict:
                 observed_tree_filtered.tree_dict[node]['params'] = observed_tree_filtered.tree_dict[node]['params'][hvgenes]
+
+        self.adata.uns['scatrex_retained_genes'] = retained_genes
 
         print(f"Filtered scRNA data for clonemap shape: {rna_filtered.shape}")
 
@@ -196,10 +203,21 @@ class SCATrEx(object):
         cnv_mat = np.ones(self.adata.shape) * 2
         for clone_id in np.unique(self.adata.obs['scatrex_obs_node'][cell_idx]):
             cells = np.where(self.adata.obs['scatrex_obs_node'][cell_idx]==clone_id)[0]
-            cnv_mat[cells] = np.array(clones)[np.where(np.array(labels)==clone_id)[0]]
             clone_idx = np.where(np.array(labels).astype(str)==str(clone_id))[0]
             cnv_mat[cells] = np.array(clones)[clone_idx]
         self.adata.layers['scatrex_cnvs'] = cnv_mat
+
+        xi_mat = np.zeros(self.adata.shape)
+        om_mat = np.zeros(self.adata.shape)
+        nodes = np.array(self.ntssb.get_nodes())
+        nodes_labels = np.array([node.label for node in nodes])
+        for node_id in np.unique(self.adata.obs['scatrex_node'][cell_idx]):
+            cells = np.where(self.adata.obs['scatrex_node'][cell_idx]==node_id)[0]
+            node = nodes[np.where(node_id==nodes_labels)[0]]
+            xi_mat[cells,retained_genes_pos] = np.array(node.variational_parameters['locals']['unobserved_factors_mean'])
+            om_mat[cells,retained_genes_pos] = np.array(np.exp(node.variational_parameters['locals']['unobserved_factors_kernel_log_mean']))
+        self.adata.layers['scatrex_xi'] = xi_mat
+        self.adata.layers['scatrex_om'] = om_mat
 
         self.ntssb.initialize_gene_node_colormaps()
 
