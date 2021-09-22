@@ -41,6 +41,8 @@ class StructureSearch(object):
 
         self.init_optimizer(step_size=step_size, opt=opt)
 
+        self.tree.max_nodes = len(self.tree.input_tree_dict.keys()) * max_nodes # upper bound on number of nodes
+
         mb_size = min(mb_size, self.tree.data.shape[0])
 
         score_type = 'elbo'
@@ -130,6 +132,8 @@ class StructureSearch(object):
 
             init_elbo = self.tree.elbo
             init_score = self.tree.elbo if score_type == 'elbo' else self.tree.ll
+
+            self.tree.n_nodes = len(self.tree.get_nodes())
 
             if move_id == 'add' and self.tree.n_nodes < self.tree.max_nodes-1:
                 init_root, init_elbo = self.add_node(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, mb_size=mb_size, max_nodes=max_nodes, debug=debug, opt=opt, callback=callback, **callback_kwargs)
