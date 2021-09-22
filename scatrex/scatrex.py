@@ -193,13 +193,14 @@ class SCATrEx(object):
 
         self.ntssb = self.search.run_search(**search_kwargs)
 
-        node_assignments = np.array([self.ntssb.root['node'].root['node'].label] * self.adata.shape[0])
-        node_assignments[cell_idx] = np.array([assignment.label for assignment in self.ntssb.assignments])
+        node_assignments = [self.ntssb.root['node'].root['node'].label] * self.adata.shape[0]
+        for i, idx in enumerate(cell_idx):
+            node_assignments[idx] = self.ntssb.assignments[i].label
 
         obs_node_assignments = np.array([self.ntssb.root['node'].label] * self.adata.shape[0])
         obs_node_assignments[cell_idx] = np.array([assignment.tssb.label for assignment in self.ntssb.assignments])
 
-        self.adata.obs['scatrex_node'] = node_assignments.astype(str)
+        self.adata.obs['scatrex_node'] = node_assignments
         self.adata.obs['scatrex_obs_node'] = obs_node_assignments.astype(str)
 
         labels = list(self.observed_tree.tree_dict.keys())
@@ -221,8 +222,8 @@ class SCATrEx(object):
             cells = np.where(self.adata.obs['scatrex_node'][cell_idx]==node_id)[0]
             node = nodes[np.where(node_id==nodes_labels)[0][0]]
             pos = np.meshgrid(cells,retained_genes_pos)
-            xi_mat[pos] = np.array(node.variational_parameters['locals']['unobserved_factors_mean']).reshape(-1,1) * np.ones((len(cells), len(retained_genes_pos))).T
-            om_mat[pos] = np.array(np.exp(node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'])).reshape(-1,1) * np.ones((len(cells), len(retained_genes_pos))).T
+            xi_mat[tuple(pos)] = np.array(node.variational_parameters['locals']['unobserved_factors_mean']).reshape(-1,1) * np.ones((len(cells), len(retained_genes_pos))).T
+            om_mat[tuple(pos)] = np.array(np.exp(node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'])).reshape(-1,1) * np.ones((len(cells), len(retained_genes_pos))).T
         self.adata.layers['scatrex_xi'] = xi_mat
         self.adata.layers['scatrex_om'] = om_mat
 
