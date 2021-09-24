@@ -1432,7 +1432,7 @@ class NTSSB(object):
                 if nodeA.parent() == nodeB or nodeB.parent() == nodeA:
                     unobserved_node_idx = np.where([not nodeA.is_observed, not nodeB.is_observed])[0]
                     if len(unobserved_node_idx) > 1:
-                        print("Warning: both nodes to swap are unobserved by are part of different TSSBs:")
+                        print("Warning: both nodes to swap are unobserved but are part of different TSSBs:")
                         print(f"{nodeA.label}: {nodeA.tssb.label}, {nodeB.label}: {nodeB.tssb.label}")
                         print("Proceeding without swapping.")
                         return
