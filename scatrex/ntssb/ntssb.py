@@ -1724,12 +1724,13 @@ class NTSSB(object):
 
         # Get the target clone subtree
         subtrees = self.get_subtrees(get_roots=True)
+        subtrees_tssbs = [subtree[0] for subtree in subtrees] # the objects
         subtrees = [subtree[1] for subtree in subtrees] # the roots
         subtree_labels = np.array([subtree['node'].label for subtree in subtrees])
         if isinstance(target_clone, str):
             subtree_idx = np.where(np.array(subtree_labels) == target_clone)[0][0]
         else:
-            subtree_idx = np.where(np.array(subtrees) == target_clone)[0][0]
+            subtree_idx = np.where(np.array(subtrees_tssbs) == target_clone)[0][0]
         target_subtree = subtrees[subtree_idx]
         subtreeA = subtrees[np.where(np.array([s['node'].label for s in subtrees]) == nodes[nodeA_idx].tssb.label)[0][0]]
 
