@@ -508,46 +508,17 @@ class StructureSearch(object):
             node_weights, nodes, roots = subtreeA['node'].get_mixture(get_roots=True)
             nodeA_idx = np.random.choice(len(roots[1:]), p=[1./len(roots[1:])]*len(roots[1:])) + 1
             nodeA_parent_idx = np.where(np.array(nodes) == nodes[nodeA_idx].parent())[0][0]
-            def descend(root):
-                ns = [root['node']]
-                for child in root['children']:
-                    child_node = descend(child)
-                    ns.extend(child_node)
-                return ns
-            nodes_below_nodeA = descend(roots[nodeA_idx])
-
-            # Check if there is a pivot here
-            for subtree_child in subtreeA['children']:
-                for n in nodes_below_nodeA:
-                    if subtree_child['pivot_node'] == n:
-                        subtree_child['node'].root['node'].set_parent(subtreeA['node'].root['node'])
-                        subtree_child['pivot_node'] = subtreeA['node'].root['node']
-                        break
 
             # Choose another subtree that's similar to the subtree's top node
             rem_subtrees = [s[1] for s in subtrees if s[1]['node'] != subtreeA['node']]
             sims = [1./(np.mean(np.abs(roots[nodeA_idx]['node'].node_mean - s['node'].root['node'].node_mean)) + 1e-8) for s in rem_subtrees]
             new_subtree = np.random.choice(rem_subtrees, p=sims/np.sum(sims))
 
-            # Move subtree
-            roots[nodeA_idx]['node'].set_parent(new_subtree['node'].root['node'])
-            roots[nodeA_idx]['node'].set_mean(variational=True)
-            roots[nodeA_idx]['node'].tssb = new_subtree['node']
-            def descend(root):
-                for child in root.children():
-                    child.tssb = new_subtree['node']
-            descend(roots[nodeA_idx]['node'])
-            new_subtree['node'].root['children'].append(roots[nodeA_idx])
-            new_subtree['node'].root['sticks'] = np.vstack([new_subtree['node'].root['sticks'], 1.])
-
-            childnodes = np.array([n['node'] for n in roots[nodeA_parent_idx]['children']])
-            tokeep = np.where(childnodes != roots[nodeA_idx]['node'])[0].astype(int).ravel()
-            roots[nodeA_parent_idx]['sticks']   = roots[nodeA_parent_idx]['sticks'][tokeep]
-            roots[nodeA_parent_idx]['children'] = list(np.array(roots[nodeA_parent_idx]['children'])[tokeep])
-
             if verbose:
                 print(f"Trying to set {roots[nodeA_idx]['node'].label} below {new_subtree['node'].label}")
 
+            # Move subtree
+            self.tree.subtree_reattach_to(roots[nodeA_idx]['node'], new_subtree['node'])
             # self.tree.reset_variational_parameters(variances_only=True)
             # init_baseline = jnp.mean(self.tree.data, axis=0)
             # init_log_baseline = jnp.log(init_baseline / init_baseline[0])[1:]
