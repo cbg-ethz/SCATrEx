@@ -1744,6 +1744,8 @@ class NTSSB(object):
 
         # Move subtree
         roots[nodeA_idx]['node'].tssb = target_subtree['node']
+        roots[nodeA_idx]['node'].cnv = np.array(target_subtree['node'].root['node'].cnvs)
+        roots[nodeA_idx]['node'].observed_parameters = np.array(target_subtree['node'].root['node'].observed_parameters)
         roots[nodeA_idx]['node'].set_parent(target_subtree['node'].root['node'])
         roots[nodeA_idx]['node'].set_mean(variational=True)
         for n in nodes_below_nodeA:
