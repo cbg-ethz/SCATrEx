@@ -109,7 +109,7 @@ class StructureSearch(object):
             # else:
             move_id = np.random.choice(moves, p=p)
 
-            if i == factor_delay and n_factors > 0:
+            if i == factor_delay and n_factors > 0 and self.tree.root['node'].root['node'].num_global_noise_factors == 0:
                 self.tree = deepcopy(self.best_tree)
                 self.tree.root['node'].root['node'].num_global_noise_factors = n_factors
                 self.tree.root['node'].root['node'].init_noise_factors()
