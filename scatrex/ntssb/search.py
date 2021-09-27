@@ -180,9 +180,12 @@ class StructureSearch(object):
                 print("Proceeding with previous tree, reducing step size and doing `reset_globals`.")
                 step_size = step_size * 0.1
                 if step_size < 1e-4:
-                    print("Step size is becoming small. Fetching best tree.")
+                    print("Step size is becoming small. Fetching best tree with noise factors.")
                     self.tree.root = deepcopy(self.best_tree.root)
                     self.tree.elbo = self.best_elbo
+                    if self.tree.root['node'].root['node'].num_global_noise_factors == 0 and n_factors > 0 and i > factor_delay:
+                        self.tree.root['node'].root['node'].num_global_noise_factors = n_factors
+                        self.tree.root['node'].root['node'].init_noise_factors()
                 if step_size < 1e-6:
                     raise ValueError("Step size became too small due to too many NaNs!")
                 self.init_optimizer(step_size=step_size)
