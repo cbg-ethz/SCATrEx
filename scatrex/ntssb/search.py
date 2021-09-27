@@ -241,6 +241,12 @@ class StructureSearch(object):
                             self.best_tree = deepcopy(self.tree)
                             print(f'New best! {self.best_elbo}')
 
+            if i == factor_delay:
+                print("Setting current tree with complete number of factors as the best.")
+                self.best_elbo = self.tree.elbo
+                self.best_tree = deepcopy(self.tree)
+                print(f'New best! {self.best_elbo}')
+
             score = self.tree.elbo if score_type == 'elbo' else self.tree.ll
             self.traces['elbo'].append(self.tree.elbo)
             self.traces['score'].append(score)
