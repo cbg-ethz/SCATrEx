@@ -5,6 +5,7 @@ from time import time
 from ..util import *
 from jax.api import jit
 from jax.experimental.optimizers import adam
+import matplotlib.pyplot as plt
 
 def search_callback(inf):
     return
@@ -33,6 +34,25 @@ class StructureSearch(object):
         opt_update = jit(opt_update)
         opt_init = jit(opt_init)
         self.opt_triplet = (opt_init, opt_update, get_params)
+
+    def plot_traces(self, keys=None, figsize=(16,10), highlight_max=True, highlight_s=100, highlight_color='red'):
+        if keys is None:
+            keys = list(self.traces['keys'])
+        if highlight_max:
+            it_max_score = np.argmax(self.traces['elbo'])
+
+        fig, ax_list = plt.subplots(len(keys), 1, sharex=True, figsize=figsize)
+        for i, k in enumerate(keys):
+            ax_list[i].plot(self.traces[k])
+            ax_list[i].set_title(k)
+            if k == 'n_nodes':
+                ax_list[i].set_ylim(0, self.tree.max_nodes)
+            if highlight_max:
+                ax_list[i].scatter(it_max_score, self.traces[k][it_max_score], s=highlight_s, color=highlight_color)
+                ax_list[i].plot([0, it_max_score], [self.traces[k][it_max_score], self.traces[k][it_max_score]], ls='--', color='black')
+                if type(self.traces[k][0]) is float or type(self.traces[k][0]) is int or k == 'elbo' or k == 'score':
+                    ax_list[i].plot([it_max_score, it_max_score], [ax_list[i].get_ylim()[0], self.traces[k][it_max_score]], ls='--', color='black')
+        plt.show()
 
     def run_search(self, n_iters=1000, n_iters_elbo=1000, factor_delay=0, posterior_delay=0, thin=10, local=True, num_samples=1, step_size=0.001, verbose=True, tol=1e-6, mb_size=100, max_nodes=5, debug=False, callback=None, alpha=0.01, Tmax=10, anneal=False, restart_step=10,
                     moves=['add', 'merge', 'pivot_reattach', 'swap', 'subtree_reattach', 'push_subtree', 'perturb_node', 'perturb_globals'],
