@@ -141,8 +141,9 @@ class StructureSearch(object):
             if step_size < main_step_size:
                 move_id = 'reset_globals'
 
-            if i > 10 and score_type == 'elbo' and np.var(self.traces['score'][-int(np.max([10, n_iters/10])):]) == 0:
-                print(f"Score hasn't changed in {int(np.max([10, n_iters/10]))} iterations. Using ll for 10 iterations.")
+            nits_check = int(np.max([10, .05*n_iters]))
+            if i > 10 and score_type == 'elbo' and np.sum(np.array(self.traces['accepted'][-nits_check:]) == False) == nits_check:
+                print(f"No moves accepted in {nits_check} iterations. Using ll for 10 iterations.")
                 posterior_delay = i + 10
 
             if i < posterior_delay:
@@ -233,6 +234,9 @@ class StructureSearch(object):
             new_score = self.tree.elbo if score_type == 'elbo' else self.tree.ll
 
             accepted = True
+
+            if move_id == 'full' or move_id == 'globals':
+                accepted = False
 
             if move_id == 'add':
                 if add_rule == 'accept' and score_type == 'elbo': # only accept immediatly if using ELBO to score
