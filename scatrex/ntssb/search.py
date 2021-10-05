@@ -54,7 +54,7 @@ class StructureSearch(object):
                     ax_list[i].plot([it_max_score, it_max_score], [ax_list[i].get_ylim()[0], self.traces[k][it_max_score]], ls='--', color='black')
         plt.show()
 
-    def run_search(self, n_iters=1000, n_iters_elbo=1000, factor_delay=0, posterior_delay=0, thin=10, local=True, num_samples=1, step_size=0.001, verbose=True, tol=1e-6, mb_size=100, max_nodes=5, debug=False, callback=None, alpha=0.01, Tmax=10, anneal=False, restart_step=10,
+    def run_search(self, n_iters=1000, n_iters_elbo=1000, factor_delay=0, posterior_delay=0, global_delay=0, thin=10, local=True, num_samples=1, step_size=0.001, verbose=True, tol=1e-6, mb_size=100, max_nodes=5, debug=False, callback=None, alpha=0.01, Tmax=10, anneal=False, restart_step=10,
                     moves=['add', 'merge', 'pivot_reattach', 'swap', 'subtree_reattach', 'push_subtree', 'perturb_node', 'perturb_globals'],
                     move_weights=[1, 3, 1, 1, 1, 1, 1, 1], merge_n_tries=5, opt=adam, search_callback=None, add_rule='accept', **callback_kwargs):
         print(f'Will search for the maximum marginal likelihood tree with the following moves: {moves}\n')
@@ -73,6 +73,9 @@ class StructureSearch(object):
         T = Tmax
         if not anneal:
             T = 1.
+
+        if not local and global_delay > 0:
+            local = True
 
         n_factors = self.tree.root['node'].root['node'].num_global_noise_factors
 
@@ -149,6 +152,9 @@ class StructureSearch(object):
                 self.tree.root = deepcopy(self.best_tree.root)
                 self.tree.elbo = self.best_elbo
                 score_type = 'elbo'
+
+            if global_delay > 0 and i > global_delay:
+                local = False
 
             init_elbo = self.tree.elbo
             init_score = self.tree.elbo if score_type == 'elbo' else self.tree.ll
