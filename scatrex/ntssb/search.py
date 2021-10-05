@@ -111,9 +111,9 @@ class StructureSearch(object):
         for i in tqdm(range(n_iters)):
             start = time()
             try:
-                nodes, mixture = self.tree.get_node_mixture()
-                n_nodes = len(nodes)
                 if np.mod(i, 5) == 0:
+                    nodes, mixture = self.tree.get_node_mixture()
+                    n_nodes = len(nodes)
                     if np.sum(mixture < 0.1*1./n_nodes) > np.ceil(n_nodes/3) or n_nodes > self.tree.max_nodes * add_rule_thres:
                         # Reduce probability of adding, and only add if score improves
                         # p = np.array(move_weights)
