@@ -299,6 +299,8 @@ class StructureSearch(object):
 
         self.tree.plot_tree(super_only=False)
         self.best_tree.plot_tree(super_only=False)
+        self.best_tree.update_ass_logits(variational=True)
+        self.best_tree.assign_to_best()
         return self.best_tree
 
     def add_node(self, local=False, num_samples=1, n_iters=100, thin=10, tol=1e-7, step_size=0.05, mb_size=100, max_nodes=5, verbose=True, debug=False, opt=None, callback=None, **callback_kwargs):
