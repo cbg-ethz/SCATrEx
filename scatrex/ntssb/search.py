@@ -56,7 +56,7 @@ class StructureSearch(object):
 
     def run_search(self, n_iters=1000, n_iters_elbo=1000, factor_delay=0, posterior_delay=0, global_delay=0, thin=10, local=True, num_samples=1, step_size=0.001, verbose=True, tol=1e-6, mb_size=100, max_nodes=5, debug=False, callback=None, alpha=0.01, Tmax=10, anneal=False, restart_step=10,
                     moves=['add', 'merge', 'pivot_reattach', 'swap', 'subtree_reattach', 'push_subtree', 'perturb_node', 'perturb_globals'],
-                    move_weights=[1, 3, 1, 1, 1, 1, 1, 1], merge_n_tries=5, opt=adam, search_callback=None, add_rule='accept', **callback_kwargs):
+                    move_weights=[1, 3, 1, 1, 1, 1, 1, 1], merge_n_tries=5, opt=adam, search_callback=None, add_rule='accept', add_rule_thres=.5, **callback_kwargs):
         print(f'Will search for the maximum marginal likelihood tree with the following moves: {moves}\n')
 
         self.init_optimizer(step_size=step_size, opt=opt)
@@ -114,7 +114,7 @@ class StructureSearch(object):
                 nodes, mixture = self.tree.get_node_mixture()
                 n_nodes = len(nodes)
                 if np.mod(i, 5) == 0:
-                    if np.sum(mixture < 0.1*1./n_nodes) > np.ceil(n_nodes/3) or n_nodes > self.tree.max_nodes * 2/3:
+                    if np.sum(mixture < 0.1*1./n_nodes) > np.ceil(n_nodes/3) or n_nodes > self.tree.max_nodes * add_rule_thres:
                         # Reduce probability of adding, and only add if score improves
                         # p = np.array(move_weights)
                         # p[np.where(np.array(moves)=='add')[0][0]] = 0.25 * 1/len(moves)
