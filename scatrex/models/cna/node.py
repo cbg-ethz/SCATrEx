@@ -133,7 +133,7 @@ class Node(AbstractNode):
         if means:
             self.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.log(self.unobserved_factors_kernel_concentration_caller())*np.ones((self.n_genes,))
         if variances:
-            self.variational_parameters['locals']['unobserved_factors_kernel_log_std'] = np.zeros((self.n_genes,))
+            self.variational_parameters['locals']['unobserved_factors_kernel_log_std'] = -2.* np.ones((self.n_genes,))
 
         self.set_mean(self.get_mean(baseline=np.append(1, np.exp(self.log_baseline_caller())), unobserved_factors=self.variational_parameters['locals']['unobserved_factors_mean']))
 
