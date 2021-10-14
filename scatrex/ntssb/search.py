@@ -475,7 +475,7 @@ class StructureSearch(object):
 
         # Pick a node in the parent subtree
         nodes, target_probs = self.tree.get_node_data_sizes(normalized=True)
-        target_probs = [prob for i, prob in enumerate(target_probs) if nodes[i].tssb == parent_subtree[0]]
+        target_probs = [prob + 1e-8 for i, prob in enumerate(target_probs) if nodes[i].tssb == parent_subtree[0]]
         nodes = [node for node in nodes if node.tssb == parent_subtree[0]]
         target_probs /= np.sum(target_probs)
         node = np.random.choice(nodes, p=np.array(target_probs))
