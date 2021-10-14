@@ -19,10 +19,11 @@ extras <- as.character(as.integer(sort(unique(benchmark_df$n_extras))))
 #                "#d8a3ff", "#C77CFF", "#b655ff",
 #                "#a3caff", "#7cb4ff", "#559eff")
 
-method_params <- list(correlation=list(name='Correlation', color=c("#ffd8a3", "#ffc77c", "#ffb655")),
-                      clonealign=list(name='clonealign', color=c("#ddccc2", "#CFB7A9", "#c1a290")),
-                      leiden=list(name='leiden', color=c("#f6e8ae", "#f2de8b", "#eed468")),
-                      scatrex=list(name='SCATrEx', color=c("#bfced8", "#A7BBC9", "#8fa8ba")))
+method_params <- list(correlation=list(name='Correlation', color=c("#ffd8a3", "#ffb655")),
+                      clonealign=list(name='clonealign', color=c("#ddccc2", "#c1a290")),
+                      leiden=list(name='leiden', color=c("#f6e8ae", "#eed468")),
+                      clonealign_leiden=list(name='clonealign+leiden', color=c("#cae1d4", "#88bda0")),
+                      scatrex=list(name='SCATrEx', color=c("#bfced8", "#8fa8ba")))
 get_colors <- function(method_list, method_params_list) {
   colors <- list()
   i = 1
@@ -56,7 +57,7 @@ p1 <- ggplot(benchmark_df_subset, aes(x = method, y = value, color = interaction
 
 ptitle = 'Clone-level v-measure'
 score = 'clone_ari'
-methods = c('leiden', 'scatrex')
+methods = c('leiden', 'clonealign_leiden', 'scatrex')
 colors <- get_colors(methods, method_params)
 benchmark_df_subset <- benchmark_df[benchmark_df$score == score,]
 benchmark_df_subset <- benchmark_df_subset[benchmark_df_subset$method %in% methods,]
@@ -74,7 +75,7 @@ p2 <- ggplot(benchmark_df_subset, aes(x = method, y = value, color = interaction
 
 ptitle = 'Node-level v-measure'
 score = 'node_ari'
-methods = c('leiden', 'scatrex')
+methods = c('leiden', 'clonealign_leiden', 'scatrex')
 colors <- get_colors(methods, method_params)
 benchmark_df_subset <- benchmark_df[benchmark_df$score == score,]
 benchmark_df_subset <- benchmark_df_subset[benchmark_df_subset$method %in% methods,]
