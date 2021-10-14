@@ -238,38 +238,39 @@ class StructureSearch(object):
             if move_id == 'full' or move_id == 'globals':
                 accepted = False
 
-            if move_id == 'add':
+            if self.tree.n_nodes >= self.tree.max_nodes:
+                self.tree.root = deepcopy(init_root)
+                self.tree.elbo = init_elbo
+                accepted = False
+            elif move_id == 'add':
                 if add_rule == 'accept' and score_type == 'elbo': # only accept immediatly if using ELBO to score
-                    if self.tree.n_nodes < self.tree.max_nodes:
-                        print(f'*Move ({move_id}) accepted. ({init_elbo} -> {self.tree.elbo})*')
-                        if self.tree.elbo > self.best_elbo:
-                            self.best_elbo = self.tree.elbo
-                            self.best_tree = deepcopy(self.tree)
-                            print(f'New best! {self.best_elbo}')
+                    print(f'*Move ({move_id}) accepted. ({init_elbo} -> {self.tree.elbo})*')
+                    if self.tree.elbo > self.best_elbo:
+                        self.best_elbo = self.tree.elbo
+                        self.best_tree = deepcopy(self.tree)
+                        print(f'New best! {self.best_elbo}')
                 else:
                     if (-(init_score - new_score)/T) < np.log(np.random.rand()):
                         self.tree.root = deepcopy(init_root)
                         self.tree.elbo = init_elbo
                         accepted = False
                     else:
-                        if self.tree.n_nodes < self.tree.max_nodes:
-                            print(f'*Move ({move_id}) accepted. ({init_elbo} -> {self.tree.elbo})*')
-                            if self.tree.elbo > self.best_elbo:
-                                self.best_elbo = self.tree.elbo
-                                self.best_tree = deepcopy(self.tree)
-                                print(f'New best! {self.best_elbo}')
-            else:
-                if move_id != 'full' and move_id != 'globals' and (-(init_score - new_score)/T) < np.log(np.random.rand()) or self.tree.n_nodes >= self.tree.max_nodes: # Rejected
-                    self.tree.root = deepcopy(init_root)
-                    self.tree.elbo = init_elbo
-                    accepted = False
-                else:
-                    if self.tree.n_nodes < self.tree.max_nodes:                                                         # Accepted
                         print(f'*Move ({move_id}) accepted. ({init_elbo} -> {self.tree.elbo})*')
                         if self.tree.elbo > self.best_elbo:
                             self.best_elbo = self.tree.elbo
                             self.best_tree = deepcopy(self.tree)
                             print(f'New best! {self.best_elbo}')
+            elif move_id != 'full' and move_id != 'globals':
+                if (-(init_score - new_score)/T) < np.log(np.random.rand()):
+                    self.tree.root = deepcopy(init_root)
+                    self.tree.elbo = init_elbo
+                    accepted = False
+                else: # Accepted
+                    print(f'*Move ({move_id}) accepted. ({init_elbo} -> {self.tree.elbo})*')
+                    if self.tree.elbo > self.best_elbo:
+                        self.best_elbo = self.tree.elbo
+                        self.best_tree = deepcopy(self.tree)
+                        print(f'New best! {self.best_elbo}')
 
             if i == factor_delay and n_factors > 0:
                 print("Setting current tree with complete number of factors as the best.")
