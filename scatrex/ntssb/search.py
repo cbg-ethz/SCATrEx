@@ -479,7 +479,7 @@ class StructureSearch(object):
         nodes = [node for node in nodes if node.tssb == parent_subtree[0]]
         target_probs /= np.sum(target_probs)
         node = np.random.choice(nodes, p=np.array(target_probs))
-        pivot_node = self.tree.add_node_to(node.label, optimal_init=True)
+        pivot_node = self.tree.add_node_to(node, optimal_init=True)
 
         # Assign data to it
         self.tree.update_ass_logits(variational=True)
@@ -488,7 +488,7 @@ class StructureSearch(object):
         # Pick one of the children subtrees
         subtrees = [subtree for subtree in parent_subtree[1]['children']]
         subtree = np.random.choice(subtrees, p=[1./len(subtrees)]*len(subtrees))
-        init_pivot = subtree['node'].root['node'].parent().label
+        init_pivot = subtree['node'].root['node'].parent()
 
         # Update pivot
         self.tree.pivot_reattach_to(subtree['node'], pivot_node)
