@@ -602,7 +602,7 @@ class StructureSearch(object):
             nodeA_parent_idx = np.where(np.array(nodes) == nodes[nodeA_idx].parent())[0][0]
 
             if verbose:
-                print(f"Trying to set {roots[nodeA_idx]['node'].label} below {subtreeA['super_parent'].label} and use it as pivot of {roots[nodeA_idx]['node'].tssb.label}")
+                print(f"Trying to set {roots[nodeA_idx]['node'].label} below {subtreeA['super_parent'].label} and use it as pivot of {subtreeA['node'].label}")
 
             # Move subtree to parent
             self.tree.subtree_reattach_to(roots[nodeA_idx]['node'], subtreeA['super_parent'].label) # Use label to avoid bugs with references
