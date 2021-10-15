@@ -601,6 +601,9 @@ class StructureSearch(object):
             nodeA_idx = np.random.choice(len(roots[1:]), p=[1./len(roots[1:])]*len(roots[1:])) + 1
             nodeA_parent_idx = np.where(np.array(nodes) == nodes[nodeA_idx].parent())[0][0]
 
+            if verbose:
+                print(f"Trying to set {roots[nodeA_idx]['node'].label} below {subtreeA['super_parent'].label} and use it as pivot of {roots[nodeA_idx]['node'].tssb.label}")
+
             # Move subtree to parent
             self.tree.subtree_reattach_to(roots[nodeA_idx]['node'], subtreeA['super_parent'].label) # Use label to avoid bugs with references
 
@@ -612,9 +615,6 @@ class StructureSearch(object):
             # init_baseline = jnp.mean(self.tree.data, axis=0)
             # init_log_baseline = jnp.log(init_baseline / init_baseline[0])[1:]
             # self.tree.root['node'].root['node'].log_baseline_mean = init_log_baseline + np.random.normal(0, .5, size=self.tree.data.shape[1]-1)
-
-            if verbose:
-                print(f"Trying to set {roots[nodeA_idx]['node'].label} below {new_subtree['node'].label} and use it as pivot of {roots[nodeA_idx]['node'].tssb.label}")
 
             root_node = None
             if local:
