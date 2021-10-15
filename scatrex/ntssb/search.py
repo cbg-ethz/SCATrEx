@@ -174,6 +174,8 @@ class StructureSearch(object):
                 init_root, init_elbo = self.swap_nodes(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, debug=debug, mb_size=mb_size, max_nodes=max_nodes, opt=opt, callback=callback, **callback_kwargs)
             elif move_id == 'subtree_reattach':
                 init_root, init_elbo = self.subtree_reattach(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, debug=debug, mb_size=mb_size, max_nodes=max_nodes, opt=opt, callback=callback, **callback_kwargs)
+            elif move_id == 'subtree_pivot_reattach':
+                init_root, init_elbo = self.subtree_pivot_reattach(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, debug=debug, mb_size=mb_size, max_nodes=max_nodes, opt=opt, callback=callback, **callback_kwargs)
             elif move_id == 'push_subtree' and self.tree.n_nodes < self.tree.max_nodes-1:
                 init_root, init_elbo = self.push_subtree(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, debug=debug, mb_size=mb_size, max_nodes=max_nodes, opt=opt, callback=callback, **callback_kwargs)
             elif move_id == 'perturb_node':
@@ -567,6 +569,53 @@ class StructureSearch(object):
             # init_baseline = jnp.mean(self.tree.data, axis=0)
             # init_log_baseline = jnp.log(init_baseline / init_baseline[0])[1:]
             # self.tree.root['node'].root['node'].log_baseline_mean = init_log_baseline + np.random.normal(0, .5, size=self.tree.data.shape[1]-1)
+            root_node = None
+            if local:
+                root_node = roots[nodeA_idx]['node']
+            self.tree.optimize_elbo(root_node=root_node, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback, **callback_kwargs)
+
+            if verbose:
+                print(f"{init_elbo} -> {self.tree.elbo}")
+
+        return init_root, init_elbo
+
+    def subtree_pivot_reattach(self, local=False, num_samples=1, n_iters=100, thin=10, tol=1e-7, step_size=0.05, mb_size=100, max_nodes=5, verbose=True, debug=False, opt=None, callback=None, **callback_kwargs):
+        """
+        Reattach subtree of node A to clone B and use it as pivot of A
+        """
+        init_root = deepcopy(self.tree.root)
+        init_elbo = self.tree.elbo
+
+        subtrees = self.tree.get_subtrees(get_roots=True)
+
+        # Pick a non-root subtree with more than 1 node
+        in_subtrees = [subtree[1] for subtree in subtrees[1:] if len(subtree[0].root['children']) > 0]
+
+        # If there is any subtree with more than 1 node, proceed
+        if len(in_subtrees) > 0:
+            # Choose one subtree
+            subtreeA = np.random.choice(in_subtrees, p=[1./len(in_subtrees)]*len(in_subtrees))
+
+            # Choose one of its nodes uniformly which is not the root
+            node_weights, nodes, roots = subtreeA['node'].get_mixture(get_roots=True)
+            nodeA_idx = np.random.choice(len(roots[1:]), p=[1./len(roots[1:])]*len(roots[1:])) + 1
+            nodeA_parent_idx = np.where(np.array(nodes) == nodes[nodeA_idx].parent())[0][0]
+
+            # Move subtree to parent
+            self.tree.subtree_reattach_to(roots[nodeA_idx]['node'], subtreeA['super_parent'].label) # Use label to avoid bugs with references
+
+            # Set root of moved subtree as new pivot. TODO: Choose one node from the leaves instead
+            self.tree.pivot_reattach_to(roots[nodeA_idx]['node'].tssb.label, roots[nodeA_idx]['node'])
+
+            # And choose a leaf node of that subtree as the pivot of old subtree
+            # self.tree.reset_variational_parameters(variances_only=True)
+            # init_baseline = jnp.mean(self.tree.data, axis=0)
+            # init_log_baseline = jnp.log(init_baseline / init_baseline[0])[1:]
+            # self.tree.root['node'].root['node'].log_baseline_mean = init_log_baseline + np.random.normal(0, .5, size=self.tree.data.shape[1]-1)
+
+            if verbose:
+                print(f"Trying to set {roots[nodeA_idx]['node'].label} below {new_subtree['node'].label} and use it as pivot of {roots[nodeA_idx]['node'].tssb.label}")
+
             root_node = None
             if local:
                 root_node = roots[nodeA_idx]['node']
