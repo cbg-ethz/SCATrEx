@@ -723,21 +723,41 @@ class StructureSearch(object):
         nodes = self.tree.get_nodes()
 
         n_genes = nodes[0].observed_parameters.shape[0]
-        probs = np.array([1e-6+np.sum(np.exp(node.variational_parameters['locals']['unobserved_factors_kernel_log_mean']) > 0.2)/n_genes for node in nodes]) # the more complex the kernel, the more likely it is to clean it
+
+        frac_events = np.array([np.sum(np.exp(node.variational_parameters['locals']['unobserved_factors_kernel_log_mean']) > 0.2)/n_genes for node in nodes])
+
+        probs = 1e-6 + frac_events # the more complex the kernel, the more likely it is to clean it
         probs = probs / np.sum(probs)
 
         node = np.random.choice(nodes, p=probs)
 
-        if verbose:
-            print(f"Trying to clean {node.label}...")
+        # Get the number of nodes with too many events
+        frac_bad_nodes = np.sum(frac_events > 0.5) / len(nodes)
+        if frac_bad_nodes > 0.5:
+            # Reset all unobserved_factors
+            print(f"Trying to clean all nodes...")
+            for node in nodes:
+                node.variational_parameters['locals']['unobserved_factors_mean'] *= 0.
+                node.variational_parameters['locals']['unobserved_factors_log_std'] = -2*np.ones((n_genes,))
+                node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.log(node.unobserved_factors_kernel_concentration_caller())*np.ones((n_genes,))
+                node.variational_parameters['locals']['unobserved_factors_kernel_log_std'] = -2*np.ones((n_genes,))
 
-        node.variational_parameters['locals']['unobserved_factors_mean'] *= 0.1
-        node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.log(node.unobserved_factors_kernel_concentration_caller())*np.ones((n_genes,))
-        node.variational_parameters['locals']['unobserved_factors_kernel_log_std'] = -2*np.ones((n_genes,))
-        root_node = node
-        if not local:
-            root_node = None
-        self.tree.optimize_elbo(root_node=root_node, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback, **callback_kwargs)
+            root_node = nodes[0]
+            if not local:
+                root_node = None
+            self.tree.optimize_elbo(root_node=root_node, num_samples=num_samples, n_iters=n_iters*5, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback, **callback_kwargs)
+        else:
+            if verbose:
+                print(f"Trying to clean {node.label}...")
+
+            node.variational_parameters['locals']['unobserved_factors_mean'] *= 0.
+            node.variational_parameters['locals']['unobserved_factors_log_std'] = -2*np.ones((n_genes,))
+            node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.log(node.unobserved_factors_kernel_concentration_caller())*np.ones((n_genes,))
+            node.variational_parameters['locals']['unobserved_factors_kernel_log_std'] = -2*np.ones((n_genes,))
+            root_node = node
+            if not local:
+                root_node = None
+            self.tree.optimize_elbo(root_node=root_node, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback, **callback_kwargs)
 
         if verbose:
             print(f"{init_elbo} -> {self.tree.elbo}")
