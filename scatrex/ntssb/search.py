@@ -723,7 +723,7 @@ class StructureSearch(object):
         nodes = self.tree.get_nodes()
 
         n_genes = nodes[0].observed_parameters.shape[0]
-        probs = np.array([1e-6+np.sum(np.exp(node.variational_paramters['locals']['unobserved_factors_kernel_log_mean']) > 0.2)/n_genes for node in nodes]) # the more complex the kernel, the more likely it is to clean it
+        probs = np.array([1e-6+np.sum(np.exp(node.variational_parameters['locals']['unobserved_factors_kernel_log_mean']) > 0.2)/n_genes for node in nodes]) # the more complex the kernel, the more likely it is to clean it
         probs = probs / np.sum(probs)
 
         node = np.random.choice(nodes, p=probs)
