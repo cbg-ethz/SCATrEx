@@ -178,6 +178,8 @@ class StructureSearch(object):
                 init_root, init_elbo = self.push_subtree(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, debug=debug, mb_size=mb_size, max_nodes=max_nodes, opt=opt, callback=callback, **callback_kwargs)
             elif move_id == 'perturb_node':
                 init_root, init_elbo = self.perturb_node(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, debug=debug, mb_size=mb_size, max_nodes=max_nodes, opt=opt, callback=callback, **callback_kwargs)
+            elif move_id == 'clean_node':
+                init_root, init_elbo = self.clean_node(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, debug=debug, mb_size=mb_size, max_nodes=max_nodes, opt=opt, callback=callback, **callback_kwargs)
             elif move_id == 'reset_globals':
                 init_root = deepcopy(self.tree.root)
                 init_elbo = self.tree.elbo
@@ -703,6 +705,35 @@ class StructureSearch(object):
             print(f"Trying to move {node.label} close to {target.label}...")
 
         self.tree.perturb_node(node, target)
+        root_node = node
+        if not local:
+            root_node = None
+        self.tree.optimize_elbo(root_node=root_node, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback, **callback_kwargs)
+
+        if verbose:
+            print(f"{init_elbo} -> {self.tree.elbo}")
+
+        return init_root, init_elbo
+
+    def clean_node(self, local=False, num_samples=1, n_iters=100, thin=10, tol=1e-7, step_size=0.05, mb_size=100, max_nodes=5, verbose=True, debug=False, opt=None, callback=None, **callback_kwargs):
+        # Get node with bad kernel and clean it up
+        init_root = deepcopy(self.tree.root)
+        init_elbo = self.tree.elbo
+
+        nodes = self.tree.get_nodes()
+
+        n_genes = nodes[0].observed_parameters.shape[0]
+        probs = np.array([1e-6+np.sum(np.exp(node.variational_paramters['locals']['unobserved_factors_kernel_log_mean']) > 0.2)/n_genes for node in nodes]) # the more complex the kernel, the more likely it is to clean it
+        probs = probs / np.sum(probs)
+
+        node = np.random.choice(nodes, p=probs)
+
+        if verbose:
+            print(f"Trying to clean {node.label}...")
+
+        node.variational_paramters['locals']['unobserved_factors_mean'] *= 0.1
+        node.variational_paramters['locals']['unobserved_factors_kernel_log_mean'] = np.log(node.unobserved_factors_kernel_concentration_caller())*np.ones((n_genes,))
+        node.variational_paramters['locals']['unobserved_factors_kernel_log_std'] = -2*np.ones((n_genes,))
         root_node = node
         if not local:
             root_node = None
