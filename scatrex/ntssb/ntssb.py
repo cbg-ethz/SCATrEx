@@ -1492,6 +1492,8 @@ class NTSSB(object):
                             observed_node_tssb_root = observed_node_ntssb_root['node'].root
                             observed_node_tssb_root['children'].append(unobserved_node_tssb_root)
                             observed_node_tssb_root['sticks'] = np.vstack([observed_node_tssb_root['sticks'], 1.])
+                else: # random swap: change data and parameters
+                    swap_params(nodeA, nodeB)
         else: # e.g. A with A-0
             init_baseline = np.mean(self.data / np.sum(self.data, axis=1).reshape(-1,1) * self.data.shape[1], axis=0)
             init_baseline = init_baseline / init_baseline[0]
