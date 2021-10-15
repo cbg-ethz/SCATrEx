@@ -605,7 +605,7 @@ class StructureSearch(object):
             self.tree.subtree_reattach_to(roots[nodeA_idx]['node'], subtreeA['super_parent'].label) # Use label to avoid bugs with references
 
             # Set root of moved subtree as new pivot. TODO: Choose one node from the leaves instead
-            self.tree.pivot_reattach_to(roots[nodeA_idx]['node'].tssb, roots[nodeA_idx]['node'])
+            self.tree.pivot_reattach_to(subtreeA['node'], roots[nodeA_idx]['node'])
 
             # And choose a leaf node of that subtree as the pivot of old subtree
             # self.tree.reset_variational_parameters(variances_only=True)
