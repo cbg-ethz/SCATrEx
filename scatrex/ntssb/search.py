@@ -731,9 +731,9 @@ class StructureSearch(object):
         if verbose:
             print(f"Trying to clean {node.label}...")
 
-        node.variational_paramters['locals']['unobserved_factors_mean'] *= 0.1
-        node.variational_paramters['locals']['unobserved_factors_kernel_log_mean'] = np.log(node.unobserved_factors_kernel_concentration_caller())*np.ones((n_genes,))
-        node.variational_paramters['locals']['unobserved_factors_kernel_log_std'] = -2*np.ones((n_genes,))
+        node.variational_parameters['locals']['unobserved_factors_mean'] *= 0.1
+        node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.log(node.unobserved_factors_kernel_concentration_caller())*np.ones((n_genes,))
+        node.variational_parameters['locals']['unobserved_factors_kernel_log_std'] = -2*np.ones((n_genes,))
         root_node = node
         if not local:
             root_node = None
