@@ -1777,9 +1777,11 @@ class NTSSB(object):
         subtreeA = subtrees[np.where(np.array([s['node'].label for s in subtrees]) == nodes[nodeA_idx].tssb.label)[0][0]]
 
         # Check if there is a pivot here
+        pivot_changed = False
         for subtree_child in subtreeA['children']:
             for n in nodes_below_nodeA:
                 if subtree_child['pivot_node'] == n:
+                    pivot_changed = True
                     subtree_child['node'].root['node'].set_parent(subtreeA['node'].root['node'])
                     subtree_child['node'].root['node'].set_mean(variational=True)
                     subtree_child['pivot_node'] = subtreeA['node'].root['node']
@@ -1813,6 +1815,8 @@ class NTSSB(object):
         # baseline = jnp.append(1, jnp.exp(self.root['node'].root['node'].log_baseline_caller()))
         # total_rna = jnp.sum(baseline * roots[nodeA_idx]['node'].cnvs/2 * jnp.exp(roots[nodeA_idx]['node'].unobserved_factors_mean))
         # roots[nodeA_idx]['node'].unobserved_factors_mean = np.log(init_mean * total_rna / (baseline * roots[nodeA_idx]['node'].cnvs/2))
+
+        return pivot_changed
 
     def resample_pivots(self, verbose=False):
         """
