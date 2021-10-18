@@ -477,7 +477,7 @@ class StructureSearch(object):
             sims = [1./(np.mean(np.abs(nodeA.node_mean - node_label_dict[node_label].node_mean)) + 1e-8) for node_label in possible_nodes[nodeA_label]]
 
             # Choose nodeB proportionally to similarities
-            nodeB_label = np.random.choice(possible_nodesA, p=sims/np.sum(sims))
+            nodeB_label = np.random.choice(possible_nodes[nodeA_label], p=sims/np.sum(sims))
             nodeB = node_label_dict[nodeB_label]
 
             if verbose:
