@@ -1306,6 +1306,46 @@ class NTSSB(object):
         del root['children'][-1]['node']
         root['children'] = root['children'][:-2]
 
+    def prune_reattach(self, node, new_parent):
+        nodes = self._get_nodes(get_roots=True)
+        roots = [n[1] for n in nodes]
+        nodes = np.array([n[0] for n in nodes])
+        if isinstance(node, str) or isinstance(new_parent, str):
+            self.plot_tree(super_only=False);
+            node_labels = np.array([n.label for n in nodes])
+        if isinstance(node, str):
+            node_idx = np.where(node_labels == node)[0][0]
+            node = nodes[node_idx]
+        else:
+            node_idx = np.where(nodes == node)[0][0]
+        if isinstance(new_parent, str):
+            new_parent_idx = np.where(node_labels == new_parent)[0][0]
+            new_parent = nodes[new_parent_idx]
+        else:
+            new_parent_idx = np.where(nodes == new_parent)[0][0]
+
+        node_root = roots[node_idx]
+        new_parent_root = roots[new_parent_idx]
+        prev_parent_idx = np.where(np.array(nodes) == node.parent())[0][0]
+
+        # Move subtree
+        node.set_parent(new_parent)
+
+        # Update dict: copy dict into new parent
+        new_parent_root['children'].append(node_root)
+        new_parent_root['sticks'] = np.vstack([new_parent_root['sticks'] , 1.])
+
+        # Remove dict from previous parent
+        childnodes = np.array([n['node'] for n in roots[prev_parent_idx]['children']])
+        tokeep = np.where(childnodes != roots[node_idx]['node'])[0].astype(int).ravel()
+        roots[prev_parent_idx]['sticks']   = roots[prev_parent_idx]['sticks'][tokeep]
+        roots[prev_parent_idx]['children'] = list(np.array(roots[prev_parent_idx]['children'])[tokeep])
+
+        # Reset kernel variational parameters
+        n_genes = node.cnvs.size
+        node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.log(node.unobserved_factors_kernel_concentration_caller())*np.ones((n_genes,))
+        node.variational_parameters['locals']['unobserved_factors_kernel_log_std'] = -2.* np.ones((n_genes,))
+
     def pivot_reattach_to(self, subtree, pivot):
         nodes = self._get_nodes(get_roots=False)
         nodes = np.array(nodes)

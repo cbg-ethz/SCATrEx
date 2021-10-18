@@ -55,8 +55,8 @@ class StructureSearch(object):
         plt.show()
 
     def run_search(self, n_iters=1000, n_iters_elbo=1000, factor_delay=0, posterior_delay=0, global_delay=0, thin=10, local=True, num_samples=1, step_size=0.001, verbose=True, tol=1e-6, mb_size=100, max_nodes=5, debug=False, callback=None, alpha=0.01, Tmax=10, anneal=False, restart_step=10,
-                    moves=['add', 'merge', 'pivot_reattach', 'swap', 'subtree_reattach', 'push_subtree', 'perturb_node', 'perturb_globals'],
-                    move_weights=[1, 3, 1, 1, 1, 1, 1, 1], merge_n_tries=5, opt=adam, search_callback=None, add_rule='accept', add_rule_thres=.5, **callback_kwargs):
+                    moves=['add', 'merge', 'prune_reattach', 'pivot_reattach', 'swap', 'subtree_reattach', 'push_subtree', 'perturb_node', 'perturb_globals'],
+                    move_weights=[1, 3, 1, 1, 1, 1, 1, 1, 1], merge_n_tries=5, opt=adam, search_callback=None, add_rule='accept', add_rule_thres=.5, **callback_kwargs):
         print(f'Will search for the maximum marginal likelihood tree with the following moves: {moves}\n')
 
         self.init_optimizer(step_size=step_size, opt=opt)
@@ -166,6 +166,8 @@ class StructureSearch(object):
                 init_root, init_elbo = self.add_node(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, mb_size=mb_size, max_nodes=max_nodes, debug=debug, opt=opt, callback=callback, **callback_kwargs)
             elif move_id == 'merge':
                 init_root, init_elbo = self.merge_nodes(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, mb_size=mb_size, max_nodes=max_nodes, debug=debug, opt=opt, callback=callback, **callback_kwargs)
+            elif move_id == 'prune_reattach':
+                init_root, init_elbo = self.prune_reattach(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, mb_size=mb_size, max_nodes=max_nodes, debug=debug, opt=opt, callback=callback, **callback_kwargs)
             elif move_id == 'pivot_reattach':
                 init_root, init_elbo = self.pivot_reattach(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, mb_size=mb_size, max_nodes=max_nodes, debug=debug, opt=opt, callback=callback, **callback_kwargs)
             elif move_id == 'add_reattach_pivot':
@@ -373,7 +375,6 @@ class StructureSearch(object):
             # self.tree.merge_nodes(pair[0], pair[1])
             # self.tree.optimize_elbo(unique_node=None, root_node=pair[1], run=True, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback, **callback_kwargs)
 
-
         # Choose a subtree
         _, subtrees = self.tree.get_mixture()
 
@@ -411,6 +412,54 @@ class StructureSearch(object):
                 print(f"Trying to merge {nodeA.label} to {nodeB.label}...")
 
             self.tree.merge_nodes(nodeA, nodeB)
+            local_node = None
+            if local:
+                local_node = nodeB
+            self.tree.optimize_elbo(unique_node=None, root_node=local_node, run=True, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback, **callback_kwargs)
+            if verbose:
+                print(f"{init_elbo} -> {self.tree.elbo}")
+
+        return init_root, init_elbo
+
+    def prune_reattach(self, local=False, num_samples=1, n_iters=100, thin=10, tol=1e-7, step_size=0.05, mb_size=100, max_nodes=5, verbose=True, debug=False, opt=None, callback=None, **callback_kwargs):
+        init_root = deepcopy(self.tree.root)
+        init_elbo = self.tree.elbo
+
+        # Choose a subtree
+        _, subtrees = self.tree.get_mixture()
+
+        n_nodes = []
+        nodes = []
+        for subtree in subtrees:
+            nodes.append(subtree.get_mixture()[1])
+            n_nodes.append(len(nodes[-1]))
+        n_nodes = np.array(n_nodes)
+        # Only proceed if there is at least one subtree with pruneable nodes -- i.e., it needs to have at least 2 extra nodes
+        if np.any(n_nodes > 2):
+            probs = n_nodes - 1
+            probs = probs / np.sum(probs)
+
+            # Choose a subtree with more than 1 node
+            idx = np.random.choice(range(len(subtrees)), p=probs)
+            subtree = subtrees[idx]
+            nodes = nodes[idx]
+
+            # Uniformly choose a first node A (which can't be the root)
+            node_idx = np.random.choice(range(len(nodes[1:])), p=[1./len(nodes[1:])]*len(nodes[1:]))
+            nodeA = nodes[1:][node_idx]
+
+            # Get nodes not below node A: use labels
+            self.tree.plot_tree();
+            nodes = [n for n in nodes if nodeA.label not in n.label and n != nodeA.parent()]
+            sims = [1./(np.mean(np.abs(nodeA.node_mean - node.node_mean)) + 1e-8) for node in nodes]
+
+            # Choose nodeB proportionally to similarities
+            nodeB = np.random.choice(nodes, p=sims/np.sum(sims))
+
+            if verbose:
+                print(f"Trying to reattach {nodeA.label} to {nodeB.label}...")
+
+            self.tree.prune_reattach(nodeA, nodeB)
             local_node = None
             if local:
                 local_node = nodeB
@@ -784,8 +833,9 @@ class StructureSearch(object):
         node = np.random.choice(nodes, p=probs)
 
         # Get the number of nodes with too many events
-        frac_bad_nodes = np.sum(frac_events > 0.5) / len(nodes)
-        if frac_bad_nodes > 0.5:
+        n_bad_nodes = np.sum(frac_events > 1/3)
+        frac_bad_nodes = n_bad_nodes / len(nodes)
+        if frac_bad_nodes > 1/3 or n_bad_nodes > 3:
             # Reset all unobserved_factors
             print(f"Trying to clean all nodes...")
             for node in nodes:
