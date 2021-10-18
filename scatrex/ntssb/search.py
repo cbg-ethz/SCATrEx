@@ -451,7 +451,7 @@ class StructureSearch(object):
         n_nodes = np.array(n_nodes)
         # Only proceed if there is at least one subtree with pruneable nodes -- i.e., it needs to have at least 2 extra nodes
         if np.any(n_nodes > 2):
-            probs = n_nodes - 1
+            probs = n_nodes - 2
             probs = probs / np.sum(probs)
 
             # Choose a subtree with more than 1 node
