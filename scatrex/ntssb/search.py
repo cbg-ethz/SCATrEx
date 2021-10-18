@@ -73,7 +73,7 @@ class StructureSearch(object):
         move_weights = list(move_weights.values())
 
         print(f'Will search for the maximum marginal likelihood tree with the following moves: {moves}\n')
-        
+
         self.init_optimizer(step_size=step_size, opt=opt)
 
         self.tree.max_nodes = len(self.tree.input_tree_dict.keys()) * max_nodes # upper bound on number of nodes
@@ -459,20 +459,28 @@ class StructureSearch(object):
             subtree = subtrees[idx]
             nodes = nodes[idx]
 
-            # Uniformly choose a first node A (which can't be the root)
-            node_idx = np.random.choice(range(len(nodes[1:])), p=[1./len(nodes[1:])]*len(nodes[1:]))
-            nodeA = nodes[1:][node_idx]
+            # Get the nodes which can be reattached, use labels
+            self.tree.plot_tree();
+            possible_nodes = dict()
+            node_label_dict = dict()
+            for node in nodes:
+                possible_nodes[node.label] = [n.label for n in nodes if node.label not in n.label and n != node.parent()]
+                node_label_dict[node.label] = node
+
+            # Choose a first node
+            possible_nodesA = [node for node in possible_nodes if len(possible_nodes[node]) > 0]
+            nodeA_label = np.random.choice(possible_nodesA, p=[1./len(possible_nodesA)]*len(possible_nodesA))
+            nodeA = node_label_dict[nodeA_label]
 
             # Get nodes not below node A: use labels
-            self.tree.plot_tree();
-            nodes = [n for n in nodes if nodeA.label not in n.label and n != nodeA.parent()]
-            sims = [1./(np.mean(np.abs(nodeA.node_mean - node.node_mean)) + 1e-8) for node in nodes]
+            sims = [1./(np.mean(np.abs(nodeA.node_mean - node_label_dict[node_label].node_mean)) + 1e-8) for node_label in possible_nodes[nodeA_label]]
 
             # Choose nodeB proportionally to similarities
-            nodeB = np.random.choice(nodes, p=sims/np.sum(sims))
+            nodeB_label = np.random.choice(possible_nodesA, p=sims/np.sum(sims))
+            nodeB = node_label_dict[nodeB_label]
 
             if verbose:
-                print(f"Trying to reattach {nodeA.label} to {nodeB.label}...")
+                print(f"Trying to reattach {nodeA_label} to {nodeB_label}...")
 
             self.tree.prune_reattach(nodeA, nodeB)
             local_node = None
