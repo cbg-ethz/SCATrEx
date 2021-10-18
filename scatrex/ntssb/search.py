@@ -640,13 +640,13 @@ class StructureSearch(object):
                 print(f"Trying to set {roots[nodeA_idx]['node'].label} below {new_subtree['node'].label}")
 
             # Move subtree
-            self.tree.subtree_reattach_to(roots[nodeA_idx]['node'], new_subtree['node'])
+            pivot_changed = self.tree.subtree_reattach_to(roots[nodeA_idx]['node'], new_subtree['node'])
             # self.tree.reset_variational_parameters(variances_only=True)
             # init_baseline = jnp.mean(self.tree.data, axis=0)
             # init_log_baseline = jnp.log(init_baseline / init_baseline[0])[1:]
             # self.tree.root['node'].root['node'].log_baseline_mean = init_log_baseline + np.random.normal(0, .5, size=self.tree.data.shape[1]-1)
             root_node = None
-            if local:
+            if local and not pivot_changed:
                 root_node = roots[nodeA_idx]['node']
             self.tree.optimize_elbo(root_node=root_node, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback, **callback_kwargs)
 
