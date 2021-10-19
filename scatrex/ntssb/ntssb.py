@@ -1807,9 +1807,9 @@ class NTSSB(object):
 
         # Reset variational parameters: all log_std and unobserved factors kernel
         n_genes = target_subtree['node'].root['node'].cnvs.size
-        roots[nodeA_idx]['node'].variational_parameters['locals']['unobserved_factors_mean'] = target_subtree['node'].root['node'].variational_parameters['locals']['unobserved_factors_mean']
+        # roots[nodeA_idx]['node'].variational_parameters['locals']['unobserved_factors_mean'] = np.array(target_subtree['node'].root['node'].variational_parameters['locals']['unobserved_factors_mean'])
         roots[nodeA_idx]['node'].variational_parameters['locals']['unobserved_factors_log_std'] = -1.*np.ones((n_genes,))
-        roots[nodeA_idx]['node'].variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.log(roots[nodeA_idx]['node'].unobserved_factors_kernel_concentration_caller())*np.ones((n_genes,))
+        # roots[nodeA_idx]['node'].variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.log(roots[nodeA_idx]['node'].unobserved_factors_kernel_concentration_caller())*np.ones((n_genes,))
         roots[nodeA_idx]['node'].variational_parameters['locals']['unobserved_factors_kernel_log_std'] = -1*np.ones((n_genes,))
 
         # Set new unobserved factors to explain the same data as before (i.e. keep mean equal)
