@@ -220,7 +220,7 @@ class Node(AbstractNode):
                 self.unobserved_factors = normal_sample(parent.unobserved_factors, self.unobserved_factors_kernel)
                 self.unobserved_factors = np.clip(self.unobserved_factors, -MAX_XI, MAX_XI)
                 if not self.is_observed:
-                    self.unobserved_factors[np.argmax(self.unobserved_factors)] = np.max([MAX_XI, np.max(self.unobserved_factors)]) # just force an amplification
+                    self.unobserved_factors[np.argmax(self.unobserved_factors_kernel)] = MAX_XI # just force an amplification
 
             # Observation mean
             self.set_mean()
