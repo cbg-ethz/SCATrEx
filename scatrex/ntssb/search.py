@@ -486,7 +486,7 @@ class StructureSearch(object):
             self.tree.prune_reattach(nodeA, nodeB)
             local_node = None
             if local:
-                local_node = nodeB
+                local_node = nodeA
             self.tree.optimize_elbo(unique_node=None, root_node=local_node, run=True, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback, **callback_kwargs)
             if verbose:
                 print(f"{init_elbo} -> {self.tree.elbo}")
