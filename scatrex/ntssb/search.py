@@ -211,7 +211,7 @@ class StructureSearch(object):
                 self.tree.root['node'].root['node'].variational_parameters['locals']['unobserved_factors_mean'] *= 0. # reset to initial
                 self.tree.root['node'].root['node'].variational_parameters['locals']['unobserved_factors_log_std'] *= 0. # reset to initial
                 # self.tree.root['node'].root['node'].variational_parameters['globals']['log_baseline_log_std'] *= 0. # allow more variation
-                self.tree.optimize_elbo(root_node=None, global_only=False, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=None, **callback_kwargs)
+                self.tree.optimize_elbo(root_node=None, global_only=False, num_samples=num_samples, n_iters=n_iters_elbo*10, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, callback=None, **callback_kwargs)
             elif move_id == 'globals':
                 init_root = deepcopy(self.tree.root)
                 init_elbo = self.tree.elbo
