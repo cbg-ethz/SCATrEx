@@ -51,7 +51,7 @@ for i in range(n_tries):
                     'full':.0,
                     'globals':1}
 
-    search_kwargs = {'n_iters': n_iters, 'n_iters_elbo': 500,
+    search_kwargs = {'n_iters': n_iters, 'n_iters_elbo': 1,
                     'move_weights': move_weights,
                     'local': True,
                     'factor_delay': 0,
@@ -67,7 +67,7 @@ for i in range(n_tries):
     sca_list.append(sca)
 
 best_sca = sca_list[np.argmax([sca.ntssb.elbo for sca in sca_list])]
-est_labels = np.array(best_sca.adata.obs['node'])
+est_labels = np.array(best_sca.adata.obs['scatrex_node'])
 
 np.savetxt(output_file, est_labels, delimiter=',', fmt="%s")
 

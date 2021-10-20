@@ -25,13 +25,13 @@ for i in range(n_tries):
     sca.set_observed_tree(simulated_observed_tree)
 
     # Run clonealign
-    sca.learn_clonemap(n_iters=1000)
+    sca.learn_clonemap(n_iters=1000, filter_genes=True, step_size=0.01)
 
     sca_list.append(sca)
 
 best_sca = sca_list[np.argmax([sca.ntssb.elbo for sca in sca_list])]
 
 best_sca.ntssb.plot_tree()
-est_labels = np.array(best_sca.adata.obs['node'])
+est_labels = np.array(best_sca.adata.obs['obs_node'])
 
 np.savetxt(output_file, est_labels, delimiter=',', fmt="%s")
