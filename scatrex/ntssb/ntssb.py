@@ -1401,10 +1401,8 @@ class NTSSB(object):
 
         # Add node below parent
         new_node = self.add_node_to(parent_node)
-        self.pivot_reattach_to(node.tssb, new_node)
-        paramsB = node.variational_parameters['locals']['unobserved_factors_mean']
-        paramsB_k = node.variational_parameters['locals']['unobserved_factors_kernel_log_mean']
-        node.set_mean(variational=True)
+        paramsB = np.array(node.variational_parameters['locals']['unobserved_factors_mean'])
+        paramsB_k = np.array(node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'])
 
         # Set new node's parameters equal to the previous parameters of node
         new_node.variational_parameters['locals']['unobserved_factors_mean'] = np.array(paramsB)
@@ -1414,6 +1412,15 @@ class NTSSB(object):
         # Make room for the child
         new_node.parent().variational_parameters['locals']['nu_log_mean'] = np.array(0.)
         new_node.parent().variational_parameters['locals']['nu_log_std'] = np.array(0.)
+
+        # Update pivot
+        self.pivot_reattach_to(node.tssb, new_node)
+        node.set_mean(variational=True)
+
+        # Open up subtree root's parameters
+        n_genes = node.cnvs.size
+        node.variational_parameters['locals']['unobserved_factors_log_std'] = -1 * np.ones((n_genes,))
+        node.variational_parameters['locals']['unobserved_factors_kernel_log_std'] = -1 * np.ones((n_genes,))
 
         return new_node
 
