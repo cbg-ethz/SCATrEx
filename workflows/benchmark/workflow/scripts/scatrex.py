@@ -26,8 +26,34 @@ for i in range(n_tries):
     sca.set_observed_tree(simulated_observed_tree)
 
     # Learn SCATrEx tree
-    search_kwargs = {'n_iters': 500, 'n_iters_elbo': 2000,
-                    'local': True, 'mb_size': adata.shape[0]}
+    move_weights = {'add':3,
+                    'merge':6,
+                    'prune_reattach':1,
+                    'pivot_reattach':1,
+                    'swap':1,
+                    'add_reattach_pivot':.5,
+                    'subtree_reattach':1,
+                    'push_subtree':.5,
+                    'extract_pivot':.5,
+                    'perturb_node':.5,
+                    'clean_node':.5,
+                    'subtree_pivot_reattach':.5,
+                    'reset_globals':.0,
+                    'full':.0,
+                    'globals':1}
+
+    search_kwargs = {'n_iters': 500, 'n_iters_elbo': 500,
+                    'move_weights': move_weights,
+                    'local': True,
+                    'factor_delay': 0,
+                    'step_size': 0.01,
+                    'posterior_delay': 0,
+                    'mb_size': 200,
+                    'num_samples': 1,
+                    'window': 50,
+                    'max_nodes': 5,
+                    'add_rule_thres': .4,
+                    'joint_init': False}
     sca.learn_tree(reset=True, search_kwargs=search_kwargs)
     sca_list.append(sca)
 
