@@ -31,7 +31,7 @@ class ObservedTree(Tree):
         self.cmap = get_cnv_cmap()
         self.sign_colors = {'-': 'blue', '+': 'red'}
 
-    def add_node_params(self, n_genes=50, n_regions=5, min_cn=0):
+    def add_node_params(self, n_genes=50, n_regions=5, min_nevents=1, max_nevents_frac=.67, min_cn=0):
         C = len(self.tree_dict.keys())
         n_regions = np.max([n_regions, 3])
         # Define regions
@@ -50,7 +50,7 @@ class ObservedTree(Tree):
                 self.tree_dict[node]['params_label'] = ''
 
                 # Sample number of regions to be affected
-                n_r = np.random.choice(np.arange(1, np.max([int(2/3 * n_regions), 2])))
+                n_r = np.random.choice(np.arange(min_nevents, np.max([int(max_nevents_frac * n_regions), 2])))
 
                 # Sample regions to be affected
                 affected_regions = np.random.choice(np.arange(0, n_regions), size=n_r, replace=False)
