@@ -5,6 +5,13 @@ n_genes: 800
 n_cells: 1000
 n_reps: 10
 n_tries: 3
+n_iters: 500
+n_regions: 10
+max_nevents_frac: .67
+min_nevents_frac: 4
+frac_dosage: .8
+log_lib_size_mean: 7.1
+log_lib_size_std: .6
 methods:
  - correlation
  - clonealign

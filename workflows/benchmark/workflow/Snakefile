@@ -10,7 +10,14 @@ N_CLONES = config["n_clones"]
 N_GENES = config["n_genes"]
 N_CELLS = config["n_cells"]
 N_REPS = config["n_reps"]
+N_ITERS = config["n_iters"]
 N_TRIES = config["n_tries"]
+N_REGIONS = config["n_regions"]
+MIN_NEVENTS = config["min_nevents"]
+MAX_NEVENTS_FRAC = config["max_nevents_frac"]
+FRAC_DOSAGE = config["frac_dosage"]
+LOG_LIB_SIZE_MEAN = config["log_lib_size_mean"]
+LOG_LIB_SIZE_STD = config["log_lib_size_std"]
 
 METHOD_LIST = config["methods"]
 
@@ -27,7 +34,13 @@ rule generate_data:
         n_genes = N_GENES,
         n_cells = N_CELLS,
         n_extras = "{n_extras}",
-        n_factors = "{n_factors}"
+        n_factors = "{n_factors}",
+        n_regions = N_REGIONS,
+        min_nevents = MIN_NEVENTS,
+        max_nevents_frac = MAX_NEVENTS_FRAC,
+        frac_dosage = FRAC_DOSAGE,
+        log_lib_size_mean = LOG_LIB_SIZE_MEAN,
+        log_lib_size_std = LOG_LIB_SIZE_STD,
     output:
         simulated_data = f'{DATA_PATH}/' + 'e{n_extras}_f{n_factors}/r{rep_id}_data.csv',
         simulated_labels = f'{DATA_PATH}/' + 'e{n_extras}_f{n_factors}/r{rep_id}_labels.csv',
@@ -39,6 +52,7 @@ rule generate_data:
 
 rule run_method:
     params:
+        n_iters = N_ITERS,
         n_tries = N_TRIES
     input:
         simulated_data = f'{DATA_PATH}/' + 'e{n_extras}_f{n_factors}/r{rep_id}_data.csv',
