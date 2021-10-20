@@ -216,6 +216,7 @@ class SCATrEx(object):
 
         xi_mat = np.zeros(self.adata.shape)
         om_mat = np.zeros(self.adata.shape)
+        mean_mat = np.zeros(self.adata.shape)
         nodes = np.array(self.ntssb.get_nodes())
         nodes_labels = np.array([node.label for node in nodes])
         for node_id in np.unique(self.adata.obs['scatrex_node'][cell_idx]):
@@ -224,8 +225,10 @@ class SCATrEx(object):
             pos = np.meshgrid(cells,retained_genes_pos)
             xi_mat[tuple(pos)] = np.array(node.variational_parameters['locals']['unobserved_factors_mean']).reshape(-1,1) * np.ones((len(cells), len(retained_genes_pos))).T
             om_mat[tuple(pos)] = np.array(np.exp(node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'])).reshape(-1,1) * np.ones((len(cells), len(retained_genes_pos))).T
+            mean_mat[tuple(pos)] = np.array(node.get_mean(norm=False)).reshape(-1,1) * np.ones((len(cells), len(retained_genes_pos))).T
         self.adata.layers['scatrex_xi'] = xi_mat
         self.adata.layers['scatrex_om'] = om_mat
+        self.adata.layers['scatrex_mean'] = mean_mat
 
         self.ntssb.initialize_gene_node_colormaps()
 
