@@ -51,7 +51,7 @@ for i in range(n_tries):
                     'full':.0,
                     'globals':1}
 
-    search_kwargs = {'n_iters': n_iters, 'n_iters_elbo': 1,
+    search_kwargs = {'n_iters': n_iters, 'n_iters_elbo': 500,
                     'move_weights': move_weights,
                     'local': True,
                     'factor_delay': 0,

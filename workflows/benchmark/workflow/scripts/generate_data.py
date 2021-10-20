@@ -33,11 +33,16 @@ sim_sca = scatrex.SCATrEx(model=models.cna, verbose=True, model_args=dict(log_li
                                                                           global_noise_factors_precisions_shape=10.,
                                                                           unobserved_factors_kernel_concentration=1./theta,
                                                                           frac_dosage=frac_dosage))
-observed_tree_args = dict(n_nodes=n_clones, node_weights=[1, 1, 1, 1])
+observed_tree_args = dict(n_nodes=n_clones, node_weights=[1]*n_clones)
 observed_tree_params = dict(n_regions=n_regions, min_cn=1, min_nevents=min_nevents, max_nevents_frac=max_nevents_frac)
 sim_sca.simulate_tree(observed_tree=None, n_extra_per_observed=n_extras, n_genes=n_genes, seed=seed,
                         observed_tree_params=observed_tree_params, observed_tree_args=observed_tree_args)
 sim_sca.observed_tree.create_adata()
+
+clip = 3.5
+for node in sim_sca.ntssb.get_nodes():
+    node.unobserved_factors[node.unobserved_factors >= clip] = clip
+
 data, labels = sim_sca.simulate_data(n_cells=n_cells, copy=True, seed=seed)
 sim_sca.plot_tree(counts=True)
 
