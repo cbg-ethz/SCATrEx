@@ -198,6 +198,8 @@ class StructureSearch(object):
                 init_root, init_elbo = self.subtree_pivot_reattach(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, debug=debug, mb_size=mb_size, max_nodes=max_nodes, opt=opt, callback=callback, **callback_kwargs)
             elif move_id == 'push_subtree' and self.tree.n_nodes < self.tree.max_nodes-1:
                 init_root, init_elbo = self.push_subtree(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, debug=debug, mb_size=mb_size, max_nodes=max_nodes, opt=opt, callback=callback, **callback_kwargs)
+            elif move_id == 'extract_pivot' and self.tree.n_nodes < self.tree.max_nodes-1:
+                init_root, init_elbo = self.extract_pivot(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, debug=debug, mb_size=mb_size, max_nodes=max_nodes, opt=opt, callback=callback, **callback_kwargs)
             elif move_id == 'perturb_node':
                 init_root, init_elbo = self.perturb_node(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, verbose=verbose, tol=tol, debug=debug, mb_size=mb_size, max_nodes=max_nodes, opt=opt, callback=callback, **callback_kwargs)
             elif move_id == 'clean_node':
@@ -611,6 +613,28 @@ class StructureSearch(object):
 
         return init_root, init_elbo
 
+    def extract_pivot(self, local=False, num_samples=1, n_iters=100, thin=10, tol=1e-7, step_size=0.05, mb_size=100, max_nodes=5, verbose=True, debug=False, opt=None, callback=None, **callback_kwargs):
+        init_root = deepcopy(self.tree.root)
+        init_elbo = self.tree.elbo
+
+        # Uniformly pick a subtree
+        subtrees = self.tree.get_mixture()[1][1:] # without the root
+        subtree = np.random.choice(subtrees, p=[1./len(subtrees)]*len(subtrees))
+
+        # Push subtree down
+        new_node = self.tree.extract_pivot(subtree.root['node'])
+
+        if verbose:
+            print(f"Trying to extract pivot from {subtree.label}")
+
+        root_node = None
+        if local:
+            root_node = new_node
+        self.tree.optimize_elbo(root_node=root_node, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback, **callback_kwargs)
+        if verbose:
+            print(f"{init_elbo} -> {self.tree.elbo}")
+
+        return init_root, init_elbo
 
     def subtree_reattach(self, local=False, num_samples=1, n_iters=100, thin=10, tol=1e-7, step_size=0.05, mb_size=100, max_nodes=5, verbose=True, debug=False, opt=None, callback=None, **callback_kwargs):
         """

@@ -1380,6 +1380,39 @@ class NTSSB(object):
         # self.update_ass_logits(variational=True)
         # self.assign_to_best()
 
+    def extract_pivot(self, node):
+        """
+        extract_pivot(B):
+        A-0 -> B -> B-0 to A-0 -> A-0-0 -> B -> B-0
+        Put unobserved factors of B also in A-0-0
+        """
+        if isinstance(node, str):
+            self.plot_tree(super_only=False);
+            nodes = self.get_nodes(None)
+            node_labels = np.array([node.label for node in nodes])
+            node = nodes[np.where(node_labels == node)[0][0]]
+
+        if node.parent() is None:
+            raise ValueError("Can't pull from root tree")
+        if not node.is_observed:
+            raise ValueError("Can't pull unobserved node")
+
+        parent_node = node.parent()
+
+        # Add node below parent
+        new_node = self.add_node_to(parent_node)
+        self.pivot_reattach_to(node.tssb, new_node)
+        paramsB = node.variational_parameters['locals']['unobserved_factors_mean']
+        paramsB_k = node.variational_parameters['locals']['unobserved_factors_kernel_log_mean']
+        node.set_mean(variational=True)
+
+        # Set new node's parameters equal to the previous parameters of node
+        new_node.variational_parameters['locals']['unobserved_factors_mean'] = np.array(paramsB)
+        new_node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.array(paramsB_k)
+        new_node.set_mean(variational=True)
+
+        return new_node
+
     def push_subtree(self, node):
         """
         push_subtree(B):
