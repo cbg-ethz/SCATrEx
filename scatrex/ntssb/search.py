@@ -64,7 +64,7 @@ class StructureSearch(object):
                     ax_list[i].plot([it_max_score, it_max_score], [ax_list[i].get_ylim()[0], self.traces[k][it_max_score]], ls='--', color='black')
         plt.show()
 
-    def run_search(self, n_iters=1000, n_iters_elbo=1000, factor_delay=0, posterior_delay=0, global_delay=0, thin=10, local=True, num_samples=1, step_size=0.001, verbose=True, tol=1e-6, mb_size=100, max_nodes=5, debug=False, callback=None, alpha=0.01, Tmax=10, anneal=False, restart_step=10,
+    def run_search(self, n_iters=1000, n_iters_elbo=1000, factor_delay=0, posterior_delay=0, global_delay=0, joint_init=True, thin=10, local=True, num_samples=1, step_size=0.001, verbose=True, tol=1e-6, mb_size=100, max_nodes=5, debug=False, callback=None, alpha=0.01, Tmax=10, anneal=False, restart_step=10,
                     move_weights=None, merge_n_tries=5, opt=adam, search_callback=None, add_rule='accept', add_rule_thres=.5, **callback_kwargs):
 
         if move_weights is None:
@@ -108,8 +108,11 @@ class StructureSearch(object):
             self.tree.root['node'].root['node'].variational_parameters['globals']['log_baseline_mean'] = init_log_baseline
             self.tree.optimize_elbo(root_node=None, sticks_only=True, num_samples=num_samples, n_iters=n_iters_elbo*10, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback)
 
-            # full update
-            self.tree.optimize_elbo(root_node=None, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback)
+            # full update -- maybe without globals?
+            root_node_init = self.tree.root['node'].root['node']
+            if joint_init:
+                root_node_init = None
+            self.tree.optimize_elbo(root_node=root_node_init, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback)
             self.tree.plot_tree(super_only=False)
             self.tree.update_ass_logits(variational=True)
             self.tree.assign_to_best()
