@@ -15,10 +15,12 @@ adata = sc.read_csv(simulated_data)
 clones_adata = sc.read_csv(simulated_clones)
 clones_adata.obs['node'] = np.loadtxt(simulated_clones_labels, delimiter=',', dtype='str')
 
+args = dict(global_noise_factors_precisions_shape=2, num_global_noise_factors=6)
+
 sca_list = []
 for i in range(n_tries):
     # Create a new object for the inference
-    sca = scatrex.SCATrEx(model=models.cna, verbose=True)
+    sca = scatrex.SCATrEx(model=models.cna, verbose=True, model_args=args)
     sca.add_data(adata)
     sca.set_observed_tree(simulated_observed_tree)
 

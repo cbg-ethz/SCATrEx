@@ -4,6 +4,8 @@ Vary the number of genes between 200 and 800 and fix the number of cells at 500.
 """
 import os
 
+configfile: "config/config.yaml"
+
 N_EXTRAS = [0, 1, 2]
 N_FACTORS = [0, 2, 6]
 N_CLONES = config["n_clones"]
