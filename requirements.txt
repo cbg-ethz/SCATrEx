@@ -1,4 +1,4 @@
-jax
+jax[cpu]==0.2.20
 scipy
 tqdm
 scikit-learn
