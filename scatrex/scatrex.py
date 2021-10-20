@@ -34,7 +34,7 @@ class SCATrEx(object):
         self.adata = None
         self.temppath = temppath
         if not os.path.exists(temppath):
-            os.makedirs(temppath)
+            os.makedirs(temppath, exist_ok=True)
 
     def add_data(self, data):
         """
