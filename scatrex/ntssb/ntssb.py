@@ -1411,6 +1411,10 @@ class NTSSB(object):
         new_node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.array(paramsB_k)
         new_node.set_mean(variational=True)
 
+        # Make room for the child
+        new_node.parent().variational_parameters['locals']['nu_log_mean'] = np.array(0.)
+        new_node.parent().variational_parameters['locals']['nu_log_std'] = np.array(0.)
+
         return new_node
 
     def push_subtree(self, node):
