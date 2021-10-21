@@ -21,8 +21,7 @@ FRAC_DOSAGE = config["frac_dosage"]
 LOG_LIB_SIZE_MEAN = config["log_lib_size_mean"]
 LOG_LIB_SIZE_STD = config["log_lib_size_std"]
 
-BASELINE_METHOD_LIST = config["baseline_methods"]
-METHOD_LIST = BASELINE_METHOD_LIST + ['scatrex']
+METHOD_LIST = config["methods"]
 
 DATA_PATH = f'results/data/c{N_CLONES}_g{N_GENES}_n{N_CELLS}'
 
@@ -53,8 +52,9 @@ rule generate_data:
     script:
         "scripts/generate_data.py"
 
-rule run_baseline_methods:
+rule run_method:
     params:
+        n_iters = N_ITERS,
         n_tries = N_TRIES
     input:
         simulated_data = f'{DATA_PATH}/' + 'e{n_extras}_f{n_factors}/r{rep_id}_data.csv',
@@ -65,20 +65,6 @@ rule run_baseline_methods:
         fname = 'results/methods/{method}/' + f'c{N_CLONES}_g{N_GENES}_n{N_CELLS}/' + 'e{n_extras}_f{n_factors}/r{rep_id}_labels.csv'
     script:
         "scripts/{wildcards.method}.py"
-
-rule run_scatrex:
-    params:
-        n_iters = N_ITERS,
-        n_tries = N_TRIES
-    input:
-        simulated_data = f'{DATA_PATH}/' + 'e{n_extras}_f{n_factors}/r{rep_id}_data.csv',
-        simulated_clones = f'{DATA_PATH}/' + 'e{n_extras}_f{n_factors}/r{rep_id}_clones.csv',
-        simulated_clones_labels = f'{DATA_PATH}/' + 'e{n_extras}_f{n_factors}/r{rep_id}_obsnodes.csv',
-        simulated_observed_tree = f'{DATA_PATH}/' + 'e{n_extras}_f{n_factors}/r{rep_id}_obstree.pickle',
-    output:
-        fname = 'results/methods/scatrex/' + f'c{N_CLONES}_g{N_GENES}_n{N_CELLS}/' + 'e{n_extras}_f{n_factors}/r{rep_id}_labels.csv'
-    script:
-        "scripts/scatrex.py"
 
 rule compute_scores:
     input:
