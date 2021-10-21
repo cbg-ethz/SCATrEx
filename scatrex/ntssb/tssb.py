@@ -1238,7 +1238,7 @@ class TSSB(object):
         else:
             style = 'filled'
             fillcolor = self.color
-        g.node(str(self.root['label']), '<' + str(root_label) + '>', fillcolor=fillcolor, style=style)
+        g.node(str(self.root['label']), '<' + str(root_label)).replace('-','') + '>', fillcolor=fillcolor, style=style)
 
         def descend(root, g):
             name = root['label']
@@ -1269,7 +1269,7 @@ class TSSB(object):
                 if node_color_dict is not None:
                     fillcolor = node_color_dict[str(child_name)]
                     style = 'filled'
-                g.node(str(child_name), '<' + str(child_label) + '>', fillcolor=fillcolor, style=style)
+                g.node(str(child_name), '<' + str(child_label).replace('-','') + '>', fillcolor=fillcolor, style=style)
 
                 edge_color = 'black'
 
