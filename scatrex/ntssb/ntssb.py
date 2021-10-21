@@ -2169,16 +2169,27 @@ class NTSSB(object):
             obs.append(subtree.root['node'].cnvs)
         return subtrees, obs
 
-    def initialize_gene_node_colormaps(self, node_obs=None, node_avg_exp=None):
+    def initialize_gene_node_colormaps(self, node_obs=None, node_avg_exp=None, gene_specific=True):
         nodes, vals = self.get_node_unobs()
         vals = np.array(vals)
-        global_min, global_max = np.nanmin(vals), np.nanmax(vals)
         cmap = self.exp_cmap
-        norm = matplotlib.colors.Normalize(vmin=global_min, vmax=global_max)
-        mapper = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap)
-        self.gene_node_colormaps['unobserved'] = dict()
-        self.gene_node_colormaps['unobserved']['vals'] = dict(zip([node.label for node in nodes], vals))
-        self.gene_node_colormaps['unobserved']['mapper'] = mapper
+        if gene_specific:
+            mappers = []
+            for gene in range(vals[0].shape[0]):
+                gene_min, gene_max = np.nanmin(vals[:,gene]), np.nanmax(vals[:,gene])
+                norm = matplotlib.colors.Normalize(vmin=gene_min, vmax=gene_max)
+                mappers.append(matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap))
+            self.gene_node_colormaps['unobserved'] = dict()
+            self.gene_node_colormaps['unobserved']['vals'] = dict(zip([node.label for node in nodes], vals))
+            self.gene_node_colormaps['unobserved']['mapper'] = mappers
+        else:
+            global_min, global_max = np.nanmin(vals), np.nanmax(vals)
+            cmap = self.exp_cmap
+            norm = matplotlib.colors.Normalize(vmin=global_min, vmax=global_max)
+            mapper = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap)
+            self.gene_node_colormaps['unobserved'] = dict()
+            self.gene_node_colormaps['unobserved']['vals'] = dict(zip([node.label for node in nodes], vals))
+            self.gene_node_colormaps['unobserved']['mapper'] = mapper
 
         if node_obs:
             nodes_labels = list(node_obs.keys())
@@ -2200,13 +2211,23 @@ class NTSSB(object):
             nodes, vals = self.get_avg_node_exp()
             nodes_labels = [node.label for node in nodes]
         vals = np.array(vals)
-        global_min, global_max = np.nanmin(vals), np.nanmax(vals)
-        cmap = self.exp_cmap
-        norm = matplotlib.colors.Normalize(vmin=global_min, vmax=global_max)
-        mapper = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap)
-        self.gene_node_colormaps['avg'] = dict()
-        self.gene_node_colormaps['avg']['vals'] = dict(zip(nodes_labels, vals))
-        self.gene_node_colormaps['avg']['mapper'] = mapper
+        if gene_specific:
+            mappers = []
+            for gene in range(vals[0].shape[0]):
+                gene_min, gene_max = np.nanmin(vals[:,gene]), np.nanmax(vals[:,gene])
+                norm = matplotlib.colors.Normalize(vmin=gene_min, vmax=gene_max)
+                mappers.append(matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap))
+            self.gene_node_colormaps['avg'] = dict()
+            self.gene_node_colormaps['avg']['vals'] = dict(zip(nodes_labels, vals))
+            self.gene_node_colormaps['avg']['mapper'] = mappers
+        else:
+            global_min, global_max = np.nanmin(vals), np.nanmax(vals)
+            cmap = self.exp_cmap
+            norm = matplotlib.colors.Normalize(vmin=global_min, vmax=global_max)
+            mapper = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap)
+            self.gene_node_colormaps['avg'] = dict()
+            self.gene_node_colormaps['avg']['vals'] = dict(zip(nodes_labels, vals))
+            self.gene_node_colormaps['avg']['mapper'] = mapper
 
         print(f'Created `self.gene_node_colormaps` with keys {list(self.gene_node_colormaps.keys())}')
 
@@ -2220,6 +2241,8 @@ class NTSSB(object):
 
                 vals = self.gene_node_colormaps[genemode]['vals']
                 mapper = self.gene_node_colormaps[genemode]['mapper']
+                if isinstance(mapper, list):
+                    mapper = mapper[gene]
                 node_color_dict = dict()
                 for name in vals:
                     color = matplotlib.colors.to_hex(mapper.to_rgba(vals[name][gene])) if not np.isnan(vals[name][gene]) else 'gray'
