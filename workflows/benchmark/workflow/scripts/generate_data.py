@@ -62,5 +62,6 @@ np.savetxt(simulated_clones, sim_sca.observed_tree.adata.X, delimiter=',')
 np.savetxt(simulated_clones_labels, np.array(sim_sca.observed_tree.adata.obs['node']), delimiter=',', fmt="%s")
 
 import pickle
+sim_sca.observed_tree.adata = None # Pickling sliced AnnData would break it
 with open(simulated_observed_tree, 'wb') as f:
     pickle.dump(sim_sca.observed_tree, f)
