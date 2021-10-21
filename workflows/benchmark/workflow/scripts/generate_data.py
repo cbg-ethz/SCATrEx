@@ -19,6 +19,7 @@ simulated_observed_tree = snakemake.output['simulated_observed_tree']
 
 import scatrex
 from scatrex import models
+import numpy as np
 
 # model_args = dict(log_lib_size_mean=10, num_global_noise_factors=n_factors, global_noise_factors_precisions_shape=10)
 # sim_sca = scatrex.SCATrEx(model=models.cna, verbose=True, model_args=model_args)
@@ -55,7 +56,6 @@ for node in simulated_observed_tree.tree_dict:
     simulated_observed_tree.tree_dict[node]['params'] = simulated_observed_tree.tree_dict[node]['params'][to_keep]
 simulated_observed_tree.adata = simulated_observed_tree.adata[:, to_keep]
 
-import numpy as np
 np.savetxt(simulated_data, data, delimiter=',')
 np.savetxt(simulated_labels, labels, delimiter=',', fmt="%s")
 np.savetxt(simulated_clones, sim_sca.observed_tree.adata.X, delimiter=',')
