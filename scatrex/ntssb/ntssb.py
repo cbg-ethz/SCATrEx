@@ -2211,6 +2211,7 @@ class NTSSB(object):
             nodes, vals = self.get_avg_node_exp()
             nodes_labels = [node.label for node in nodes]
         vals = np.array(vals)
+        cmap = self.exp_cmap
         if gene_specific:
             mappers = []
             for gene in range(vals[0].shape[0]):
@@ -2222,7 +2223,6 @@ class NTSSB(object):
             self.gene_node_colormaps['avg']['mapper'] = mappers
         else:
             global_min, global_max = np.nanmin(vals), np.nanmax(vals)
-            cmap = self.exp_cmap
             norm = matplotlib.colors.Normalize(vmin=global_min, vmax=global_max)
             mapper = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap)
             self.gene_node_colormaps['avg'] = dict()
