@@ -1,4 +1,4 @@
-from sklearn.metrics import accuracy_score, v_measure_score
+from sklearn.metrics import accuracy_score, v_measure_score, adjusted_rand_score
 import numpy as np
 
 simulated_labels = snakemake.input['simulated_labels']
@@ -12,10 +12,10 @@ true_clones = np.array([n[0] for n in true_nodes])
 estimated_clones = np.array([n[0] for n in estimated_nodes])
 
 node_accuracy = accuracy_score(estimated_nodes, true_nodes)
-node_ari = v_measure_score(estimated_nodes, true_nodes)
+node_ari = adjusted_rand_score(estimated_nodes, true_nodes)
 
 clone_accuracy = accuracy_score(estimated_clones, true_clones)
-clone_ari = v_measure_score(estimated_clones, true_clones)
+clone_ari = adjusted_rand_score(estimated_clones, true_clones)
 
 labels = 'clone_accuracy,clone_ari,node_accuracy,node_ari'
 vals = ','.join([str(clone_accuracy), str(clone_ari), str(node_accuracy), str(node_ari)])
