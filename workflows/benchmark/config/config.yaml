@@ -10,9 +10,8 @@ min_nevents: 4
 frac_dosage: .8
 log_lib_size_mean: 7.1
 log_lib_size_std: .6
-methods:
+baseline_methods:
  - correlation
  - clonealign
  - leiden
  - clonealign_leiden
- - scatrex
