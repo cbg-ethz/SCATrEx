@@ -49,12 +49,12 @@ data, labels = sim_sca.simulate_data(n_cells=n_cells, copy=True, seed=seed)
 sim_sca.plot_tree(counts=True)
 
 # Remove genes with no expression in any cell
-to_keep = np.where(np.sum(adata.X, axis=0) > 0)[0]
+to_keep = np.where(np.sum(data, axis=0) > 0)[0]
 
-simulated_data = simulated_data[:,to_keep]
-for node in simulated_observed_tree.tree_dict:
-    simulated_observed_tree.tree_dict[node]['params'] = simulated_observed_tree.tree_dict[node]['params'][to_keep]
-simulated_observed_tree.adata = simulated_observed_tree.adata[:, to_keep]
+data = data[:,to_keep]
+for node in sim_sca.observed_tree.tree_dict:
+    sim_sca.observed_tree.tree_dict[node]['params'] = sim_sca.observed_tree.tree_dict[node]['params'][to_keep]
+sim_sca.observed_tree.adata = sim_sca.observed_tree.adata[:, to_keep]
 
 np.savetxt(simulated_data, data, delimiter=',')
 np.savetxt(simulated_labels, labels, delimiter=',', fmt="%s")
