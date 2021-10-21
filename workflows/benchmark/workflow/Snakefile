@@ -7,7 +7,7 @@ import os
 configfile: "config/config.yaml"
 
 N_EXTRAS = [0, 1, 2]
-N_FACTORS = [0, 2, 6]
+N_FACTORS = [0, 2, 4]
 N_CLONES = config["n_clones"]
 N_GENES = config["n_genes"]
 N_CELLS = config["n_cells"]

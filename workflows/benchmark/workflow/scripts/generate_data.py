@@ -29,10 +29,11 @@ from scatrex import models
 
 theta = 50
 sim_sca = scatrex.SCATrEx(model=models.cna, verbose=True, model_args=dict(log_lib_size_mean=log_lib_size_mean, log_lib_size_std=log_lib_size_std,
-                                                                          num_global_noise_factors=4,
+                                                                          num_global_noise_factors=n_factors,
                                                                           global_noise_factors_precisions_shape=10.,
                                                                           unobserved_factors_kernel_concentration=1./theta,
-                                                                          frac_dosage=frac_dosage))
+                                                                          frac_dosage=frac_dosage,
+                                                                          baseline_shape=.7))
 observed_tree_args = dict(n_nodes=n_clones, node_weights=[1]*n_clones)
 observed_tree_params = dict(n_regions=n_regions, min_cn=1, min_nevents=min_nevents, max_nevents_frac=max_nevents_frac)
 sim_sca.simulate_tree(observed_tree=None, n_extra_per_observed=n_extras, n_genes=n_genes, seed=seed,
