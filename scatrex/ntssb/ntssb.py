@@ -2064,7 +2064,7 @@ class NTSSB(object):
             root_fillcolor = self.root['node'].color
         if gene is not None:
             fillcolor=name_color_dict[str(self.root['label'])]
-        g.node(str(self.root['label']), '<' + str(root_label) + '>', fillcolor=root_fillcolor, style=style)
+        g.node(str(self.root['label']), '<' + str(root_label).replace('-','') + '>', fillcolor=root_fillcolor, style=style)
 
         edge_color = 'black'
 
@@ -2091,7 +2091,7 @@ class NTSSB(object):
                 fillcolor = child['node'].color
                 if gene is not None:
                     fillcolor = name_color_dict[str(child_name)]
-                g.node(str(child_name), '<' + str(child_label) + '>', fillcolor=fillcolor, style=style)
+                g.node(str(child_name), '<' + str(child_label).replace('-','') + '>', fillcolor=fillcolor, style=style)
 
                 g.edge(str(name), str(child_name), color=edge_color)
 
@@ -2259,12 +2259,12 @@ class NTSSB(object):
                         lab = str(child['pivot_node'].num_local_data())
                         if show_labels:
                             lab = child['pivot_node'].label + '<br/><br/>' + lab + ' cells'
-                        g.node(child['pivot_node'].label, '<' + lab + '>')
+                        g.node(child['pivot_node'].label, '<' + lab.replace('-','') + '>')
                     elif events:
                         lab = child['pivot_node'].event_str
                         if show_labels:
                             lab = child['pivot_node'].label + '<br/><br/>' + lab
-                        g.node(child['pivot_node'].label, '<' + lab + '>')
+                        g.node(child['pivot_node'].label, '<' + lab.replace('-','') + '>')
                     if pivot_probabilities is not None:
                         if child['node'].root['label'] in pivot_probabilities:
                             for pivot in pivot_probabilities[child['node'].root['label']]:
