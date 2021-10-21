@@ -544,7 +544,12 @@ class SCATrEx(object):
             g = plt.gca()
             if show_colorbar:
                 if gene is not None:
-                    plt.colorbar(self.ntssb.gene_node_colormaps[kwargs['genemode']]['mapper'], label=cbtitle)
+                    cbar = plt.colorbar(self.ntssb.gene_node_colormaps[kwargs['genemode']]['mapper'], label=cbtitle)
+                    if kwargs['genemode'] == 'observed':
+                        n_discrete_levels = self.ntssb.gene_node_colormaps['observed']['mapper'].cmap.N
+                        tick_locs = (np.arange(n_discrete_levels) + 0.5)*(n_discrete_levels-1)/n_discrete_levels
+                        cbar.set_ticks(tick_locs)
+                        cbar.set_ticklabels(np.arange(n_discrete_levels))
                 elif pathway is not None:
                     plt.colorbar(constants.PATHWAY_CMAPPER, label=cbtitle)
             os.remove(os.path.join(self.temppath, 'temptree.png'))
