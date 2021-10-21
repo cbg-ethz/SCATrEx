@@ -42,11 +42,18 @@ sim_sca.observed_tree.create_adata()
 
 clip = 3.5
 for node in sim_sca.ntssb.get_nodes():
-    node.unobserved_factors[node.unobserved_factors >= clip] = clip
+    node.unobserved_factors = np.clip(node.unobserved_factors, -clip, clip)
 
 data, labels = sim_sca.simulate_data(n_cells=n_cells, copy=True, seed=seed)
 sim_sca.plot_tree(counts=True)
 
+# Remove genes with no expression in any cell
+to_keep = np.where(np.sum(adata.X, axis=0) > 0)[0]
+
+simulated_data = simulated_data[:,to_keep]
+for node in simulated_observed_tree.tree_dict:
+    simulated_observed_tree.tree_dict[node]['params'] = simulated_observed_tree.tree_dict[node]['params'][to_keep]
+simulated_observed_tree.adata = simulated_observed_tree.adata[:, to_keep]
 
 import numpy as np
 np.savetxt(simulated_data, data, delimiter=',')
