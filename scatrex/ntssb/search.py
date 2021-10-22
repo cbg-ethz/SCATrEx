@@ -752,6 +752,9 @@ class StructureSearch(object):
                 if empty_root:
                     # self.tree = deepcopy(ntree)
                     print(f"Swapped {nodeA.label} with {nodeB.label}")
+                    ntree.optimize_elbo(root_node=None, num_samples=num_samples, n_iters=n_iters*10, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback, **callback_kwargs)
+                    if verbose:
+                        print(f"{init_elbo} -> {ntree.elbo}")
                 else:
                     # ntree = self.compute_expected_score(ntree, n_burnin=n_burnin, n_samples=n_samples, thin=thin, global_params=global_params, compound=compound)
                     # ntree.reset_variational_parameters(variances_only=True)
