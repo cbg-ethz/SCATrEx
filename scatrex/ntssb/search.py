@@ -94,10 +94,12 @@ class StructureSearch(object):
 
         n_factors = self.tree.root['node'].root['node'].num_global_noise_factors
 
-        init_baseline = np.mean(self.tree.data / np.sum(self.tree.data, axis=1).reshape(-1,1) * self.tree.data.shape[1], axis=0)
-        init_baseline = init_baseline / init_baseline[0]
+        init_baseline = np.median(self.tree.data, axis=0)
+        init_baseline = init_baseline / np.mean(self.tree.input_tree.adata.X/2, axis=0)
+        init_baseline = init_baseline / np.std(init_baseline)
+        init_baseline[0] = 1.
         init_log_baseline = np.log(init_baseline[1:] + 1e-6)
-        init_log_baseline = np.clip(init_log_baseline, -1, 1)
+        init_log_baseline = np.clip(init_log_baseline, -2, 2)
 
         if len(self.traces['score']) == 0:
             if n_factors > 0 and factor_delay > 0:
