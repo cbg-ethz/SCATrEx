@@ -1343,7 +1343,7 @@ class NTSSB(object):
 
         # Reset kernel variational parameters
         n_genes = node.cnvs.size
-        node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.log(node.unobserved_factors_kernel_concentration_caller())*np.ones((n_genes,))
+        # node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.log(node.unobserved_factors_kernel_concentration_caller())*np.ones((n_genes,))
         node.variational_parameters['locals']['unobserved_factors_kernel_log_std'] = -2.* np.ones((n_genes,))
 
     def pivot_reattach_to(self, subtree, pivot):
@@ -1369,7 +1369,7 @@ class NTSSB(object):
         subtrees[subtree_idx][1]['pivot_node'] = pivot_node
 
         # prev_unobserved_factors = root_node[0].unobserved_factors_mean
-        root_node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.log(root_node.unobserved_factors_kernel_concentration_caller())*np.ones((root_node.n_genes,))
+        root_node.variational_parameters['locals']['unobserved_factors_kernel_log_std'] = -2*np.ones((root_node.n_genes,))
         root_node.set_parent(pivot_node, reset=False)
         root_node.set_mean(variational=True)
         # Reset the kernel posterior
