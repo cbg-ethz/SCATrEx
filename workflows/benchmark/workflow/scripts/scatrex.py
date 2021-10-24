@@ -20,7 +20,7 @@ clones_adata = sc.read_csv(simulated_clones)
 clones_adata.obs['node'] = np.loadtxt(simulated_clones_labels, delimiter=',', dtype='str')
 
 
-theta = 50
+theta = 100
 args = dict(global_noise_factors_precisions_shape=2, num_global_noise_factors=4,
             unobserved_factors_kernel_concentration=1/theta,
             unobserved_factors_kernel_rate=1.,
