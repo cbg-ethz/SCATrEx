@@ -11,6 +11,7 @@ sc.pp.normalize_total(adata, target_sum=1e4)
 sc.pp.log1p(adata)
 sc.pp.regress_out(adata, 'total_counts')
 sc.pp.scale(adata, max_value=10)
+sc.tl.pca(adata, svd_solver='arpack')
 sc.pp.neighbors(adata, n_neighbors=10, n_pcs=40)
 sc.tl.leiden(adata)
 
