@@ -44,7 +44,7 @@ sim_sca.simulate_tree(observed_tree=None, n_extra_per_observed=n_extras, n_genes
                         observed_tree_params=observed_tree_params, observed_tree_args=observed_tree_args)
 sim_sca.observed_tree.create_adata()
 
-clip = 2.5
+clip = 3.
 for node in sim_sca.ntssb.get_nodes():
     node.unobserved_factors = np.clip(node.unobserved_factors, -clip, clip)
 
