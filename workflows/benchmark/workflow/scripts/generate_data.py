@@ -31,7 +31,7 @@ import numpy as np
 theta = 50
 sim_sca = scatrex.SCATrEx(model=models.cna, verbose=True, model_args=dict(log_lib_size_mean=log_lib_size_mean, log_lib_size_std=log_lib_size_std,
                                                                           num_global_noise_factors=n_factors,
-                                                                          global_noise_factors_precisions_shape=10.,
+                                                                          global_noise_factors_precisions_shape=5.,
                                                                           unobserved_factors_kernel_concentration=1./theta,
                                                                           frac_dosage=frac_dosage,
                                                                           baseline_shape=.7))
