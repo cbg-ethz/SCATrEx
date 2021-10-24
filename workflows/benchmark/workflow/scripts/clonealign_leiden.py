@@ -41,6 +41,7 @@ sc.pp.normalize_total(adata, target_sum=1e4)
 sc.pp.log1p(adata)
 sc.pp.regress_out(adata, 'total_counts')
 sc.pp.scale(adata, max_value=10)
+sc.tl.pca(adata, svd_solver='arpack')
 sc.pp.neighbors(adata, n_neighbors=10, n_pcs=40)
 
 est_labels = np.array(['----------'] * adata.shape[0])
@@ -49,6 +50,7 @@ for clone in np.unique(est_clones):
     sub_adata = adata[clone_cells_idx]
     print(sub_adata)
     try: # Strange error possible
+        sc.pp.neighbors(sub_adata, n_neighbors=10, n_pcs=40)
         sc.tl.leiden(sub_adata)
         labs = np.array([clone + str(l) for l in sub_adata.obs['leiden']])
     except Exception:
