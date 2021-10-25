@@ -216,7 +216,8 @@ class Node(AbstractNode):
                 self.unobserved_factors_kernel = gamma_sample(self.unobserved_factors_kernel_concentration_caller(), np.exp(np.abs(parent.unobserved_factors)), size=self.n_genes)
                 # Make sure some genes are affected in unobserved nodes
                 if not self.is_observed:
-                    self.unobserved_factors_kernel[np.argmax(self.unobserved_factors_kernel)] = np.max([5., np.max(self.unobserved_factors_kernel)])
+                    top_genes = np.argsort(self.unobserved_factors_kernel)[::-1][:5]
+                    self.unobserved_factors_kernel[top_genes] = np.max([5., np.max(self.unobserved_factors_kernel)])
                 self.unobserved_factors = normal_sample(parent.unobserved_factors, self.unobserved_factors_kernel)
                 self.unobserved_factors = np.clip(self.unobserved_factors, -MAX_XI, MAX_XI)
                 if not self.is_observed:
