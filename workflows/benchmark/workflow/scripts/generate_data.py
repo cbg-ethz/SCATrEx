@@ -29,12 +29,14 @@ import numpy as np
 # data, labels = sim_sca.simulate_data(n_cells=n_cells, copy=True, seed=seed)
 
 theta = 50
-sim_sca = scatrex.SCATrEx(model=models.cna, verbose=True, model_args=dict(log_lib_size_mean=log_lib_size_mean, log_lib_size_std=log_lib_size_std,
+model_args =dict(log_lib_size_mean=log_lib_size_mean, log_lib_size_std=log_lib_size_std,
                                                                           num_global_noise_factors=n_factors,
                                                                           global_noise_factors_precisions_shape=5.,
                                                                           unobserved_factors_kernel_concentration=1./theta,
                                                                           frac_dosage=frac_dosage,
-                                                                          baseline_shape=.7))
+                                                                          baseline_shape=.7)
+
+sim_sca = scatrex.SCATrEx(model=models.cna, verbose=True, model_args=model_args)
 weights = np.ones((n_clones,))
 weights[0] = .5
 weights = weights / np.sum(weights)
@@ -43,6 +45,8 @@ observed_tree_params = dict(n_regions=n_regions, min_cn=1, min_nevents=min_neven
 sim_sca.simulate_tree(observed_tree=None, n_extra_per_observed=n_extras, n_genes=n_genes, seed=seed,
                         observed_tree_params=observed_tree_params, observed_tree_args=observed_tree_args)
 sim_sca.observed_tree.create_adata()
+
+sim_sca.ntssb.reset_node_parameters(node_hyperparams=model_args)
 
 clip = 3.
 for node in sim_sca.ntssb.get_nodes():
