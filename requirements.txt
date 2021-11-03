@@ -1,9 +1,0 @@
-jax[cpu]==0.2.20
-scipy
-tqdm
-scikit-learn
-graphviz
-gseapy
-scanpy
-anndata
-leidenalg
