@@ -1,5 +1,5 @@
 <div align="left">
-  <img src="https://github.com/cbg-ethz/SCATrEx/blob/main/figures/scatrex.png", width="300px">
+  <img src="https://github.com/cbg-ethz/SCATrEx/blob/main/figures/scatrex.png?raw=True", width="300px">
 </div>
 
 [![pypi](https://img.shields.io/pypi/v/scatrex.svg)](https://pypi.python.org/pypi/scatrex)
