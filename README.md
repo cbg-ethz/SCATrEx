@@ -1,5 +1,5 @@
 <div align="left">
-  <img src="figures/logo_text.png", width="300px">
+  <img src="figures/scatrex.png", width="300px">
 </div>
 
 [![pypi](https://img.shields.io/pypi/v/scatrex.svg)](https://pypi.python.org/pypi/scatrex)
