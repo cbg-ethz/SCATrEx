@@ -3,16 +3,12 @@
 </div>
 
 [![pypi](https://img.shields.io/pypi/v/scatrex.svg)](https://pypi.python.org/pypi/scatrex)
-[![Travis](https://img.shields.io/travis/pedrofale/scatrex.svg)](https://travis-ci.com/pedrofale/scatrex)
-[![readthedocs](https://readthedocs.org/projects/scatrex/badge/?version=latest)](https://scatrex.readthedocs.io/en/latest/?badge=latest)
 
-Augment a clonal tree with single-cell transcriptomic data. SCATrEx allows you to
-map tumor scRNA-seq data onto a copy number aberration
-clonal tree and identify extra subpopulations that respect that
-structure. Compared with fully unsupervised clustering methods, SCATrEx enables
-the discovery of more interpretable groups of cells in light of the
-underlying evolutionary process.
+Find a hierarchical clustering structure in scRNA-seq data on top of a known copy number aberration tree. Check out the [tutorial](./notebooks/tutorial.ipynb) for more information.
 
+## Installation
+```
+$ pip install scatrex
+```
 
-* Free software: GNU General Public License v3
-* Documentation: https://scatrex.readthedocs.io.
+SCATrEx uses [JAX](https://github.com/google/jax) to perform automatic differentiation. By default, SCATrEx installs the CPU-only version of JAX, but we strongly recommend the use of GPU acceleration. Please follow the instructions in https://github.com/google/jax#pip-installation-gpu-cuda to install the GPU version of JAX.

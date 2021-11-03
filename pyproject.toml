@@ -1,0 +1,14 @@
+[build-system]
+requires = [
+    "setuptools>=42",
+    "wheel",
+    "jax[cpu]==0.2.20",
+    "scipy",
+    "tqdm",
+    "scikit-learn",
+    "graphviz",
+    "gseapy",
+    "scanpy",
+    "anndata",
+]
+build-backend = "setuptools.build_meta"
