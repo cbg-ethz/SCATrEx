@@ -90,6 +90,7 @@ rule plot_benchmark:
     input:
         fname = 'results/scores.csv'
     output:
-        fname = f'results/c{N_CLONES}_g{N_GENES}_n{N_CELLS}_benchmark_figure.pdf'
+        ari_fname = f'results/c{N_CLONES}_g{N_GENES}_n{N_CELLS}_benchmark_figure_ari.pdf',
+        acc_fname = f'results/c{N_CLONES}_g{N_GENES}_n{N_CELLS}_benchmark_figure_acc.pdf'
     script:
         "scripts/plot_benchmark.R"
