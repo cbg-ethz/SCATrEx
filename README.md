@@ -4,7 +4,7 @@
 
 [![pypi](https://img.shields.io/pypi/v/scatrex.svg)](https://pypi.python.org/pypi/scatrex)
 
-Map single-cell transcriptomes to copy number evolutionary trees. Check out the [tutorial](https://github.com/cbg-ethz/SCATrEx/blob/master/notebooks/tutorial.ipynb) for more information.
+Map single-cell transcriptomes to copy number evolutionary trees. Check out the [tutorial](https://github.com/cbg-ethz/SCATrEx/blob/main/notebooks/tutorial.ipynb) for more information.
 
 ## Installation
 ```
