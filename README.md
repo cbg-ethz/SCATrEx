@@ -1,10 +1,10 @@
 <div align="left">
-  <img src="figures/scatrex.png", width="300px">
+  <img src="https://github.com/cbg-ethz/SCATrEx/blob/master/figures/scatrex.png", width="300px">
 </div>
 
 [![pypi](https://img.shields.io/pypi/v/scatrex.svg)](https://pypi.python.org/pypi/scatrex)
 
-Map single-cell transcriptomes to copy number evolutionary trees. Check out the [tutorial](./notebooks/tutorial.ipynb) for more information.
+Map single-cell transcriptomes to copy number evolutionary trees. Check out the [tutorial](https://github.com/cbg-ethz/SCATrEx/blob/master/notebooks/tutorial.ipynb) for more information.
 
 ## Installation
 ```
