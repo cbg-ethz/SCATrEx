@@ -1,10 +1,10 @@
 <div align="left">
-  <img src="figures/logo_text.png", width="400px">
+  <img src="figures/logo_text.png", width="200px">
 </div>
 
 [![pypi](https://img.shields.io/pypi/v/scatrex.svg)](https://pypi.python.org/pypi/scatrex)
 
-Find a hierarchical clustering structure in scRNA-seq data on top of a known copy number aberration tree. Check out the [tutorial](./notebooks/tutorial.ipynb) for more information.
+Map single-cell transcriptomes to copy number evolutionary trees. Check out the [tutorial](./notebooks/tutorial.ipynb) for more information.
 
 ## Installation
 ```
