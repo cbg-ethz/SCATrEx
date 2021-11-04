@@ -17,7 +17,7 @@ from ...ntssb.node import *
 from ...ntssb.tree import *
 
 MIN_CNV = 1e-6
-MAX_XI = 5
+MAX_XI = 3
 
 class Node(AbstractNode):
     def __init__(self, is_observed, observed_parameters, log_lib_size_mean=6, log_lib_size_std=.8,
