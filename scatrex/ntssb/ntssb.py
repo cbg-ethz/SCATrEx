@@ -1059,9 +1059,6 @@ class NTSSB(object):
             callback = elbos_callback
                 # print("Iteration {} lower bound {}".format(t, self.batch_objective(cnvs, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, params, t)))
 
-        print(data_mask)
-        print(node_mask)
-
         # print(all_nodes_mask)
         full_data_indices = jnp.array(np.arange(self.num_data))
         data_mask_subset = jnp.array(data_mask)
