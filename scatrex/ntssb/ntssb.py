@@ -664,7 +664,7 @@ class NTSSB(object):
         return node_mean
 
     def get_tssb_indices(self, nodes, tssbs):
-        start = time.time()
+        # start = time.time()
         max_len = self.max_nodes
         tssb_indices = []
         for node in nodes:
@@ -678,8 +678,8 @@ class NTSSB(object):
                 c = np.concatenate([c, np.array([-1]*(max_len-l))])
                 tssb_indices[i] = c
         tssb_indices = jnp.array(tssb_indices).astype(int)
-        end = time.time()
-        print(f"get_tssb_indices: {end-start}")
+        # end = time.time()
+        # print(f"get_tssb_indices: {end-start}")
         return tssb_indices
 
     def get_below_root(self, root_idx, children_vector, tssbs=None):
@@ -704,7 +704,7 @@ class NTSSB(object):
         return jax.vmap(f)(jnp.arange(self.max_nodes))
 
     def get_ancestor_indices(self, nodes, parent_vector, inclusive=False):
-        start = time.time()
+        # start = time.time()
         ancestor_indices = []
         max_len = self.max_nodes
         for i in range(len(nodes)):
@@ -727,12 +727,12 @@ class NTSSB(object):
                 c = np.concatenate([c, np.array([-1]*(max_len-l))])
                 ancestor_indices[i] = c
         ancestor_indices = jnp.array(ancestor_indices).astype(int)
-        end = time.time()
-        print(f"get_ancestor_indices: {end-start}")
+        # end = time.time()
+        # print(f"get_ancestor_indices: {end-start}")
         return ancestor_indices
 
     def get_previous_branches_indices(self, nodes):
-        start = time.time()
+        # start = time.time()
         previous_branches_indices = []
         max_len = self.max_nodes
         for node in nodes:
@@ -758,8 +758,8 @@ class NTSSB(object):
                 c = np.concatenate([c, np.array([-1]*(max_len-l))])
                 previous_branches_indices[i] = c
         previous_branches_indices = jnp.array(previous_branches_indices).astype(int)
-        end = time.time()
-        print(f"get_previous_branches_indices: {end-start}")
+        # end = time.time()
+        # print(f"get_previous_branches_indices: {end-start}")
         return previous_branches_indices
 
     def Eq_log_p_nu(self, dp_alpha, nu_sticks_alpha, nu_sticks_beta):
@@ -893,7 +893,7 @@ class NTSSB(object):
         return opt_state, gradient, params, value
 
     def optimize_elbo(self, root_node=None, local_node=None, global_only=False, sticks_only=False, unique_node=None, num_samples=10, n_iters=100, thin=10, step_size=0.05, debug=False, tol=1e-5, run=True, max_nodes=5, init=False, opt=None, opt_triplet=None, mb_size=100, callback=None, **callback_kwargs):
-        start = time.time()
+        # start = time.time()
         self.max_nodes = len(self.input_tree_dict.keys()) * max_nodes # upper bound on number of nodes
         self.data = jnp.array(self.data, dtype='float32')
 
@@ -944,10 +944,10 @@ class NTSSB(object):
         parent_vector = jnp.array(np.concatenate([parent_vector, -2*np.ones((rem,))])).astype(int)
         tssbs = [node.tssb.label for node in nodes]
         tssb_indices = self.get_tssb_indices(nodes, tssbs)
-        start3 = time.time()
+        # start3 = time.time()
         children_vector = self.get_children_vector(parent_vector)
-        end3 = time.time()
-        print(f"get_children_vector: {end3-start3}")
+        # end3 = time.time()
+        # print(f"get_children_vector: {end3-start3}")
         ancestor_nodes_indices = self.get_ancestor_indices(nodes, parent_vector)
         previous_branches_indices = self.get_previous_branches_indices(nodes)
         node_idx = np.where(np.array(nodes)==root_node)[0][0]
@@ -969,7 +969,7 @@ class NTSSB(object):
             sticks_only = True
 
 
-        start2 = time.time()
+        # start2 = time.time()
         node_mask = np.zeros((len(nodes),))
         node_mask[node_mask_idx] = 1
 
@@ -1037,8 +1037,8 @@ class NTSSB(object):
 
         init_params = local_params_list + global_params
 
-        end2 = time.time()
-        print(f"Getting parameters: {end2-start2}")
+        # end2 = time.time()
+        # print(f"Getting parameters: {end2-start2}")
 
         if opt_triplet is None:
             if opt is None:
@@ -1068,8 +1068,8 @@ class NTSSB(object):
         sub_data_indices = np.where(data_mask)[0]
         current_elbo = self.elbo
 
-        end = time.time()
-        print(f"before run: {end-start}")
+        # end = time.time()
+        # print(f"before run: {end-start}")
         if run:
             # Main loop.
             current_elbo = self.elbo
@@ -1088,10 +1088,10 @@ class NTSSB(object):
                 data_mask_subset = jnp.array(data_mask)[minibatch_idx]
                 # minibatch_idx = np.arange(self.num_data)
                 # data_mask_subset = data_mask
-                start = time.time()
+                # start = time.time()
                 opt_state, g, params, elbo = self.update(obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, node_mask, data_mask_subset, minibatch_idx, do_global, global_only, sticks_only, num_samples, t, opt_state, opt_update, get_params)
-                end = time.time()
-                print(f"update: {end-start}")
+                # end = time.time()
+                # print(f"update: {end-start}")
                 elbos.append(-elbo)
                 try:
                     callback(elbos, **callback_kwargs)
@@ -1101,11 +1101,11 @@ class NTSSB(object):
 
 
             # Without node mask
-            start = time.time()
+            # start = time.time()
             ret = self.batch_objective(obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, all_nodes_mask,
                                     jnp.array(1.), jnp.array(0.), jnp.array(0.), num_samples, get_params(opt_state), 10)
-            end = time.time()
-            print(f"batch_objective: {end-start}")
+            # end = time.time()
+            # print(f"batch_objective: {end-start}")
             self.elbo = np.array(ret[0])
             self.ll = np.array(ret[1])
             self.kl = np.array(ret[2])
@@ -1129,12 +1129,12 @@ class NTSSB(object):
             # print(f"New ELBO: {new_elbo:.5f}")
             # print(f"New ELBO improvement: {(new_elbo - current_elbo)/np.abs(current_elbo) * 100:.3f}%\n")
 
-            start = time.time()
+            # start = time.time()
             self.set_node_means(get_params(opt_state), nodes, local_names, global_names, node_mask=node_mask, do_global=do_global)
             self.update_ass_logits(indices=sub_data_indices, variational=True, node_mask=node_mask)
             self.assign_to_best(nodes=nodes)
-            end = time.time()
-            print(f"last part: {end-start}")
+            # end = time.time()
+            # print(f"last part: {end-start}")
             return elbos
         else:
             ret = self.batch_objective(obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, all_nodes_mask,
@@ -1158,7 +1158,7 @@ class NTSSB(object):
             return None
 
     def set_node_means(self, params, nodes, local_names, global_names, node_mask=None, do_global=True):
-        start = time.time()
+        # start = time.time()
         if do_global:
             globals_start = len(local_names)
             params_idx = 0
@@ -1174,10 +1174,10 @@ class NTSSB(object):
             for i, local_param in enumerate(local_names):
                 nodes[node_idx].variational_parameters['locals'][local_param] = np.array(params[i][node_idx])
             nodes[node_idx].set_mean(variational=True)
-        print(f"set_node_means: {time.time()-start}")
+        # print(f"set_node_means: {time.time()-start}")
 
     def update_ass_logits(self, indices=None, variational=False, prior=True, node_mask=None):
-        start = time.time()
+        # start = time.time()
         if indices is None:
             indices = list(range(self.num_data))
 
@@ -1192,10 +1192,10 @@ class NTSSB(object):
             node_lls = nodes[node_idx].loglh(np.array(indices), variational=variational, axis=1)
             node_lls = node_lls + np.log(weights[node_idx] + 1e-6) if prior else node_lls
             nodes[node_idx].data_ass_logits[np.array(indices)] = node_lls
-        print(f"update_ass_logits: {time.time()-start}")
+        # print(f"update_ass_logits: {time.time()-start}")
 
     def assign_to_best(self, nodes=None):
-        start = time.time()
+        # start = time.time()
         if nodes is None:
             nodes = self.get_nodes()
 
@@ -1213,7 +1213,7 @@ class NTSSB(object):
 
         self.assignments = list(np.array(nodes)[assignments])
 
-        print(f"assign_to_best: {time.time()-start}")
+        # print(f"assign_to_best: {time.time()-start}")
 
     # ========= Functions to update tree structure. =========
 
