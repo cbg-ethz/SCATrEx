@@ -20,12 +20,12 @@ MIN_CNV = 1e-6
 MAX_XI = 3
 
 class Node(AbstractNode):
-    def __init__(self, is_observed, observed_parameters, log_lib_size_mean=6, log_lib_size_std=.8,
-                        num_global_noise_factors=4, global_noise_factors_precisions_shape=2.,
+    def __init__(self, is_observed, observed_parameters, log_lib_size_mean=7.1, log_lib_size_std=.6,
+                        num_global_noise_factors=4, global_noise_factors_precisions_shape=5.,
                         cell_global_noise_factors_weights_scale=1.,
                         unobserved_factors_root_kernel=0.1, unobserved_factors_kernel=1.,
-                        unobserved_factors_kernel_concentration=.01,
-                        unobserved_factors_kernel_rate=1., frac_dosage=1, baseline_shape=0.1, **kwargs):
+                        unobserved_factors_kernel_concentration=.02,
+                        unobserved_factors_kernel_rate=1., frac_dosage=1, baseline_shape=0.7, **kwargs):
         super(Node, self).__init__(is_observed, observed_parameters, **kwargs)
 
         # The observed parameters are the CNVs of all genes
