@@ -12,3 +12,6 @@ $ pip install scatrex
 ```
 
 SCATrEx uses [JAX](https://github.com/google/jax) to perform automatic differentiation. By default, SCATrEx installs the CPU-only version of JAX, but we strongly recommend the use of GPU acceleration. Please follow the instructions in https://github.com/google/jax#pip-installation-gpu-cuda to install the GPU version of JAX.
+
+## Preprint
+https://doi.org/10.1101/2021.11.04.467244
