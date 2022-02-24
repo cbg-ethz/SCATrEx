@@ -1156,12 +1156,12 @@ class NTSSB(object):
 
     def set_node_means(self, params, nodes, local_names, global_names, node_mask=None, do_global=True):
         # start = time.time()
-        if do_global:
-            globals_start = len(local_names)
-            params_idx = 0
-            for i, global_param in enumerate(global_names):
-                    params_idx = globals_start + i
-                    self.root['node'].root['node'].variational_parameters['globals'][global_param] = np.array(params[params_idx])
+        globals_start = len(local_names)
+        params_idx = 0
+        for i, global_param in enumerate(global_names):
+            params_idx = globals_start + i
+            if do_global or 'cell' in global_param: # always update cell-specific parameters
+                self.root['node'].root['node'].variational_parameters['globals'][global_param] = np.array(params[params_idx])
 
         if node_mask is None:
             node_indices = np.arange(len(nodes))
@@ -1171,7 +1171,6 @@ class NTSSB(object):
             for i, local_param in enumerate(local_names):
                 nodes[node_idx].variational_parameters['locals'][local_param] = np.array(params[i][node_idx])
             nodes[node_idx].set_mean(variational=True)
-        # print(f"set_node_means: {time.time()-start}")
 
     def update_ass_logits(self, indices=None, variational=False, prior=True, node_mask=None):
         # start = time.time()
