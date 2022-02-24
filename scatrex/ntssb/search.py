@@ -47,7 +47,7 @@ class StructureSearch(object):
 
     def plot_traces(self, keys=None, figsize=(16,10), highlight_max=True, highlight_s=100, highlight_color='red'):
         if keys is None:
-            keys = list(self.traces['keys'])
+            keys = list(self.traces.keys())
         if highlight_max:
             it_max_score = np.argmax(self.traces['elbo'])
 
