@@ -767,3 +767,84 @@ class SCATrEx(object):
             d[cnv_levels[i]] = dict(label=cnv_levels_labels[i], exp=exp_levels[i])
 
         return d
+
+    def get_cnv_vs_state(self):
+        node_dict = dict()
+        nodes, locs = np.unique(self.adata.obs['scatrex_node'], return_index=True)
+        for i, node in enumerate(nodes):
+            node_dict[node] = dict()
+            cnv = self.adata.layers['scatrex_cnvs'][locs[i]]
+            xi = self.adata.layers['scatrex_xi'][locs[i]]
+            cnv_levels = np.unique(cnv).astype(int)
+            for cnv_level in cnv_levels:
+                genes_in_level = np.where(cnv==cnv_level)[0]
+                node_dict[node][cnv_level] = dict()
+                node_dict[node][cnv_level]['state'] = xi[genes_in_level]
+                node_dict[node][cnv_level]['genes'] = genes_in_level
+
+        return node_dict
+
+    def get_concordances(self):
+        node_dict = dict()
+        nodes, locs = np.unique(self.adata.obs['scatrex_node'], return_index=True)
+        for i, node in enumerate(nodes):
+            cnv = self.adata.layers['scatrex_cnvs'][locs[i]]
+            xi = self.adata.layers['scatrex_xi'][locs[i]]
+            node_dict[node] = np.zeros(cnv.shape)
+            non_2 = np.where(cnv!=2)[0]
+            node_dict[node][non_2] = xi[non_2] / np.log(cnv[non_2]/2)
+        return node_dict
+        
+    def _plot_cnv_vs_state_node(self, node, mapping=None, concordances=None, state_range=[-1,1], cnv_range=[1,2,3,4],
+                                ax=None, figsize=None, ylabel='Cell state', xlabel='Copy number',
+                               alpha=1, colorbar=False):
+        if mapping is None:
+            mapping = self.get_cnv_vs_state()
+
+        if ax is None:
+            plt.figure(figsize=figsize)
+            ax = plt.gca()
+
+        norm = matplotlib.colors.Normalize(vmin=state_range[0], vmax=state_range[1])
+        if concordances is not None:
+            norm = matplotlib.colors.Normalize(vmin=-1, vmax=1)
+
+        plt.sca(ax)
+        for cnv in cnv_range:
+            if cnv in list(mapping[node].keys()):
+                c = mapping[node][cnv]['state']
+                if concordances is not None:
+                    c = concordances[node][mapping[node][cnv]['genes']]
+                plt.scatter(cnv*np.ones((len(mapping[node][cnv]['state']))), mapping[node][cnv]['state'],
+                            c=c, norm=norm, alpha=alpha)
+        plt.axhline(0, alpha=0.6, color='gray')
+        plt.xticks(cnv_range)
+        plt.xlim([cnv_range[0]-.5, cnv_range[-1]+.5])
+        plt.ylim([state_range[0]-.2, state_range[-1]+0.2])
+        plt.ylabel(ylabel)
+        plt.xlabel(xlabel)
+        plt.title(node)
+        if concordances:
+            if colorbar:
+                cbar = plt.colorbar(label='Concordance')
+                cbar.set_ticks([-1, 0, 1])
+                cbar.set_ticklabels(['-1', '0', '+1'])
+
+    def plot_cnv_vs_state(self, nodes, mapping=None, concordances=None, state_range=[-1,1], cnv_range=[1,2,3,4],
+                          figsize=None, alpha=1):
+        if mapping is None:
+            mapping = self.get_cnv_vs_state()
+
+        if isinstance(nodes, str):
+            self._plot_cnv_vs_state_node(nodes, mapping=mapping, concordances=concordances,
+                                    state_range=state_range, cnv_range=cnv_range, alpha=alpha)
+            plt.show()
+        else:
+            fig, axes = plt.subplots(1, len(nodes), figsize=figsize, sharey=True)
+            for i, node in enumerate(nodes):
+                ylabel = 'Cell state' if i == 0 else ''
+                colorbar = True if i == len(nodes)-1 else False
+                self._plot_cnv_vs_state_node(node, mapping=mapping, concordances=concordances,
+                                        state_range=state_range, cnv_range=cnv_range,
+                                        ax=axes[i], ylabel=ylabel, colorbar=colorbar, alpha=alpha)
+            plt.show()
