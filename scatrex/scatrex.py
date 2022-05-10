@@ -831,11 +831,14 @@ class SCATrEx(object):
 
         return sorted_discordant_genes, sorted_concordances, sorted_nodes
 
-    def plot_discordant_genes(self, sorted_discordant_genes, sorted_concordances, sorted_nodes, figisze=None):
+    def plot_discordant_genes(self, sorted_discordant_genes, sorted_concordances, sorted_nodes=None, figisze=None):
         plt.figure(figsize=figsize)
+        if sorted_nodes is not None:
         for node in np.unique(sorted_nodes):
             idx = np.where(sorted_nodes == node)[0]
             plt.scatter(np.arange(len(sorted_concordances))[idx], -sorted_concordances[idx], label=node)
+        else:
+            plt.scatter(np.arange(len(sorted_concordances))[idx], -sorted_concordances[idx])
         plt.axhline(1, color='gray', alpha=0.6, ls='--', label='Perfect discordance')
         plt.legend()
         plt.xticks(range(len(sorted_concordances)), labels=sorted_discordant_genes)
