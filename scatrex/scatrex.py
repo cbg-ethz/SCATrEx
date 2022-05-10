@@ -794,7 +794,56 @@ class SCATrEx(object):
             non_2 = np.where(cnv!=2)[0]
             node_dict[node][non_2] = xi[non_2] / np.log(cnv[non_2]/2)
         return node_dict
-        
+
+
+    def get_discordant_genes_node(self, node_concordances):
+        discordant_genes = np.where(node_concordances < 0)[0]
+        sorted_discordant_genes = discordant_genes[np.argsort(node_concordances[discordant_genes])]
+        sorted_concordances = node_concordances[sorted_discordant_genes]
+        return sorted_discordant_genes, sorted_concordances
+
+    def get_discordant_genes(self, concordances):
+        dg = []
+        sc = []
+        nodes = []
+        for node in np.unique(self.adata.obs['scatrex_node'])[1:]:
+            a, b = self.get_discordant_genes_node(concordances[node])
+            dg.append(a)
+            sc.append(b)
+            nodes.append(len(a)*[node])
+        dg = np.concatenate(dg)
+        sc = np.concatenate(sc)
+        nodes = np.concatenate(nodes)
+
+        sorted_discordant_genes = dg[np.argsort(sc)]
+        sorted_concordances = sc[np.argsort(sc)]
+        sorted_nodes = nodes[np.argsort(sc)]
+
+        unique, indices = np.unique(sorted_discordant_genes, return_index=True)
+
+        unique_discordant_genes = sorted_discordant_genes[indices]
+        unique_concordances = sorted_concordances[indices]
+        unique_nodes = sorted_nodes[indices]
+
+        sorted_discordant_genes = unique_discordant_genes[np.argsort(unique_concordances)]
+        sorted_concordances = unique_concordances[np.argsort(unique_concordances)]
+        sorted_nodes = unique_nodes[np.argsort(unique_concordances)]
+
+        return sorted_discordant_genes, sorted_concordances, sorted_nodes
+
+    def plot_discordant_genes(self, sorted_discordant_genes, sorted_concordances, sorted_nodes, figisze=None):
+        plt.figure(figsize=figsize)
+        for node in np.unique(sorted_nodes):
+            idx = np.where(sorted_nodes == node)[0]
+            plt.scatter(np.arange(len(sorted_concordances))[idx], -sorted_concordances[idx], label=node)
+        plt.axhline(1, color='gray', alpha=0.6, ls='--', label='Perfect discordance')
+        plt.legend()
+        plt.xticks(range(len(sorted_concordances)), labels=sorted_discordant_genes)
+        plt.xlabel('Discordant genes')
+        plt.ylabel('Negative concordance score')
+        plt.ylim([0, np.max(-sorted_concordances) + 0.2])
+        plt.show()
+
     def _plot_cnv_vs_state_node(self, node, mapping=None, concordances=None, state_range=[-1,1], cnv_range=[1,2,3,4],
                                 ax=None, figsize=None, ylabel='Cell state', xlabel='Copy number',
                                alpha=1, colorbar=False):
