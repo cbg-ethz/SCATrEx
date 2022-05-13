@@ -197,6 +197,7 @@ class SCATrEx(object):
                 print('Will continue search from where it left off.')
 
         self.ntssb = self.search.run_search(**search_kwargs)
+        self.ntssb.create_augmented_tree_dict()
 
         node_assignments = [self.ntssb.root['node'].root['node'].label] * self.adata.shape[0]
         for i, idx in enumerate(cell_idx):
@@ -900,3 +901,107 @@ class SCATrEx(object):
                                         state_range=state_range, cnv_range=cnv_range,
                                         ax=axes[i], ylabel=ylabel, colorbar=colorbar, alpha=alpha)
             plt.show()
+
+    def get_gene_inheritance_scores_in_lineage(self, lineage, xi_threshold=0.5, chi_threshold=0.5, prob=False, direction=False, window=1, names=False, neutral=False):
+        lineage_root_idx = np.where(self.adata.obs['scatrex_node'] == lineage[0])[0]
+
+        genes = np.array(list(set(np.where(self.adata.layers['scatrex_om'][lineage_root_idx[0]] > chi_threshold)[0]).intersection(
+                     set(np.where(np.abs(self.adata.layers['scatrex_xi'][lineage_root_idx[0]]) > xi_threshold)[0]))
+                ))
+
+        # Filter: get only CNV-constant events in the lineage
+        lineage_idx = np.where(self.adata.obs['scatrex_node'].isin(lineage))[0]
+        if neutral:
+            genes = genes[np.where(np.all(self.adata.layers['scatrex_cnvs'][lineage_idx][:,genes]==2, axis=0))[0]]
+        else:
+            genes = genes[np.where(np.var(self.adata.layers['scatrex_cnvs'][lineage_idx][:,genes], axis=0) == 0)[0]]
+
+        gene_names = self.adata.var_names[genes]
+
+        gene_scores = dict()
+        for gene_idx, gene in enumerate(genes):
+            parent_concordances = []
+            for idx, node in enumerate(lineage):
+                if idx != 0:
+                    parent_mean = self.ntssb.node_dict[lineage[idx-1]]['node'].variational_parameters['locals']['unobserved_factors_mean'][gene]
+                    node_mean = self.ntssb.node_dict[lineage[idx]]['node'].variational_parameters['locals']['unobserved_factors_mean'][gene]
+                    if prob:
+                        parent_std = np.exp(self.ntssb.node_dict[lineage[idx-1]]['node'].variational_parameters['locals']['unobserved_factors_log_std'][gene])
+                        node_std = np.exp(self.ntssb.node_dict[lineage[idx]]['node'].variational_parameters['locals']['unobserved_factors_log_std'][gene])
+                        if direction:
+                            if parent_mean > 0:
+                                prob_score = 1-stats.norm.cdf(parent_mean-parent_std, node_mean, node_std)
+                            else:
+                                prob_score = stats.norm.cdf(parent_mean+parent_std, node_mean, node_std)
+                        else:
+                            prob_score = stats.norm.cdf(parent_mean+parent_std, node_mean, node_std) - stats.norm.cdf(parent_mean-parent_std, node_mean, node_std)
+                        parent_concordances.append(prob_score)
+                    else: # negative absolute distance
+                        parent_concordances.append(-np.abs(parent_mean-node_mean))
+            gene_name = gene
+            if names:
+                gene_name = gene_names[gene_idx]
+            gene_scores[gene_name] = np.mean(parent_concordances)
+
+        return gene_scores
+
+    def plot_state_inheritance(self, lineage, gene_scores=None, gene_step=2, node_step=1, figsize=None, ax=None):
+        # Plots the variational distributions of cell states across a lineage
+        # Useful for identifying heritable effects
+
+        if gene_scores is None:
+            gene_scores = self.get_gene_inheritance_scores_in_lineage(lineage, names=False)
+
+        # Sort by highest scoring to lowest scoring
+        order = np.argsort(list(gene_scores.values()))[::-1]
+        genes = np.array(list(gene_scores.keys()))[order]
+        scores = np.array(list(gene_scores.values()))[order]
+
+        if ax is None:
+            plt.figure(figsize=figsize)
+        else:
+            plt.sca(ax)
+        plt.axhline(0, alpha=0.5, ls='--', color='gray')
+        gene_offset = 0
+        for gene_idx, gene in enumerate(genes):
+            gene_offset = gene_idx*gene_step
+            node_offset = 0
+            for node_idx, node in enumerate(lineage):
+                node_offset = node_idx*node_step
+                mean = self.ntssb.node_dict[node]['node'].variational_parameters['locals']['unobserved_factors_mean'][gene]
+                std = np.exp(self.ntssb.node_dict[node]['node'].variational_parameters['locals']['unobserved_factors_log_std'][gene])
+                yy = np.arange(mean-3*std, mean+3*std, 0.001)
+                label = None
+                if gene_idx == len(genes)-1:
+                    label = node
+                pdf = stats.norm.pdf(yy, mean, std)
+                pdf = pdf / np.max(pdf)
+                plt.plot(pdf + gene_offset + node_offset, yy, label=label, color=self.ntssb.node_dict[node]['node'].tssb.color, lw=4, alpha=0.7)
+        plt.legend()
+        ax = plt.gca()
+        return ax
+
+    def plot_state_inheritance2(self, lineage, gene_scores=None, gene_step=2, node_step=1, figsize=None, ax=None):
+        # Includes actual scores as a subplot
+
+        # Sort by highest scoring to lowest scoring
+        order = np.argsort(list(gene_scores.values()))[::-1]
+        genes = np.array(list(gene_scores.keys()))[order]
+        scores = np.array(list(gene_scores.values()))[order]
+
+        fig, axes = plt.subplots(2, 1, sharex=True, figsize=figsize)
+        ax = self.plot_state_inheritance(lineage, gene_scores=gene_scores, gene_step=5, node_step=1.5, ax=axes[0])
+        ax.set_title('B->C transition')
+        plt.axhline(0, alpha=0.5, ls='--', color='gray')
+
+        plt.sca(axes[1])
+        plt.bar(np.arange(1, 1+len(genes)*5, 5), scores)
+        plt.ylabel('Heritability score')
+        plt.xlabel(f'State-affected genes in {lineage[0]}')
+        plt.xticks(np.arange(1, 1+len(genes)*5, 5), labels=self.adata.var_names[genes])
+        return axes
+
+    def plot_cnv_inheritance(self):
+        # Plots the combined effect of each CNV across a lineage
+        # Can be useful to check if the provided CNV tree is true
+        raise NotImplementedError
