@@ -3,6 +3,7 @@ import numpy.random
 import scipy.special
 import scipy.stats
 from functools import partial
+import numpy as np
 
 from jax.api import vmap
 from jax import random
@@ -37,6 +38,13 @@ def diag_gaussian_sample(rng, mean, log_std):
 def diag_gaussian_logpdf(x, mean, log_std, axis=None):
     # Evaluate a single point on a diagonal multivariate Gaussian.
     return jnp.sum(vmap(norm.logpdf)(x, mean, jnp.exp(log_std)), axis=axis)
+
+def loggaussian_logpdf(x, mean, std, axis=None):
+    return -jnp.log(x) - jnp.log(std) - 0.5*jnp.log(2*jnp.pi) - ((jnp.log(x)-mean)**2)/(2*std**2)
+
+def diag_loggaussian_logpdf(x, mean, log_std, axis=None):
+    # Evaluate a single point on a diagonal multivariate LogGaussian.
+    return jnp.sum(vmap(loggaussian_logpdf)(x, mean, jnp.exp(log_std)), axis=axis)
 
 def diag_laplace_sample(rng, mean, log_std):
     # Evaluate a single point on a diagonal multivariate Laplace.
@@ -314,3 +322,62 @@ def dirichletpdfln(p, a):
 def logsumexp(X, axis=None):
     maxes = numpy.max(X, axis=axis)
     return numpy.log(numpy.sum(numpy.exp(X - maxes), axis=axis)) + maxes
+
+def convert_tidy_to_matrix(tidy_df):
+    # Takes a tidy dataframe specifying the CNVs of cells along genomic bins
+    # and converts it to a cell by bin matrix
+    cell_df = tidy_df.loc[tidy_df.single_cell_id==tidy_df.single_cell_id[0]]
+    bins_df = cell_df.drop(columns=['copy_number', 'single_cell_id'], inplace=False)
+    tidy_df['bin_id'] = np.tile(bins_df.index, tidy_df.single_cell_id.unique().size)
+    matrix = tidy_df[['copy_number', 'single_cell_id', 'bin_id']].pivot_table(values='copy_number',
+                                                            index='single_cell_id', columns='bin_id')
+
+    return matrix, bins_df
+
+def annotate_bins(bins_df):
+    # Takes a dataframe of genomic regions and returns an ordered list of full genes in each region
+    server = Server("www.ensembl.org", use_cache=False)
+    dataset = server.marts["ENSEMBL_MART_ENSEMBL"].datasets["hsapiens_gene_ensembl"]
+    gene_coordinates = dataset.query(attributes=["chromosome_name", "start_position", "end_position", "external_gene_name"],
+                        filters={'chromosome_name':[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,'X','Y']},
+                        use_attr_names=True)
+    # Drop duplicate genes
+    gene_coordinates.drop_duplicates(subset='external_gene_name', ignore_index=True)
+
+    annotated_bins = bins_df.copy()
+    annotated_bins['genes'] = [list() for _ in range(annotated_bins.shape[0])]
+
+    bin_size = bins_df['end'][0] - bins_df['start'][0]
+    for index, row in gene_coordinates.iterrows():
+        gene = row["external_gene_name"]
+        if pd.isna(gene):
+            continue
+        start_bin_in_chr = int(row["start_position"] / bin_size)
+        stop_bin_in_chr = int(row["end_position"] / bin_size)
+        chromosome = str(row["chromosome_name"])
+        chr_start = np.where(bins_df["chr"] == chromosome)[0][0]
+        start_bin = start_bin_in_chr + chr_start
+        stop_bin = stop_bin_in_chr + chr_start
+
+        if stop_bin < annotated_bins.shape[0]:
+            if np.all(annotated_bins.iloc[start_bin:stop_bin].chr == chromosome):
+                for bin in range(start_bin, stop_bin + 1):
+                    annotated_bins.loc[bin, "genes"].append(gene)
+
+    return annotated_bins
+
+def annotate_matrix(matrix, annotated_bins):
+    # Takes a dataframe of cells by bins and a dataframe with gene lists for each bin
+    # and returns a dataframe of cells by genes
+    df_list = []
+    for bin, row in annotated_bins.iterrows():
+        genes = row['genes']
+        if len(genes) > 0:
+            df_list.append(pd.concat([matrix[bin]] * len(genes), axis=1, ignore_index=True).rename(columns=dict(zip(range(len(genes)), genes))))
+    df = pd.concat(df_list)
+    return df
+
+def convert_phylogeny_to_clonal_tree(threshold):
+    # Converts a phylogenetic tree to a clonal tree by choosing the main clades
+    # according to some threshold
+    raise NotImplementedError

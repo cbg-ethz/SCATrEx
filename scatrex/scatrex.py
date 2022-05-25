@@ -15,13 +15,16 @@ import os
 import scanpy as sc
 from anndata import AnnData
 import gseapy as gp
-from tqdm import tqdm
+from tqdm.auto import tqdm
+
+import logging
+logger = logging.getLogger(__name__)
 
 class SCATrEx(object):
     def __init__(self,
                  model=cna,
                  model_args=dict(),
-                 verbose=False,
+                 verbosity=logging.INFO,
                  temppath='./temppath'):
 
         self.model = cna
@@ -29,12 +32,14 @@ class SCATrEx(object):
         self.observed_tree = None
         self.ntssb = None
         self.projector = None
-        self.verbose = verbose
+        self.verbosity = verbosity
         self.search = None
         self.adata = None
         self.temppath = temppath
         if not os.path.exists(temppath):
             os.makedirs(temppath, exist_ok=True)
+
+        logger.setLevel(verbosity)
 
     def add_data(self, data):
         """
@@ -76,27 +81,24 @@ class SCATrEx(object):
         self.observed_tree = observed_tree
 
         if not self.observed_tree:
-            if self.verbose:
-                print(f"Generating an observed {self.model.__name__.split('.')[-1].upper()} tree")
-                if len(observed_tree_args.keys()) > 0:
-                    for arg in observed_tree_args:
-                        print(f'{arg}: {observed_tree_args[arg]}')
+            logger.info(f"Generating an observed {self.model.__name__.split('.')[-1].upper()} tree")
+            if len(observed_tree_args.keys()) > 0:
+                for arg in observed_tree_args:
+                    logger.info(f'{arg}: {observed_tree_args[arg]}')
 
             self.observed_tree = self.model.ObservedTree(**observed_tree_args)
             self.observed_tree.generate_tree()
             self.observed_tree.add_node_params(n_genes=n_genes, **observed_tree_params)
 
-        if self.verbose:
-            print(f"Generating an augmented {self.model.__name__.split('.')[-1].upper()} tree")
-            if len(self.model_args.keys()) > 0:
-                for arg in self.model_args:
-                    print(f'{arg}: {self.model_args[arg]}')
+        logger.info(f"Generating an augmented {self.model.__name__.split('.')[-1].upper()} tree")
+        if len(self.model_args.keys()) > 0:
+            for arg in self.model_args:
+                logger.info(f'{arg}: {self.model_args[arg]}')
 
         self.ntssb = NTSSB(self.observed_tree, self.model.Node, node_hyperparams=self.model_args)
         self.ntssb.create_new_tree(n_extra_per_observed=n_extra_per_observed)
 
-        if self.verbose:
-            print('Tree is stored in `self.observed_tree` and `self.ntssb`')
+        logger.info('Tree is stored in `self.observed_tree` and `self.ntssb`')
 
         return self.ntssb if copy else None
 
@@ -124,8 +126,7 @@ class SCATrEx(object):
         self.ntssb.data = observations
         self.ntssb.num_data = observations.shape[0]
 
-        if self.verbose:
-            print('Labeled data are stored in `self.adata`')
+        logger.info('Labeled data are stored in `self.adata`')
 
         self.adata = AnnData(observations)
         self.adata.obs['node'] = assignments_labels
@@ -182,10 +183,10 @@ class SCATrEx(object):
 
         self.adata.uns['scatrex_retained_genes'] = retained_genes
 
-        print(f"Filtered scRNA data for clonemap shape: {rna_filtered.shape}")
+        logger.debug(f"Filtered scRNA data for clonemap shape: {rna_filtered.shape}")
 
         if reset:
-            self.ntssb = NTSSB(observed_tree_filtered, self.model.Node, node_hyperparams=self.model_args)
+            self.ntssb = NTSSB(observed_tree_filtered, self.model.Node, node_hyperparams=self.model_args, verbosity=self.verbosity)
             self.ntssb.add_data(np.array(rna_filtered), to_root=True)
             self.ntssb.root['node'].root['node'].reset_data_parameters()
             self.ntssb.reset_variational_parameters()
@@ -193,8 +194,7 @@ class SCATrEx(object):
             self.ntssb.assign_to_best()
             self.search = StructureSearch(self.ntssb)
         else:
-            if self.verbose:
-                print('Will continue search from where it left off.')
+            logger.info('Will continue search from where it left off.')
 
         self.ntssb = self.search.run_search(**search_kwargs)
         self.ntssb.create_augmented_tree_dict()
@@ -258,14 +258,13 @@ class SCATrEx(object):
         ids = [clone for clone in self.observed_tree.tree_dict]
         clones = [self.observed_tree.tree_dict[clone]['params'] for clone in self.observed_tree.tree_dict]
         clones = np.array(clones)
-        print(clones.shape)
 
         # Diploid clone
         dna_is_diploid = np.array((np.sum(clones == 2, axis=1) / clones.shape[1]) > dna_diploid_threshold)
         diploid_clone_indices = np.where(dna_is_diploid)[0]
         malignant_indices = np.arange(clones.shape[0])
         if len(diploid_clone_indices) == 0:
-            print("No diploid clones in scDNA-seq data.")
+            logger.warning("No diploid clones in scDNA-seq data.")
         else:
             diploid_clone_idx = diploid_clone_indices[0]
             malignant_indices_mask = np.ones(clones.shape[0], dtype=bool)
@@ -275,8 +274,8 @@ class SCATrEx(object):
             diploid_ids = np.array(ids)[diploid_clone_idx].tolist()
             malignant_labels = np.array(labels)[malignant_indices].tolist()
             malignant_ids = np.array(ids)[malignant_indices].tolist()
-            print(f'Diploid clones: labels: {diploid_labels}, ids: {diploid_ids}')
-            print(f'Malignant clones: labels: {malignant_labels}, ids: {malignant_ids}')
+            logger.info(f'Diploid clones: labels: {diploid_labels}, ids: {diploid_ids}')
+            logger.info(f'Malignant clones: labels: {malignant_labels}, ids: {malignant_ids}')
 
         # Subset the data to the highest variable genes
         adata = deepcopy(self.adata)
@@ -347,7 +346,7 @@ class SCATrEx(object):
         cell_idx = np.arange(self.adata.shape[0])
         others_idx = np.array([])
         if cell_filter:
-            print(f"Selecting {cell_filter} cells")
+            logger.info(f"Selecting {cell_filter} cells")
             cell_idx = np.where(np.array([cell_filter in celltype for celltype in self.adata.obs['celltype_major']]))[0]
             others_idx = np.where(np.array([cell_filter not in celltype for celltype in self.adata.obs['celltype_major']]))[0]
 
@@ -355,14 +354,13 @@ class SCATrEx(object):
         ids = [clone for clone in self.observed_tree.tree_dict]
         clones = [self.observed_tree.tree_dict[clone]['params'] for clone in self.observed_tree.tree_dict]
         clones = np.array(clones)
-        print(clones.shape)
 
         # Diploid clone
         dna_is_diploid = np.array((np.sum(clones == 2, axis=1) / clones.shape[1]) > dna_diploid_threshold)
         diploid_clone_indices = np.where(dna_is_diploid)[0]
         malignant_indices = np.arange(clones.shape[0])
         if len(diploid_clone_indices) == 0:
-            print("No diploid clones in scDNA-seq data.")
+            logger.warning("No diploid clones in scDNA-seq data.")
         else:
             diploid_clone_idx = diploid_clone_indices[0]
             malignant_indices_mask = np.ones(clones.shape[0], dtype=bool)
@@ -372,8 +370,8 @@ class SCATrEx(object):
             diploid_ids = np.array(ids)[diploid_clone_idx].tolist()
             malignant_labels = np.array(labels)[malignant_indices].tolist()
             malignant_ids = np.array(ids)[malignant_indices].tolist()
-            print(f'Diploid clones: labels: {diploid_labels}, ids: {diploid_ids}')
-            print(f'Malignant clones: labels: {malignant_labels}, ids: {malignant_ids}')
+            logger.info(f'Diploid clones: labels: {diploid_labels}, ids: {diploid_ids}')
+            logger.info(f'Malignant clones: labels: {malignant_labels}, ids: {malignant_ids}')
 
         adata = self.adata.raw.to_adata()
         adata = adata[cell_idx]
@@ -405,7 +403,7 @@ class SCATrEx(object):
             for node in observed_tree_filtered.tree_dict:
                 observed_tree_filtered.tree_dict[node]['params'] = observed_tree_filtered.tree_dict[node]['params'][hvgenes]
 
-        print(f"Filtered scRNA data for clonemap shape: {rna_filtered.shape}")
+        logger.debug(f"Filtered scRNA data for clonemap shape: {rna_filtered.shape}")
 
         if filter_diploid_cells:
             if len(diploid_clone_indices) > 0:
@@ -413,7 +411,7 @@ class SCATrEx(object):
                 for node in diploid_ids:
                     observed_tree_filtered.tree_dict[node]['size'] = 0
                 observed_tree_filtered.update_weights(uniform=False)
-                print(f'Assigning no weight to diploid clones: {diploid_labels} ({diploid_ids})')
+                logger.info(f'Assigning no weight to diploid clones: {diploid_labels} ({diploid_ids})')
 
         self.ntssb = NTSSB(observed_tree_filtered, self.model.Node, node_hyperparams=self.model_args)
         self.ntssb.add_data(np.array(rna_filtered), to_root=True)
@@ -475,8 +473,7 @@ class SCATrEx(object):
         mat = sc.pp.scale(self.adata.X, copy=True)
         self.adata.layers["scaled"] = mat
 
-        if self.verbose:
-            print('Normalized data are stored in `self.adata`')
+        logger.info('Normalized data are stored in `self.adata`')
 
         return self.adata if copy else None
 
@@ -484,8 +481,7 @@ class SCATrEx(object):
         self.pca_obj = PCA(n_components=n_dim)
         self.pca = self.pca_obj.fit_transform(self.adata.X)
 
-        if self.verbose:
-            print(f'{n_dim}-projected data are stored in `self.pca` and projection matrix in `self.pca_obj`')
+        logger.info(f'{n_dim}-projected data are stored in `self.pca` and projection matrix in `self.pca_obj`')
 
         return (self.pca, self.pca_obj) if copy else None
 
@@ -594,41 +590,54 @@ class SCATrEx(object):
             plt.savefig(save, bbox_inches='tight')
         plt.show()
 
-    def plot_unobserved_parameters(self, gene=None, figsize=(4,4), lw=4, alpha=0.7, title='', fontsize=18, step=4, estimated=False, x_max=4, name='unobserved_factors', save=None):
+    def plot_unobserved_parameters(self, gene=None, ax=None, figsize=(4,4), lw=4, alpha=0.7, title='', fontsize=18, step=4, estimated=False, x_max=1, name='unobserved_factors', save=None):
         nodes, _ = self.ntssb.get_node_mixture()
-        plt.figure(figsize=figsize)
+
+        if self.search is not None:
+            if len(self.search.traces['elbo']) > 0:
+                estimated = True
+
+        if ax is None:
+            plt.figure(figsize=figsize)
+        else:
+            plt.gca(ax)
         ticklabs = []
         tickpos = []
         for i, node in enumerate(nodes):
-            ls = '-'
-            tickpos.append(- step*i)
-            ticklabs.append(fr"{node.label.replace('-', '')}")
-            unobs = node.__getattribute__(name)
-            if estimated:
-                try:
-                    mean = node.variational_parameters['locals'][name]
-                except KeyError:
+            if node.parent() is not None:
+                ls = '-'
+                unobs = node.__getattribute__(name)
+                if estimated:
                     try:
-                        unobs = node.variational_parameters['locals'][name + '_mean']
-                        std = np.exp(node.variational_parameters['locals'][name + '_log_std'])
+                        mean = node.variational_parameters['locals'][name]
                     except KeyError:
-                        unobs = np.exp(node.variational_parameters['locals'][name + '_log_mean'])
-                        std = np.exp(node.variational_parameters['locals'][name + '_log_std'])
-            if estimated and gene is not None:
-                gene_pos = np.where(self.adata.var_names == gene)[0][0]
-                mean = unobs
-                # Plot the variational distribution
-                xx = np.arange(-x_max, x_max, 0.001)
-                # plt.scatter(xx, stats.norm.pdf(xx, mean[14], std[14]), c=np.abs(xx))
-                plt.plot(xx, stats.norm.pdf(xx, mean[gene_pos], std[gene_pos]) - step*i, label=node.label, color=node.tssb.color, lw=4, alpha=0.7, ls=ls)
-            else:
-                plt.plot(unobs - step*i, label=node.label, color=node.tssb.color, lw=4, alpha=0.7, ls=ls)
-                plt.xticks([])
+                        try:
+                            unobs = node.variational_parameters['locals'][name + '_mean']
+                            std = np.exp(node.variational_parameters['locals'][name + '_log_std'])
+                        except KeyError:
+                            unobs = np.exp(node.variational_parameters['locals'][name + '_log_mean'])
+                            std = np.exp(node.variational_parameters['locals'][name + '_log_std'])
+                if estimated and gene is not None:
+                    gene_pos = np.where(self.adata.var_names == gene)[0][0]
+                    mean = unobs
+                    # Plot the variational distribution
+                    xx = np.arange(-x_max, x_max, 0.001)
+                    # plt.scatter(xx, stats.norm.pdf(xx, mean[14], std[14]), c=np.abs(xx))
+                    density = stats.norm.pdf(xx, mean[gene_pos], std[gene_pos])
+                    normed_density = density / np.max(density)
+                    # step = 1.5
+                    plt.plot(xx, density - step*i, label=node.label, color=node.tssb.color, lw=4, alpha=0.7, ls=ls)
+                else:
+                    plt.plot(unobs - step*i, label=node.label, color=node.tssb.color, lw=4, alpha=0.7, ls=ls)
+                    plt.xticks([])
+                tickpos.append(- step*i)
+                ticklabs.append(fr"{node.label.replace('-', '')}")
         plt.yticks(tickpos, labels=ticklabs, fontsize=fontsize)
         plt.title(title, fontsize=fontsize)
         if save is not None:
             plt.savefig(save, bbox_inches='tight')
-        plt.show()
+        if ax is None:
+            plt.show()
 
     def bulkify(self):
         self.adata.var['raw_bulk'] = np.mean(self.adata.X, axis=0)
@@ -653,8 +662,7 @@ class SCATrEx(object):
         else:
             self.adata.layers["smoothed"] = self.__smooth_expression(mat=mat, window_size=window_size, clip=clip)
 
-        if self.verbose:
-            print(f'Smoothed gene expression is stored in `self.adata.layers[\"smoothed\"]`')
+        logger.info(f'Smoothed gene expression is stored in `self.adata.layers[\"smoothed\"]`')
 
         return self.adata.obsm["smoothed"] if copy else None
 
@@ -678,10 +686,14 @@ class SCATrEx(object):
 
     def get_rankings(self, genemode='unobserved', threshold=0.5):
         term_names = self.adata.var_names
-        nodes, term_scores = self.ntssb.get_node_unobs()
+        if genemode == 'unobserved':
+            nodes, term_scores = self.ntssb.get_node_unobs()
+        elif genemode == 'observed':
+            nodes, term_scores = self.ntssb.get_node_obs()
+        else:
+            nodes, term_scores = self.ntssb.get_avg_node_exp()
         term_scores = np.abs(np.array(term_scores))
         top_terms = []
-        threshold = 0.5
         for k, node in enumerate(nodes):
             top_terms_idx = (term_scores[k]).argsort()[::-1]
             top_terms_idx = top_terms_idx[np.where(term_scores[k][top_terms_idx] >= threshold)]
@@ -725,7 +737,7 @@ class SCATrEx(object):
         for pivot in possible_pivots:
             if len(possible_pivots) == 1:
                 possible_pivots[pivot] = self.ntssb.elbo
-                print(f'Clone {clone} has only one possible parent node.')
+                logger.warning(f'Clone {clone} has only one possible parent node.')
                 break
             ntssb = deepcopy(self.ntssb)
             ntssb.pivot_reattach_to(clone, pivot.label)
@@ -741,7 +753,7 @@ class SCATrEx(object):
         return pivot_likelihoods
 
 
-    def get_cnv_exp(self, max_level=4, method=''):
+    def get_cnv_exp(self, max_level=4, method='scatrex'):
         cnv_levels = np.unique(self.observed_tree.adata.X)
         exp_levels = []
         for cnv in cnv_levels:
@@ -755,7 +767,7 @@ class SCATrEx(object):
         try:
             max_level_pos = np.where(cnv_levels>=max_level)[0][0]
         except IndexError:
-            print(f"{max_level} not present in {cnv_levels}.")
+            logger.warning(f"{max_level} not present in {cnv_levels}.")
             max_level_pos = np.argmax(cnv_levels)
         exp_levels[max_level_pos] = np.concatenate(exp_levels[max_level_pos:])
         exp_levels = exp_levels[:max_level_pos+1]
@@ -832,20 +844,33 @@ class SCATrEx(object):
 
         return sorted_discordant_genes, sorted_concordances, sorted_nodes
 
-    def plot_discordant_genes(self, sorted_discordant_genes, sorted_concordances, sorted_nodes=None, figisze=None):
-        plt.figure(figsize=figsize)
+    def plot_discordant_genes(self, sorted_discordant_genes, sorted_concordances, sorted_nodes=None, gene_annots=None, top=20, figsize=None):
+        sorted_discordant_genes = np.array(sorted_discordant_genes)[:top]
+        sorted_concordances = np.array(sorted_concordances)[:top]
         if sorted_nodes is not None:
-        for node in np.unique(sorted_nodes):
-            idx = np.where(sorted_nodes == node)[0]
-            plt.scatter(np.arange(len(sorted_concordances))[idx], -sorted_concordances[idx], label=node)
-        else:
-            plt.scatter(np.arange(len(sorted_concordances))[idx], -sorted_concordances[idx])
+            sorted_nodes = np.array(sorted_nodes)[:top]
+        if gene_annots is not None:
+            gene_annots = gene_annots[sorted_discordant_genes]
+
+        plt.figure(figsize=figsize)
         plt.axhline(1, color='gray', alpha=0.6, ls='--', label='Perfect discordance')
-        plt.legend()
+        if sorted_nodes is not None:
+            for node in np.unique(sorted_nodes):
+                idx = np.where(sorted_nodes == node)[0]
+                plt.scatter(np.arange(len(sorted_concordances))[idx], -sorted_concordances[idx], label=node, color=self.ntssb.node_dict[node]['node'].tssb.color)
+        elif gene_annots is not None:
+            for gene_annot in np.unique(gene_annots):
+                idx = np.where(gene_annots == gene_annot)[0]
+                plt.scatter(np.arange(len(sorted_concordances))[idx], -sorted_concordances[idx], label=gene_annot)
+        else:
+            plt.scatter(np.arange(len(sorted_concordances)), -sorted_concordances)
+        if sorted_nodes is not None or gene_annots is not None:
+            plt.legend()
         plt.xticks(range(len(sorted_concordances)), labels=sorted_discordant_genes)
         plt.xlabel('Discordant genes')
         plt.ylabel('Negative concordance score')
-        plt.ylim([0, np.max(-sorted_concordances) + 0.2])
+        maximum_discordance = np.max(-sorted_concordances)
+        plt.ylim([0, np.max([maximum_discordance, 1]) + 0.2])
         plt.show()
 
     def _plot_cnv_vs_state_node(self, node, mapping=None, concordances=None, state_range=[-1,1], cnv_range=[1,2,3,4],
@@ -881,33 +906,45 @@ class SCATrEx(object):
             if colorbar:
                 cbar = plt.colorbar(label='Concordance')
                 cbar.set_ticks([-1, 0, 1])
-                cbar.set_ticklabels(['-1', '0', '+1'])
+                cbar.set_ticklabels(['<= -1', '0', '>= +1'])
 
-    def plot_cnv_vs_state(self, nodes, mapping=None, concordances=None, state_range=[-1,1], cnv_range=[1,2,3,4],
+    def plot_cnv_vs_state(self, nodes=None, mapping=None, concordances=None, state_range=[-1,1], cnv_range=[1,2,3,4],
                           figsize=None, alpha=1):
         if mapping is None:
             mapping = self.get_cnv_vs_state()
 
-        if isinstance(nodes, str):
+        if nodes is None:
+            nodes = sorted(list(mapping.keys()))
+        elif isinstance(nodes, str):
             self._plot_cnv_vs_state_node(nodes, mapping=mapping, concordances=concordances,
                                     state_range=state_range, cnv_range=cnv_range, alpha=alpha)
             plt.show()
-        else:
-            fig, axes = plt.subplots(1, len(nodes), figsize=figsize, sharey=True)
-            for i, node in enumerate(nodes):
-                ylabel = 'Cell state' if i == 0 else ''
-                colorbar = True if i == len(nodes)-1 else False
-                self._plot_cnv_vs_state_node(node, mapping=mapping, concordances=concordances,
-                                        state_range=state_range, cnv_range=cnv_range,
-                                        ax=axes[i], ylabel=ylabel, colorbar=colorbar, alpha=alpha)
-            plt.show()
+            return
 
-    def get_gene_inheritance_scores_in_lineage(self, lineage, xi_threshold=0.5, chi_threshold=0.5, prob=False, direction=False, window=1, names=False, neutral=False):
+        fig, axes = plt.subplots(1, len(nodes), figsize=figsize, sharey=True)
+        for i, node in enumerate(nodes):
+            node = nodes[i]
+            ylabel = ''
+            colorbar = False
+            if i == 0:
+                ylabel = 'Cell state'
+            if i == len(nodes) - 1:
+                colorbar = True
+            self._plot_cnv_vs_state_node(node, mapping=mapping, concordances=concordances, state_range=state_range,
+                                    cnv_range=cnv_range, ax=axes[i], ylabel=ylabel,
+                                    colorbar=colorbar, alpha=alpha)
+
+        plt.show()
+
+    def get_gene_inheritance_scores_in_lineage(self, lineage, xi_threshold=0.1, chi_threshold=0.1, prob=True, direction=True, window=1, neutral=False):
         lineage_root_idx = np.where(self.adata.obs['scatrex_node'] == lineage[0])[0]
 
         genes = np.array(list(set(np.where(self.adata.layers['scatrex_om'][lineage_root_idx[0]] > chi_threshold)[0]).intersection(
                      set(np.where(np.abs(self.adata.layers['scatrex_xi'][lineage_root_idx[0]]) > xi_threshold)[0]))
-                ))
+                )).astype(int)
+
+        if len(genes) == 0:
+            raise ValueError(f'No genes had a cell state event in node {lineage[0]} with indicated thresholds.')
 
         # Filter: get only CNV-constant events in the lineage
         lineage_idx = np.where(self.adata.obs['scatrex_node'].isin(lineage))[0]
@@ -938,24 +975,24 @@ class SCATrEx(object):
                         parent_concordances.append(prob_score)
                     else: # negative absolute distance
                         parent_concordances.append(-np.abs(parent_mean-node_mean))
-            gene_name = gene
-            if names:
-                gene_name = gene_names[gene_idx]
-            gene_scores[gene_name] = np.mean(parent_concordances)
+            gene_name = gene_names[gene_idx]
+            gene_scores[gene_name] = dict(idx=gene, score=np.mean(parent_concordances))
 
         return gene_scores
 
-    def plot_state_inheritance(self, lineage, gene_scores=None, gene_step=2, node_step=1, figsize=None, ax=None):
+    def plot_state_inheritance(self, lineage, gene_scores=None, figsize=None, ax=None, **gene_scores_kwargs):
         # Plots the variational distributions of cell states across a lineage
         # Useful for identifying heritable effects
 
         if gene_scores is None:
-            gene_scores = self.get_gene_inheritance_scores_in_lineage(lineage, names=False)
+            gene_scores = self.get_gene_inheritance_scores_in_lineage(lineage, **gene_scores_kwargs)
 
         # Sort by highest scoring to lowest scoring
-        order = np.argsort(list(gene_scores.values()))[::-1]
+        scores = np.array(list(gene['score'] for gene in gene_scores.values()))
+        order = np.argsort(scores)[::-1]
+        scores = scores[order]
         genes = np.array(list(gene_scores.keys()))[order]
-        scores = np.array(list(gene_scores.values()))[order]
+        indices = np.array(list(gene['idx'] for gene in gene_scores.values()))[order]
 
         if ax is None:
             plt.figure(figsize=figsize)
@@ -963,13 +1000,17 @@ class SCATrEx(object):
             plt.sca(ax)
         plt.axhline(0, alpha=0.5, ls='--', color='gray')
         gene_offset = 0
+        node_step = 1 + 0.5 # each node's dist is normalized to height 1, plus some small offset
+        gene_length = len(lineage)*node_step
+        gene_ticks = []
         for gene_idx, gene in enumerate(genes):
-            gene_offset = gene_idx*gene_step
+            gene_offset = gene_idx*(gene_length+0.5*gene_length)
+            gene_ticks.append(gene_offset+0.5*gene_length)
             node_offset = 0
             for node_idx, node in enumerate(lineage):
                 node_offset = node_idx*node_step
-                mean = self.ntssb.node_dict[node]['node'].variational_parameters['locals']['unobserved_factors_mean'][gene]
-                std = np.exp(self.ntssb.node_dict[node]['node'].variational_parameters['locals']['unobserved_factors_log_std'][gene])
+                mean = self.ntssb.node_dict[node]['node'].variational_parameters['locals']['unobserved_factors_mean'][indices[gene_idx]]
+                std = np.exp(self.ntssb.node_dict[node]['node'].variational_parameters['locals']['unobserved_factors_log_std'][indices[gene_idx]])
                 yy = np.arange(mean-3*std, mean+3*std, 0.001)
                 label = None
                 if gene_idx == len(genes)-1:
@@ -977,29 +1018,36 @@ class SCATrEx(object):
                 pdf = stats.norm.pdf(yy, mean, std)
                 pdf = pdf / np.max(pdf)
                 plt.plot(pdf + gene_offset + node_offset, yy, label=label, color=self.ntssb.node_dict[node]['node'].tssb.color, lw=4, alpha=0.7)
-        plt.legend()
+        if ax is None:
+            plt.xticks(gene_ticks, labels=genes)
+            plt.title(' -> '.join(lineage))
+            plt.ylabel('Cell state factor')
         ax = plt.gca()
-        return ax
+        return ax, gene_ticks
 
-    def plot_state_inheritance2(self, lineage, gene_scores=None, gene_step=2, node_step=1, figsize=None, ax=None):
+    def plot_state_inheritance_scores(self, lineage, gene_scores=None, figsize=None, **gene_scores_kwargs):
         # Includes actual scores as a subplot
+        if gene_scores is None:
+            gene_scores = self.get_gene_inheritance_scores_in_lineage(lineage, **gene_scores_kwargs)
 
         # Sort by highest scoring to lowest scoring
-        order = np.argsort(list(gene_scores.values()))[::-1]
+        scores = np.array(list(gene['score'] for gene in gene_scores.values()))
+        order = np.argsort(scores)[::-1]
+        scores = scores[order]
         genes = np.array(list(gene_scores.keys()))[order]
-        scores = np.array(list(gene_scores.values()))[order]
 
         fig, axes = plt.subplots(2, 1, sharex=True, figsize=figsize)
-        ax = self.plot_state_inheritance(lineage, gene_scores=gene_scores, gene_step=5, node_step=1.5, ax=axes[0])
-        ax.set_title('B->C transition')
-        plt.axhline(0, alpha=0.5, ls='--', color='gray')
+        ax, gene_ticks = self.plot_state_inheritance(lineage, gene_scores=gene_scores, ax=axes[0])
+
+        ax.set_title(' -> '.join(lineage))
+        ax.set_ylabel('Cell state factor')
 
         plt.sca(axes[1])
-        plt.bar(np.arange(1, 1+len(genes)*5, 5), scores)
+        plt.bar(gene_ticks, scores)
         plt.ylabel('Heritability score')
         plt.xlabel(f'State-affected genes in {lineage[0]}')
-        plt.xticks(np.arange(1, 1+len(genes)*5, 5), labels=self.adata.var_names[genes])
-        return axes
+        plt.xticks(gene_ticks, labels=genes)
+        plt.show()
 
     def plot_cnv_inheritance(self):
         # Plots the combined effect of each CNV across a lineage

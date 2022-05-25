@@ -25,6 +25,9 @@ from .tssb import TSSB
 
 import time
 
+import logging
+logger = logging.getLogger(__name__)
+
 class NTSSB(object):
     """
     Takes as input a dictionary of {node_label: parent_label} pairs.
@@ -54,7 +57,7 @@ class NTSSB(object):
 
     def __init__(self, input_tree, node_constructor, dp_alpha=1.0, dp_gamma=1.0, alpha_decay=1.0,
                         min_depth=0, max_depth=15, fixed_weights_pivot_sampling=True, use_weights=True,
-                        node_hyperparams=dict()):
+                        verbosity=logging.INFO, node_hyperparams=dict()):
         if input_tree is None:
             raise Exception("Input tree must be specified.")
 
@@ -85,6 +88,8 @@ class NTSSB(object):
         self.obs_cmap = self.input_tree.cmap
         self.exp_cmap = matplotlib.cm.viridis
         self.gene_node_colormaps = dict()
+
+        logger.setLevel(verbosity)
 
         self.reset_tree(use_weights=use_weights, node_hyperparams=node_hyperparams)
 
@@ -229,7 +234,7 @@ class NTSSB(object):
     def add_data(self, data, to_root=False):
         self.data        = data
         self.num_data    = 0 if data is None else data.shape[0]
-        print(f'Adding data of shape {data.shape} to NTSSB')
+        logger.debug(f'Adding data of shape {data.shape} to NTSSB')
 
         self.assignments = []
 
@@ -826,8 +831,6 @@ class NTSSB(object):
         nu_sticks = jnp.exp(init_nu_log_alphas) / (jnp.exp(init_nu_log_alphas) + jnp.exp(init_nu_log_betas))
         psi_sticks = jnp.exp(init_psi_log_alphas) / (jnp.exp(init_psi_log_alphas) + jnp.exp(init_psi_log_betas))
 
-        print(nu_sticks, psi_sticks)
-
         logpis = []
         for i, node in enumerate(nodes):
             logpis.append(self.tssb_log_prior(i, nu_sticks, psi_sticks, previous_branches_indices, ancestor_nodes_indices, tssb_weights))
@@ -861,13 +864,13 @@ class NTSSB(object):
 
     @partial(jit, static_argnums=(0,16))
     def objective(self, obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, node_mask, data_mask_subset, indices, do_global, global_only, sticks_only, num_samples, params, t):
-        print("Recompiling objective!")
+        logger.debug("Recompiling objective!")
         rng = random.PRNGKey(t)
         return -self.batch_elbo(rng, obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, node_mask, data_mask_subset, indices, do_global, global_only, sticks_only, params, num_samples)
 
     @partial(jit, static_argnums=(0,14))
     def batch_objective(self, obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, node_mask, do_global, global_only, sticks_only, num_samples, params, t):
-        print("Recompiling batch objective!")
+        logger.debug("Recompiling batch objective!")
         rng = random.PRNGKey(t)
         # Average over a batch of random samples from the var approx.
         rngs = random.split(rng, num_samples)
@@ -1027,9 +1030,9 @@ class NTSSB(object):
         # print([cnv[0] for cnv in cnvs])
 
         if not do_global:
-            print("Won't take derivatives wrt global parameters")
+            logger.debug("Won't take derivatives wrt global parameters")
         elif global_only:
-            print("Won't take derivatives wrt local parameters")
+            logger.debug("Won't take derivatives wrt local parameters")
 
         do_global = do_global * jnp.array(1.)
         global_only = global_only * jnp.array(1.)
@@ -1093,19 +1096,19 @@ class NTSSB(object):
                 try:
                     callback(elbos, **callback_kwargs)
                 except StopIteration as e:
-                    print(e)
+                    logger.debug(f"Stopped optimization at iteration {t}/{n_iters}")
                     break
 
 
             # Without node mask
             # start = time.time()
             ret = self.batch_objective(obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, all_nodes_mask,
-                                    jnp.array(1.), jnp.array(0.), jnp.array(0.), num_samples, get_params(opt_state), 10)
+                                    jnp.array(1.), jnp.array(0.), jnp.array(0.), num_samples, get_params(opt_state), 0)
             # end = time.time()
             # print(f"batch_objective: {end-start}")
-            self.elbo = np.array(ret[0])
-            self.ll = np.array(ret[1])
-            self.kl = np.array(ret[2])
+            self.elbo = np.array(ret[0]).item()
+            self.ll = np.array(ret[1]).item()
+            self.kl = np.array(ret[2]).item()
             self.node_kl = np.array(ret[3])
 
             # Weigh by tree prior
@@ -1128,17 +1131,17 @@ class NTSSB(object):
 
             # start = time.time()
             self.set_node_means(get_params(opt_state), nodes, local_names, global_names, node_mask=node_mask, do_global=do_global)
-            self.update_ass_logits(indices=sub_data_indices, variational=True, node_mask=node_mask)
+            self.update_ass_logits(nodes=nodes, indices=sub_data_indices, variational=True)
             self.assign_to_best(nodes=nodes)
             # end = time.time()
             # print(f"last part: {end-start}")
             return elbos
         else:
             ret = self.batch_objective(obs_params, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, all_nodes_mask,
-                                    jnp.array(1.), jnp.array(0.), jnp.array(0.), num_samples, get_params(opt_state), 10)
-            self.elbo = np.array(ret[0])
-            self.ll = np.array(ret[1])
-            self.kl = np.array(ret[2])
+                                    jnp.array(1.), jnp.array(0.), jnp.array(0.), num_samples, get_params(opt_state), 0)
+            self.elbo = np.array(ret[0]).item()
+            self.ll = np.array(ret[1]).item()
+            self.kl = np.array(ret[2]).item()
             self.node_kl = np.array(ret[3])
 
             # Weigh by tree prior
@@ -1172,22 +1175,20 @@ class NTSSB(object):
                 nodes[node_idx].variational_parameters['locals'][local_param] = np.array(params[i][node_idx])
             nodes[node_idx].set_mean(variational=True)
 
-    def update_ass_logits(self, indices=None, variational=False, prior=True, node_mask=None):
+    def update_ass_logits(self, nodes=None, indices=None, variational=False, prior=True):
         # start = time.time()
         if indices is None:
             indices = list(range(self.num_data))
 
-        nodes, weights = self.get_node_mixture()
+        ns, weights = self.get_node_mixture()
+        if nodes is None:
+            nodes = ns
 
-        if node_mask is None:
-            node_indices = np.arange(len(nodes))
-        else:
-            node_indices = np.where(node_mask==1)[0]
-
-        for node_idx in node_indices:
-            node_lls = nodes[node_idx].loglh(np.array(indices), variational=variational, axis=1)
-            node_lls = node_lls + np.log(weights[node_idx] + 1e-6) if prior else node_lls
-            nodes[node_idx].data_ass_logits[np.array(indices)] = node_lls
+        for i, node in enumerate(ns):
+            if node in nodes:
+                node_lls = node.loglh(np.array(indices), variational=variational, axis=1)
+                node_lls = node_lls + np.log(weights[i] + 1e-6) if prior else node_lls
+                node.data_ass_logits[np.array(indices)] = node_lls
         # print(f"update_ass_logits: {time.time()-start}")
 
     def assign_to_best(self, nodes=None):
@@ -1242,7 +1243,7 @@ class NTSSB(object):
 
             if factor_idx is not None:
                 target_genes = np.argsort(np.abs(self.root['node'].root['node'].variational_parameters['globals']['noise_factors_mean'][factor_idx]))[-5:]
-                root['children'][-1]['node'].variational_parameters['locals']['unobserved_factors_kernel_log_mean'][target_genes] = 1.
+                root['children'][-1]['node'].variational_parameters['locals']['unobserved_factors_kernel_log_mean'][target_genes] = -1.
                 # root['children'][-1]['node'].variational_parameters['locals']['unobserved_factors_mean'] = self.root['node'].root['node'].variational_parameters['globals']['noise_factors_mean'][factor_idx]
                 # root['children'][-1]['node'].set_mean(root['children'][-1]['node'].get_mean(unobserved_factors=root['children'][-1]['node'].variational_parameters['locals']['unobserved_factors_mean'], baseline=baseline))
             else:
@@ -1262,7 +1263,7 @@ class NTSSB(object):
                 if len(data_indices) > 0:
                     data_in_node = np.array(self.data)[data_indices]
                     target_genes = np.argsort(np.var(np.log(data_in_node + 1), axis=0))[-5:]
-                    root['children'][-1]['node'].variational_parameters['locals']['unobserved_factors_kernel_log_mean'][target_genes] = 1.
+                    root['children'][-1]['node'].variational_parameters['locals']['unobserved_factors_kernel_log_mean'][target_genes] = -1.
 
 
         return root['children'][-1]['node']
@@ -1282,7 +1283,7 @@ class NTSSB(object):
             index = np.random.choice(np.array(data_indices))
             # worst_index = np.argmin(root['node'].data_ass_logits[data_indices])
             # worst_index = np.random.choice(np.array(data_indices)[np.array([np.argsort(target.data_ass_logits[data_indices])[:5]])].ravel())
-            print(f'Setting node to explain datum {index}')
+            logger.debug(f'Setting node to explain datum {index}')
             worst_datum = self.data[index]
             baseline = np.append(1, np.exp(self.root['node'].root['node'].log_baseline_caller()))
             noise = self.root['node'].root['node'].variational_parameters['globals']['cell_noise_mean'][index].dot(self.root['node'].root['node'].variational_parameters['globals']['noise_factors_mean'])
@@ -1340,7 +1341,7 @@ class NTSSB(object):
         # Reset kernel variational parameters
         n_genes = node.cnvs.size
         # node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.log(node.unobserved_factors_kernel_concentration_caller())*np.ones((n_genes,))
-        node.variational_parameters['locals']['unobserved_factors_kernel_log_std'] = -2.* np.ones((n_genes,))
+        # node.variational_parameters['locals']['unobserved_factors_kernel_log_std'] += .5
 
     def pivot_reattach_to(self, subtree, pivot):
         nodes = self._get_nodes(get_roots=False)
@@ -1365,7 +1366,7 @@ class NTSSB(object):
         subtrees[subtree_idx][1]['pivot_node'] = pivot_node
 
         # prev_unobserved_factors = root_node[0].unobserved_factors_mean
-        root_node.variational_parameters['locals']['unobserved_factors_kernel_log_std'] = -2*np.ones((root_node.n_genes,))
+        # root_node.variational_parameters['locals']['unobserved_factors_kernel_log_std'] += .5
         root_node.set_parent(pivot_node, reset=False)
         root_node.set_mean(variational=True)
         # Reset the kernel posterior
@@ -1398,12 +1399,19 @@ class NTSSB(object):
         # Add node below parent
         new_node = self.add_node_to(parent_node)
         paramsB = np.array(node.variational_parameters['locals']['unobserved_factors_mean'])
+        paramsB_std = np.array(node.variational_parameters['locals']['unobserved_factors_log_std'])
         paramsB_k = np.array(node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'])
+        paramsB_k_std = np.array(node.variational_parameters['locals']['unobserved_factors_kernel_log_std'])
 
         # Set new node's parameters equal to the previous parameters of node
         new_node.variational_parameters['locals']['unobserved_factors_mean'] = np.array(paramsB)
+        new_node.variational_parameters['locals']['unobserved_factors_log_std'] = np.array(paramsB_std)
         new_node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.array(paramsB_k)
+        new_node.variational_parameters['locals']['unobserved_factors_kernel_log_std'] = np.array(paramsB_k_std)
         new_node.set_mean(variational=True)
+
+        # Increase the kernel of node a bit to help the useless events disappear
+        # node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] *= 1.
 
         # Make room for the child
         new_node.parent().variational_parameters['locals']['nu_log_mean'] = np.array(0.)
@@ -1415,8 +1423,13 @@ class NTSSB(object):
 
         # Open up subtree root's parameters
         n_genes = node.cnvs.size
-        node.variational_parameters['locals']['unobserved_factors_log_std'] = -1 * np.ones((n_genes,))
-        node.variational_parameters['locals']['unobserved_factors_kernel_log_std'] = -1 * np.ones((n_genes,))
+
+        # Remove kernel from most affected genes in node -- they are now explained by the top
+        affected_genes = np.where(np.abs(node.variational_parameters['locals']['unobserved_factors_mean']) > 0.5)[0]
+        node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'][affected_genes] = np.log(node.unobserved_factors_kernel_concentration_caller())
+
+        # node.variational_parameters['locals']['unobserved_factors_log_std'] += .5
+        # node.variational_parameters['locals']['unobserved_factors_kernel_log_std'] += .5
 
         return new_node
 
@@ -1447,13 +1460,13 @@ class NTSSB(object):
         # Add node below parent
         new_node = self.add_node_to(parent_node)
         self.pivot_reattach_to(node.tssb, new_node)
-        paramsB = node.variational_parameters['locals']['unobserved_factors_mean']
-        paramsB_k = node.variational_parameters['locals']['unobserved_factors_kernel_log_mean']
+        paramsB = np.array(node.variational_parameters['locals']['unobserved_factors_mean'])
+        paramsB_k = np.array(node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'])
         dataB = node.data.copy()
         logitsB = np.array(node.data_ass_logits)
         if child_node:
-            node.variational_parameters['locals']['unobserved_factors_mean'] = child_node.variational_parameters['locals']['unobserved_factors_mean']
-            node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = child_node.variational_parameters['locals']['unobserved_factors_kernel_log_mean']
+            node.variational_parameters['locals']['unobserved_factors_mean'] = np.array(child_node.variational_parameters['locals']['unobserved_factors_mean'])
+            node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.array(child_node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'])
             node.data = child_node.data.copy()
             node.data_ass_logits = np.array(child_node.data_ass_logits)
             # Merge B with child that it has become equal to
@@ -1461,16 +1474,58 @@ class NTSSB(object):
         node.set_mean(variational=True)
 
         # Set new node's parameters equal to the previous parameters of node
-        new_node.variational_parameters['locals']['unobserved_factors_mean'] = paramsB
-        new_node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = paramsB_k
+        new_node.variational_parameters['locals']['unobserved_factors_mean'] = np.array(paramsB)
+        new_node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.array(paramsB_k)
         new_node.set_mean(variational=True)
         if child_node:
             new_node.data = dataB.copy()
             new_node.data_ass_logits = np.array(logitsB)
 
-    def swap_nodes(self, nodeA, nodeB):
+    def path_to_node(self, node):
+        path = []
+        path.append(node)
+        parent = node.parent()
+        while parent is not None:
+            path.append(parent)
+            parent = parent.parent()
+        return path[::-1][:]
+
+    def get_mrca(self, nodeA, nodeB):
+        pathA = np.array(self.path_to_node(nodeA))
+        pathB = np.array(self.path_to_node(nodeB))
+        path = []
+        # Get MRCA
+        i = -1
+        for node in pathA:
+            if node in pathB:
+                i += 1
+            else:
+                break
+        mrca = pathA[i]
+        return mrca
+
+    def path_between_nodes(self, nodeA, nodeB):
+        pathA = np.array(self.path_to_node(nodeA))
+        pathB = np.array(self.path_to_node(nodeB))
+        path = []
+        # Get MRCA
+        i = -1
+        for node in pathA:
+            if node in pathB:
+                i += 1
+            else:
+                break
+        mrca = pathA[i]
+        pathA = np.array(pathA[::-1])
+        # Get path from A to MRCA
+        path = path + list(pathA[:np.where(pathA == mrca)[0][0]])
+        # Get path from MRCA to B
+        path = path + list(pathB[np.where(pathB == mrca)[0][0]:])
+        return path
+
+    def swap_nodes(self, nodeA, nodeB, update_pivots=True):
+        self.plot_tree(super_only=False);
         if isinstance(nodeA, str) and isinstance(nodeB, str):
-            self.plot_tree(super_only=False);
             nodes = self.get_nodes(None)
             node_labels = np.array([node.label for node in nodes])
             nodeA = nodes[np.where(node_labels == nodeA)[0][0]]
@@ -1489,17 +1544,60 @@ class NTSSB(object):
             non_root_node = nodeA
 
         def swap_params(nA, nB):
-            paramsA = nA.variational_parameters['locals']['unobserved_factors_mean']
-            paramsA_k = nA.variational_parameters['locals']['unobserved_factors_kernel_log_mean']
+            params_names = list(nA.variational_parameters['locals'].keys())
+            paramsA_list = [np.array(nA.variational_parameters['locals'][key]) for key in params_names]
+            # paramsA = np.array(nA.variational_parameters['locals']['unobserved_factors_mean'])
+            paramsA_k = np.array(nA.variational_parameters['locals']['unobserved_factors_kernel_log_mean'])
+            # nu_sticksA = np.array(nA.variational_parameters['locals']['nu_log_mean'])
+            # psi_sticksA = np.array(nA.variational_parameters['locals']['psi_log_mean'])
+            paramsB_k = np.array(nB.variational_parameters['locals']['unobserved_factors_kernel_log_mean'])
+            params_k = np.array([paramsA_k, paramsB_k])
+            # We will initialize the kernels to be the one with the most events, just in case
+            top_k_idx = np.argmax(np.array([np.var(paramsA_k), np.var(paramsB_k)]))
+
+            # Relax kernel of intermediate nodes
+            int_nodes = []
+            if nA.label in nB.label:
+                n = nB
+                while True:
+                    n = n.parent()
+                    if n == nA:
+                        break
+                    else:
+                        int_nodes.append(n)
+            elif nB.label in nA.label:
+                n = nA
+                while True:
+                    n = n.parent()
+                    if n == nB:
+                        break
+                    else:
+                        int_nodes.append(n)
+            if len(int_nodes) > 0:
+                for node in int_nodes:
+                    node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.clip(params_k[top_k_idx], -3, 10)
+
             dataA = nA.data.copy()
             logitsA = np.array(nA.data_ass_logits)
-            nA.variational_parameters['locals']['unobserved_factors_mean'] = nB.variational_parameters['locals']['unobserved_factors_mean']
-            nA.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = nB.variational_parameters['locals']['unobserved_factors_kernel_log_mean']
+            for param in params_names:
+                nA.variational_parameters['locals'][param] = np.array(nB.variational_parameters['locals'][param])
+            nA.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.array(params_k[top_k_idx])
+            if nA == nB.parent():
+                # If one is a child of the other, the child should not have high kernel where parent does
+                parent_events = np.where(np.abs(nA.variational_parameters['locals']['unobserved_factors_mean']) < 0.1)[0]
+                nA.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.array(nA.variational_parameters['locals']['unobserved_factors_kernel_log_mean'])
+                nA.variational_parameters['locals']['unobserved_factors_kernel_log_mean'][parent_events] -= 1
             nA.data = nB.data.copy()
             nA.data_ass_logits = np.array(nB.data_ass_logits)
             nA.set_mean(variational=True)
-            nB.variational_parameters['locals']['unobserved_factors_mean'] = paramsA
-            nB.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = paramsA_k
+            for i, param in enumerate(params_names):
+                nB.variational_parameters['locals'][param] = np.array(paramsA_list[i])
+            nB.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.array(params_k[top_k_idx])
+            if nB == nA.parent():
+                # If one is a child of the other, the child should not have high kernel where parent does
+                parent_events = np.where(np.abs(nB.variational_parameters['locals']['unobserved_factors_mean']) < 0.1)[0]
+                nB.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.array(nB.variational_parameters['locals']['unobserved_factors_kernel_log_mean'])
+                nB.variational_parameters['locals']['unobserved_factors_kernel_log_mean'][parent_events] -= 1
             nB.data = dataA.copy()
             nB.data_ass_logits = np.array(logitsA)
             nB.set_mean(variational=True)
@@ -1512,78 +1610,91 @@ class NTSSB(object):
                 if nodeA.parent() == nodeB or nodeB.parent() == nodeA:
                     unobserved_node_idx = np.where([not nodeA.is_observed, not nodeB.is_observed])[0]
                     if len(unobserved_node_idx) > 1:
-                        print("Warning: both nodes to swap are unobserved but are part of different TSSBs:")
-                        print(f"{nodeA.label}: {nodeA.tssb.label}, {nodeB.label}: {nodeB.tssb.label}")
-                        print("Proceeding without swapping.")
+                        logger.debug("Warning: both nodes to swap are unobserved but are part of different TSSBs:")
+                        logger.debug(f"{nodeA.label}: {nodeA.tssb.label}, {nodeB.label}: {nodeB.tssb.label}")
+                        logger.debug("Proceeding without swapping.")
                         return
                     elif len(unobserved_node_idx) == 1:
-                        # change A -> A-0 -> B to A-> B -> B-0:
+                        # change A -> A-0 -> B to A-> B -> B-0: and put params of A-0 in B and of B in B-0
                         unobserved_node_idx = unobserved_node_idx[0]
                         unobserved_node = [nodeA, nodeB][unobserved_node_idx]
                         observed_node = [nodeA, nodeB][1 - unobserved_node_idx]
                         parent_unobserved = unobserved_node.parent()
-                        # if unobserved node is parent of more than one subtree, don't proceed with full swap
+                        # if unobserved node is parent of more than one subtree, update pivot of the others to parent of unobserved_node
                         unobserved_node_children = unobserved_node.children()
-                        if not (np.sum(np.array([child.is_observed for child in unobserved_node_children])) > 1):
-                            # Update params
-                            init_obs_params = observed_node.variational_parameters['locals']['unobserved_factors_mean']
-                            observed_node.variational_parameters['locals']['unobserved_factors_mean'] = parent_unobserved.variational_parameters['locals']['unobserved_factors_mean']
-                            unobserved_node.variational_parameters['locals']['unobserved_factors_mean'] = init_obs_params
-                            observed_node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.log(observed_node.unobserved_factors_kernel_concentration_caller())*np.ones((observed_node.n_genes,))
-                            unobserved_node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.log(unobserved_node.unobserved_factors_kernel_concentration_caller())*np.ones((unobserved_node.n_genes,))
+                        if (np.sum(np.array([child.is_observed for child in unobserved_node_children])) > 1):
+                            for child in list(unobserved_node_children):
+                                if child.is_observed:
+                                    self.pivot_reattach_to(child.tssb, parent_unobserved)
+                        # if not (np.sum(np.array([child.is_observed for child in unobserved_node_children])) > 1):
+                        # Update params
+                        # init_obs_params = observed_node.variational_parameters['locals']['unobserved_factors_mean']
+                        # observed_node.variational_parameters['locals']['unobserved_factors_mean'] = parent_unobserved.variational_parameters['locals']['unobserved_factors_mean']
+                        # unobserved_node.variational_parameters['locals']['unobserved_factors_mean'] = init_obs_params
+                        swap_params(nodeA, nodeB)
+                        # observed_node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] += 2#np.log(observed_node.unobserved_factors_kernel_concentration_caller())*np.ones((observed_node.n_genes,))
+                        # unobserved_node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] += 2#np.log(unobserved_node.unobserved_factors_kernel_concentration_caller())*np.ones((unobserved_node.n_genes,))
 
-                            # Put same-subtree children of unobserved node in its parent in order to not move a whole subtree
-                            nodes = self._get_nodes(get_roots=True)
-                            unobserved_node_tssb_root = [node[1] for node in nodes if node[0] == unobserved_node][0]
-                            parent_unobserved_node_tssb_root = [node[1] for node in nodes if node[0] == parent_unobserved][0]
-                            for i, unobs_child in enumerate(unobserved_node_tssb_root['children']):
-                                unobs_child['node'].set_parent(unobserved_node.parent())
-                                # Add children from unobserved to the parent dict
-                                parent_unobserved_node_tssb_root['children'].append(unobs_child)
-                                parent_unobserved_node_tssb_root['sticks'] = np.vstack([ parent_unobserved_node_tssb_root['sticks'], unobserved_node_tssb_root['sticks'][i] ])
-                            if len(unobserved_node_tssb_root['children']) > 0:
-                                # Remove children from unobserved
-                                unobserved_node_tssb_root['sticks']   = np.array([]).reshape(0,1)
-                                unobserved_node_tssb_root['children'] = []
+                        # Put same-subtree children of unobserved node in its parent in order to not move a whole subtree
+                        nodes = self._get_nodes(get_roots=True)
+                        unobserved_node_tssb_root = [node[1] for node in nodes if node[0] == unobserved_node][0]
+                        parent_unobserved_node_tssb_root = [node[1] for node in nodes if node[0] == parent_unobserved][0]
+                        for i, unobs_child in enumerate(unobserved_node_tssb_root['children']):
+                            unobs_child['node'].set_parent(unobserved_node.parent())
+                            # Add children from unobserved to the parent dict
+                            parent_unobserved_node_tssb_root['children'].append(unobs_child)
+                            parent_unobserved_node_tssb_root['sticks'] = np.vstack([ parent_unobserved_node_tssb_root['sticks'], unobserved_node_tssb_root['sticks'][i] ])
+                        if len(unobserved_node_tssb_root['children']) > 0:
+                            # Remove children from unobserved
+                            unobserved_node_tssb_root['sticks']   = np.array([]).reshape(0,1)
+                            unobserved_node_tssb_root['children'] = []
 
-                            # Now move the unobserved node to below the observed one
-                            observed_node.set_parent(parent_unobserved)
-                            unobserved_node.set_parent(observed_node)
-                            unobserved_node.tssb = observed_node.tssb
-                            unobserved_node.cnvs = observed_node.cnvs
-                            unobserved_node.observed_parameters = observed_node.observed_parameters
-                            n_siblings = len(list(observed_node.children()))
-                            unobserved_node.label = observed_node.label + '-' + str(n_siblings-1)
+                        # Now move the unobserved node to below the observed one
+                        observed_node.set_parent(parent_unobserved)
+                        unobserved_node.set_parent(observed_node)
+                        unobserved_node.tssb = observed_node.tssb
+                        unobserved_node.cnvs = observed_node.cnvs
+                        unobserved_node.observed_parameters = observed_node.observed_parameters
+                        n_siblings = len(list(observed_node.children()))
+                        unobserved_node.label = observed_node.label + '-' + str(n_siblings-1)
 
-                            nodes = self._get_nodes(get_roots=True)
-                            unobserved_node_tssb_root = [node[1] for node in nodes if node[0] == unobserved_node][0]
-                            parent_unobserved_node_tssb_root = [node[1] for node in nodes if node[0] == parent_unobserved][0]
+                        nodes = self._get_nodes(get_roots=True)
+                        unobserved_node_tssb_root = [node[1] for node in nodes if node[0] == unobserved_node][0]
+                        parent_unobserved_node_tssb_root = [node[1] for node in nodes if node[0] == parent_unobserved][0]
 
-                            # Update dicts
-                            # Remove unobserved_node from its parent dict
-                            childnodes = np.array([n['node'] for n in parent_unobserved_node_tssb_root['children']])
-                            tokeep = np.where(childnodes != unobserved_node_tssb_root['node'])[0].astype(int).ravel()
-                            parent_unobserved_node_tssb_root['sticks']   = parent_unobserved_node_tssb_root['sticks'][tokeep]
-                            parent_unobserved_node_tssb_root['children'] = list(np.array(parent_unobserved_node_tssb_root['children'])[tokeep])
-                            # Update observed_node's pivot_node to unobserved_node's parent
-                            observed_node_ntssb_root = observed_node.tssb.get_ntssb_root()
-                            observed_node_ntssb_root['pivot_node'] = parent_unobserved
-                            # Add unobserved_node to observed_node's dict
-                            observed_node_tssb_root = observed_node_ntssb_root['node'].root
-                            observed_node_tssb_root['children'].append(unobserved_node_tssb_root)
-                            observed_node_tssb_root['sticks'] = np.vstack([observed_node_tssb_root['sticks'], 1.])
+                        # Update dicts
+                        # Remove unobserved_node from its parent dict
+                        childnodes = np.array([n['node'] for n in parent_unobserved_node_tssb_root['children']])
+                        tokeep = np.where(childnodes != unobserved_node_tssb_root['node'])[0].astype(int).ravel()
+                        parent_unobserved_node_tssb_root['sticks']   = parent_unobserved_node_tssb_root['sticks'][tokeep]
+                        parent_unobserved_node_tssb_root['children'] = list(np.array(parent_unobserved_node_tssb_root['children'])[tokeep])
+                        # Update observed_node's pivot_node to unobserved_node's parent
+                        observed_node_ntssb_root = observed_node.tssb.get_ntssb_root()
+                        observed_node_ntssb_root['pivot_node'] = parent_unobserved
+                        # Add unobserved_node to observed_node's dict
+                        observed_node_tssb_root = observed_node_ntssb_root['node'].root
+                        observed_node_tssb_root['children'].append(unobserved_node_tssb_root)
+                        observed_node_tssb_root['sticks'] = np.vstack([observed_node_tssb_root['sticks'], 1.])
                 else: # random swap: change data and parameters
                     swap_params(nodeA, nodeB)
         else: # e.g. A with A-0
-            init_baseline = np.mean(self.data / np.sum(self.data, axis=1).reshape(-1,1) * self.data.shape[1], axis=0)
-            init_baseline = init_baseline / init_baseline[0]
-            init_log_baseline = np.log(init_baseline[1:] + 1e-6)
-            root_node.variational_parameters['globals']['log_baseline_mean'] = init_log_baseline
+            # init_baseline = np.mean(self.data / np.sum(self.data, axis=1).reshape(-1,1) * self.data.shape[1], axis=0)
+            # init_baseline = init_baseline / init_baseline[0]
+            # init_log_baseline = np.log(init_baseline[1:] + 1e-6)
+            init_bs = np.array(root_node.variational_parameters['globals']['log_baseline_mean'] - np.mean(root_node.variational_parameters['globals']['log_baseline_mean']))
+            root_node.variational_parameters['globals']['log_baseline_mean'] = np.log(non_root_node.node_mean / non_root_node.node_mean[0])[1:]
             root_node.variational_parameters['locals']['unobserved_factors_mean'] = np.zeros((self.data.shape[1],))
+            root_node.variational_parameters['locals']['unobserved_factors_log_std'] = np.zeros((self.data.shape[1],)) - 2
             root_node.set_mean(variational=True)
-
-            non_root_node.variational_parameters['locals']['unobserved_factors_mean'] = np.clip(normal_sample(0., gamma_sample(root_node.unobserved_factors_kernel_concentration_caller(),
-                                                                                                root_node.unobserved_factors_kernel_concentration_caller(), size=self.data.shape[1])), a_min=-5, a_max=5)
+            non_root_node_init_psi = np.array(non_root_node.variational_parameters['locals']['unobserved_factors_mean'])
+            nodes = self.get_nodes()[1:]
+            for node in nodes:
+                node.variational_parameters['locals']['unobserved_factors_mean'] -= non_root_node_init_psi
+                # node.variational_parameters['locals']['unobserved_factors_log_std'] += .5
+                # node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] += 1
+                # node.variational_parameters['locals']['unobserved_factors_kernel_log_std'] += .5
+            # non_root_node.variational_parameters['locals']['unobserved_factors_mean'] = np.clip(normal_sample(0., gamma_sample(root_node.unobserved_factors_kernel_concentration_caller(),
+            #                                                                                     root_node.unobserved_factors_kernel_concentration_caller(), size=self.data.shape[1])), a_min=-5, a_max=5)
             data_indices = list(root_node.data)
             if len(data_indices) > 0:
                 # idx = np.random.choice(np.array(data_indices))
@@ -1593,10 +1704,15 @@ class NTSSB(object):
                 # total_rna = np.sum(baseline * non_root_node.cnvs/2 * np.exp(root_node.variational_parameters['locals']['unobserved_factors_mean']))
                 # non_root_node.variational_parameters['locals']['unobserved_factors_mean'] = np.log((datum+1) * total_rna/(root_node.lib_sizes[idx]*baseline * root_node.cnvs/2))
                 non_root_node.variational_parameters['locals']['unobserved_factors_mean'] = np.zeros((self.data.shape[1],))
+                new_bs = np.array(root_node.variational_parameters['globals']['log_baseline_mean'] - np.mean(root_node.variational_parameters['globals']['log_baseline_mean']))
+                non_root_node.variational_parameters['locals']['unobserved_factors_mean'][1:] = np.array(init_bs-new_bs)
                 non_root_node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.log(root_node.unobserved_factors_kernel_concentration_caller())*np.ones((self.data.shape[1],))
                 data_in_node = np.array(self.data)[data_indices]
-                target_genes = np.argsort(np.var(np.log(data_in_node + 1), axis=0))[-5:]
-                non_root_node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'][target_genes] = 1.
+                target_genes_1 = np.argsort(np.var(np.log(data_in_node + 1), axis=0))[-5:]
+                target_genes_2 = np.where(np.abs(non_root_node.variational_parameters['locals']['unobserved_factors_mean']) > 0.5)[0]
+                target_genes = np.unique(np.concatenate([np.array(target_genes_1), np.array(target_genes_2)]))
+                non_root_node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'][target_genes] = -1.
+
             non_root_node.set_mean(variational=True)
             dataRoot = root_node.data.copy()
             logitsRoot = np.array(root_node.data_ass_logits)
@@ -1605,18 +1721,31 @@ class NTSSB(object):
             non_root_node.data = dataRoot.copy()
             non_root_node.data_ass_logits = np.array(logitsRoot)
 
-        if nodeA.tssb == nodeB.tssb:
-            root = nodeB.tssb.get_ntssb_root()
-            # For each subtree, if pivot was swapped, update it
-            for child in root['children']:
-                if child['pivot_node'] == nodeA:
-                    child['pivot_node'] = nodeB
-                    child['node'].root['node'].set_parent(nodeB, reset=False)
-                    child['node'].root['node'].set_mean(variational=True)
-                elif child['pivot_node'] == nodeB:
-                    child['pivot_node'] = nodeA
-                    child['node'].root['node'].set_parent(nodeA, reset=False)
-                    child['node'].root['node'].set_mean(variational=True)
+            nodeA_children = [node for node in list(nodeA.children()) if not node.is_observed and node != nodeB]
+            nodeB_children = [node for node in list(nodeB.children()) if not node.is_observed and node != nodeA]
+
+            if not non_root_node.is_observed:
+                if non_root_node.parent() == root_node:
+                    # Go through children of nodeA and set them as children of nodeB and vice-versa
+                    for nodeA_child in nodeA_children:
+                        self.prune_reattach(nodeA_child, nodeB)
+
+                    for nodeB_child in nodeB_children:
+                        self.prune_reattach(nodeB_child, nodeA)
+
+        if update_pivots:
+            if nodeA.tssb == nodeB.tssb:
+                root = nodeB.tssb.get_ntssb_root()
+                # For each subtree, if pivot was swapped, update it
+                for child in root['children']:
+                    if child['pivot_node'] == nodeA:
+                        child['pivot_node'] = nodeB
+                        child['node'].root['node'].set_parent(nodeB, reset=False)
+                        child['node'].root['node'].set_mean(variational=True)
+                    elif child['pivot_node'] == nodeB:
+                        child['pivot_node'] = nodeA
+                        child['node'].root['node'].set_parent(nodeA, reset=False)
+                        child['node'].root['node'].set_mean(variational=True)
 
     # def swap_nodes(self, nodeA, nodeB):
     #     if isinstance(nodeA, str) and isinstance(nodeB, str):
@@ -1736,54 +1865,126 @@ class NTSSB(object):
         nodeA_root = nodes[nodeA_idx][1]
         nodeB_root = nodes[nodeB_idx][1]
         nodeA_parent_root = nodes[np.where(np.array(nodes) == nodeA.parent())[0][0]][1]
-
-        # Move child nodes of nodeA to nodeB and remove nodeA
-        n_childrenA = len(nodeA_root['children'])
-        n_childrenB = len(nodeB_root['children'])
-        for i, nodeA_child in enumerate(nodeA_root['children']):
-            nodeA_child['node'].set_parent(nodeB_root['node'], reset=False)
-            nodeA_child['node'].set_mean(variational=True)
-            nodeB_root['children'].append(nodeA_child)
-            nodeB_root['sticks'] = np.vstack([nodeB_root['sticks'], 1.])
-        nodeA_root['children'] = []
-
-        # If nodeA was the pivot of a downstream tree, update the pivot to nodeB
-        nodeA_children = nodeA_root['node'].children().copy()
-        for nodeA_child in nodeA_children:
-            if nodeA_child.tssb != nodeA_root['node'].tssb:
-                nodeA_child.set_parent(nodeB_root['node'], reset=False)
-                nodeA_child.set_mean(variational=True)
-                ntssb_root = nodeA_child.tssb.get_ntssb_root()
-                ntssb_root['pivot_node'] = nodeB_root['node']
-        nodeA_root['node'].children().clear()
+        if nodeB.parent() is not None:
+            nodeB_parent_root = nodes[np.where(np.array(nodes) == nodeB.parent())[0][0]][1]
 
         numDataA, numDataB = (len(nodeA.data), len(nodeB.data))
-        nodeB.data.update(nodeA.data)
+
+        nodeA_init_psi = np.array(nodeA.variational_parameters['locals']['unobserved_factors_mean'])
+
+        if not nodeA.is_observed or not nodeB.is_observed:
+            if nodeA.tssb == nodeB.tssb:
+                # Move child nodes of nodeA to nodeB and remove nodeA
+                # And make sure the children of nodeA keep their parameters
+                n_childrenA = len(nodeA_root['children'])
+                n_childrenB = len(nodeB_root['children'])
+                for i, nodeA_child in enumerate(nodeA_root['children']):
+                    nodeA_child['node'].set_parent(nodeB_root['node'], reset=False)
+                    nodeA_child['node'].variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.maximum(nodeA_child['node'].variational_parameters['locals']['unobserved_factors_kernel_log_mean'], nodeA.variational_parameters['locals']['unobserved_factors_kernel_log_mean'])
+                    nodeA_child['node'].variational_parameters['locals']['unobserved_factors_kernel_log_std'] = np.minimum(nodeA_child['node'].variational_parameters['locals']['unobserved_factors_kernel_log_std'], nodeA.variational_parameters['locals']['unobserved_factors_kernel_log_std'])
+                    nodeA_child['node'].set_mean(variational=True)
+                    nodeB_root['children'].append(nodeA_child)
+                    nodeB_root['sticks'] = np.vstack([nodeB_root['sticks'], 1.])
+                nodeA_root['children'] = []
+
+                # If nodeA was the pivot of a downstream tree, update the pivot to nodeB
+                nodeA_children = nodeA_root['node'].children().copy()
+                for nodeA_child in nodeA_children:
+                    if nodeA_child.tssb != nodeA_root['node'].tssb:
+                        nodeA_child.set_parent(nodeB_root['node'], reset=False)
+                        nodeA_child.set_mean(variational=True)
+                        ntssb_root = nodeA_child.tssb.get_ntssb_root()
+                        ntssb_root['pivot_node'] = nodeB_root['node']
+                nodeA_root['node'].children().clear()
+
+                nodeB.data.update(nodeA.data)
+            else:
+                # nodeB is parent (and pivot) of nodeA
+                # Set parent of nodeB as pivot of nodeA's subtree
+                ntssb_root = nodeA.tssb.get_ntssb_root()
+                ntssb_root['pivot_node'] = nodeB_parent_root['node']
+                nodeA.set_parent(nodeB.parent(), reset=False)
+
+                # Set all children of nodeB as children of nodeB's parent
+                for i, nodeB_child in enumerate(nodeB_root['children']):
+                    nodeB_child['node'].set_parent(nodeB_parent_root['node'], reset=False)
+                    nodeB_child['node'].variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.maximum(nodeB_child['node'].variational_parameters['locals']['unobserved_factors_kernel_log_mean'], nodeB_parent_root['node'].variational_parameters['locals']['unobserved_factors_kernel_log_mean'])
+                    nodeB_child['node'].variational_parameters['locals']['unobserved_factors_kernel_log_std'] = np.minimum(nodeB_child['node'].variational_parameters['locals']['unobserved_factors_kernel_log_std'], nodeB_parent_root['node'].variational_parameters['locals']['unobserved_factors_kernel_log_std'])
+                    nodeB_child['node'].set_mean(variational=True)
+                    nodeB_parent_root['children'].append(nodeB_child)
+                    nodeB_parent_root['sticks'] = np.vstack([nodeB_parent_root['sticks'], 1.])
+                nodeB_root['children'] = []
+
+                # If nodeB was pivot of another tree, update the pivot to nodeB_parent
+                nodeB_children = nodeB_root['node'].children().copy()
+                for nodeB_child in nodeB_children:
+                    if nodeB_child.tssb != nodeB_root['node'].tssb and nodeB_child.tssb != nodeA.tssb:
+                        nodeB_child.set_parent(nodeB_parent_root['node'], reset=False)
+                        nodeB_child.set_mean(variational=True)
+                        ntssb_root = nodeB_child.tssb.get_ntssb_root()
+                        ntssb_root['pivot_node'] = nodeB_parent_root['node']
+                nodeB_root['node'].children().clear()
+
+                nodeA.data.update(nodeB.data)
+        else:
+            nodeB.data.update(nodeA.data)
+            nodeA.data.clear()
+
 
         # Keep node that explains the most data
         if optimal_params:
-            if numDataA > numDataB:
-                nodeB.variational_parameters['locals']['unobserved_factors_mean'] = nodeA.variational_parameters['locals']['unobserved_factors_mean']
-                nodeB.variational_parameters['locals']['unobserved_factors_log_std'] = nodeA.variational_parameters['locals']['unobserved_factors_log_std']
+            if nodeA.tssb == nodeB.tssb:
                 # Merge kernels
-                nodeB.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.log(np.exp(nodeA.variational_parameters['locals']['unobserved_factors_kernel_log_mean']) + np.exp(nodeB.variational_parameters['locals']['unobserved_factors_kernel_log_mean']))
-                nodeB.variational_parameters['locals']['unobserved_factors_kernel_log_std'] = np.log(np.exp(nodeA.variational_parameters['locals']['unobserved_factors_kernel_log_std']) + np.exp(nodeB.variational_parameters['locals']['unobserved_factors_kernel_log_std']))
-                nodeB.variational_parameters['locals']['nu_log_mean'] = nodeA.variational_parameters['locals']['nu_log_mean']
-                nodeB.variational_parameters['locals']['nu_log_std'] = nodeA.variational_parameters['locals']['nu_log_std']
-                nodeB.variational_parameters['locals']['psi_log_mean'] = nodeA.variational_parameters['locals']['psi_log_mean']
-                nodeB.variational_parameters['locals']['psi_log_std'] = nodeA.variational_parameters['locals']['psi_log_std']
-                nodeB.set_mean(variational=True)
+                nodeB.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.maximum(nodeA.variational_parameters['locals']['unobserved_factors_kernel_log_mean'], nodeB.variational_parameters['locals']['unobserved_factors_kernel_log_mean'])
+                nodeB.variational_parameters['locals']['unobserved_factors_kernel_log_std'] = np.minimum(nodeA.variational_parameters['locals']['unobserved_factors_kernel_log_std'], nodeB.variational_parameters['locals']['unobserved_factors_kernel_log_std'])
+                if numDataA > numDataB:
+                    if nodeB.parent() is not None:
+                        nodeB.variational_parameters['locals']['unobserved_factors_mean'] = np.array(nodeA.variational_parameters['locals']['unobserved_factors_mean'])
+                        nodeB.variational_parameters['locals']['unobserved_factors_log_std'] = np.array(nodeA.variational_parameters['locals']['unobserved_factors_log_std'])
+                        nodeB.variational_parameters['locals']['nu_log_mean'] = np.array(nodeA.variational_parameters['locals']['nu_log_mean'])
+                        nodeB.variational_parameters['locals']['nu_log_std'] = np.array(nodeA.variational_parameters['locals']['nu_log_std'])
+                        nodeB.variational_parameters['locals']['psi_log_mean'] = np.array(nodeA.variational_parameters['locals']['psi_log_mean'])
+                        nodeB.variational_parameters['locals']['psi_log_std'] = np.array(nodeA.variational_parameters['locals']['psi_log_std'])
+                    else: # We're trying to merge to root and root has no data, so adjust its baseline
+                        nodeB.variational_parameters['globals']['log_baseline_mean'] = np.log(nodeA.node_mean / nodeA.node_mean[0])[1:]
+                        nodeB.variational_parameters['locals']['unobserved_factors_mean'] *= 0.
+                        # Also adjust all unobserved factors by removing previous nodeA psi from all nodes: it is now present as the baseline
+                        nodes = self.get_nodes()[1:]
+                        for node in nodes:
+                            node.variational_parameters['locals']['unobserved_factors_mean'] -= nodeA_init_psi
+                            node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] += 1.
+                    nodeB.set_mean(variational=True)
+            else:
+                nodeA.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.maximum(nodeA.variational_parameters['locals']['unobserved_factors_kernel_log_mean'], nodeB.variational_parameters['locals']['unobserved_factors_kernel_log_mean'])
+                nodeA.variational_parameters['locals']['unobserved_factors_kernel_log_std'] = np.minimum(nodeA.variational_parameters['locals']['unobserved_factors_kernel_log_std'], nodeB.variational_parameters['locals']['unobserved_factors_kernel_log_std'])
+                if nodeB.parent() is None:
+                    nodeB.variational_parameters['globals']['log_baseline_mean'] = np.log(nodeA.node_mean / nodeA.node_mean[0])[1:]
+                    nodes = self.get_nodes()[1:]
+                    for node in nodes:
+                        node.variational_parameters['locals']['unobserved_factors_mean'] -= nodeA_init_psi
+                        node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'] += 1.
 
-        # Remove nodeA from tssb root dict
-        nodes = np.array([n['node'] for n in nodeA_parent_root['children']])
-        tokeep = np.where(nodes != nodeA)[0].astype(int).ravel()
-        nodeA_root['node'].kill()
-        del nodeA_root['node']
+        if not nodeA.is_observed or not nodeB.is_observed:
+            if nodeA.tssb == nodeB.tssb:
+                # Remove nodeA from tssb root dict
+                nodes = np.array([n['node'] for n in nodeA_parent_root['children']])
+                tokeep = np.where(nodes != nodeA)[0].astype(int).ravel()
+                nodeA_root['node'].kill()
+                del nodeA_root['node']
 
-        nodeA_parent_root['sticks']   = nodeA_parent_root['sticks'][tokeep]
-        nodeA_parent_root['children'] = list(np.array(nodeA_parent_root['children'])[tokeep])
+                nodeA_parent_root['sticks']   = nodeA_parent_root['sticks'][tokeep]
+                nodeA_parent_root['children'] = list(np.array(nodeA_parent_root['children'])[tokeep])
+            else:
+                # Remove nodeB from tssb root dict
+                nodes = np.array([n['node'] for n in nodeB_parent_root['children']])
+                tokeep = np.where(nodes != nodeB)[0].astype(int).ravel()
+                nodeB_root['node'].kill()
+                del nodeB_root['node']
 
-    def subtree_reattach_to(self, node, target_clone):
+                nodeB_parent_root['sticks']   = nodeB_parent_root['sticks'][tokeep]
+                nodeB_parent_root['children'] = list(np.array(nodeB_parent_root['children'])[tokeep])
+
+    def subtree_reattach_to(self, node, target_clone, optimal_init=True):
         # Get the node and its parent root
         nodes = self._get_nodes(get_roots=True)
         roots = [node[1] for node in nodes]
@@ -1795,6 +1996,7 @@ class NTSSB(object):
             nodeA_idx = np.where(np.array(nodes) == node)[0][0]
         nodeA_parent_idx = np.where(np.array(nodes) == nodes[nodeA_idx].parent())[0][0]
         init_mean = nodes[nodeA_idx].node_mean
+        init_cnvs = nodes[nodeA_idx].cnvs
 
         def descend(root):
             ns = [root['node']]
@@ -1845,12 +2047,34 @@ class NTSSB(object):
         roots[nodeA_parent_idx]['sticks']   = roots[nodeA_parent_idx]['sticks'][tokeep]
         roots[nodeA_parent_idx]['children'] = list(np.array(roots[nodeA_parent_idx]['children'])[tokeep])
 
+
+        if optimal_init:
+            for node in nodes_below_nodeA:
+                node.variational_parameters['locals']['unobserved_factors_mean'] = node.variational_parameters['locals']['unobserved_factors_mean'] - np.log(node.cnvs/2) + np.log(init_cnvs/2)
+
+            parent_affected_genes = np.where(np.abs(roots[nodeA_idx]['node'].parent().variational_parameters['locals']['unobserved_factors_mean']) > 0.5)[0]
+            for node in nodes_below_nodeA:
+                node.variational_parameters['locals']['unobserved_factors_kernel_log_mean'][parent_affected_genes] = -1
+
+            if roots[nodeA_idx]['node'].parent().parent() is not None:
+                roots[nodeA_idx]['node'].variational_parameters['locals']['unobserved_factors_mean'][parent_affected_genes] = roots[nodeA_idx]['node'].parent().variational_parameters['locals']['unobserved_factors_mean'][parent_affected_genes]
+
+            genes = np.where(roots[nodeA_idx]['node'].cnvs != 2)[0]
+            roots[nodeA_idx]['node'].variational_parameters['locals']['unobserved_factors_kernel_log_mean'][genes] -= 1
+
+            genes = np.where(init_cnvs != 2)[0]
+            roots[nodeA_idx]['node'].variational_parameters['locals']['unobserved_factors_kernel_log_mean'][genes] -= 1
+
+            # Need to accomodate events this node has that were previously inherited
+            affected_genes = np.where(np.abs(roots[nodeA_idx]['node'].variational_parameters['locals']['unobserved_factors_mean']) > 0.5)[0]
+            roots[nodeA_idx]['node'].variational_parameters['locals']['unobserved_factors_kernel_log_mean'][affected_genes] = -1
+
         # Reset variational parameters: all log_std and unobserved factors kernel
-        n_genes = target_subtree['node'].root['node'].cnvs.size
+        # n_genes = target_subtree['node'].root['node'].cnvs.size
         # roots[nodeA_idx]['node'].variational_parameters['locals']['unobserved_factors_mean'] = np.array(target_subtree['node'].root['node'].variational_parameters['locals']['unobserved_factors_mean'])
-        roots[nodeA_idx]['node'].variational_parameters['locals']['unobserved_factors_log_std'] = -1.*np.ones((n_genes,))
-        # roots[nodeA_idx]['node'].variational_parameters['locals']['unobserved_factors_kernel_log_mean'] = np.log(roots[nodeA_idx]['node'].unobserved_factors_kernel_concentration_caller())*np.ones((n_genes,))
-        roots[nodeA_idx]['node'].variational_parameters['locals']['unobserved_factors_kernel_log_std'] = -1*np.ones((n_genes,))
+        # roots[nodeA_idx]['node'].variational_parameters['locals']['unobserved_factors_log_std'] += .5#*np.ones((n_genes,))
+        # roots[nodeA_idx]['node'].variational_parameters['locals']['unobserved_factors_kernel_log_mean'] += 1.#= np.log(roots[nodeA_idx]['node'].unobserved_factors_kernel_concentration_caller())*np.ones((n_genes,))
+        # roots[nodeA_idx]['node'].variational_parameters['locals']['unobserved_factors_kernel_log_std'] += .5#*np.ones((n_genes,))
 
         # Set new unobserved factors to explain the same data as before (i.e. keep mean equal)
         # baseline = jnp.append(1, jnp.exp(self.root['node'].root['node'].log_baseline_caller()))
@@ -1882,8 +2106,7 @@ class NTSSB(object):
                 reweights = np.array(reweights)
                 probs = np.exp(reweights - logsumexp(reweights))
                 pivot_node = np.random.choice(nodes, p=probs)
-                if verbose:
-                    print(f"Pivot of {child['node'].root['node'].label}: {child['pivot_node'].label}->{pivot_node.label}")
+                logger.debug(f"Pivot of {child['node'].root['node'].label}: {child['pivot_node'].label}->{pivot_node.label}")
                 child['pivot_node'] = pivot_node
                 if child['node'].root['node'].parent() != pivot_node:
                     child['node'].root['node'].set_parent(pivot_node, reset=True) # update parameters
@@ -1986,8 +2209,7 @@ class NTSSB(object):
                                 node.data_log_likelihood() +
                                 subtree.sticks_node_logprior(roots[j], depths[j]) +
                                 node.logprior())
-                    if verbose:
-                        print(f'{node.label}: {node.num_local_data()*log(node_weights[j]*subtree_weights[i])}\t{node.data_log_likelihood()}\t{subtree.sticks_node_logprior(roots[j], depths[j])}\t{node.logprior()}')
+                    logger.debug(f'{node.label}: {node.num_local_data()*log(node_weights[j]*subtree_weights[i])}\t{node.data_log_likelihood()}\t{subtree.sticks_node_logprior(roots[j], depths[j])}\t{node.logprior()}')
         llh = sum(array(llhs))
 
         return llh
@@ -2101,9 +2323,9 @@ class NTSSB(object):
     def get_node_unobs(self):
         nodes = self.get_nodes(None)
         unobs = []
-        estimated = np.var(nodes[0].variational_parameters['locals']['unobserved_factors_mean']) != 0
+        estimated = np.var(nodes[1].variational_parameters['locals']['unobserved_factors_mean']) != 0
         if estimated:
-            print("Getting the learned unobserved factors.")
+            logger.debug("Getting the learned unobserved factors.")
         for node in nodes:
             unobs_factors = node.unobserved_factors if not estimated else node.variational_parameters['locals']['unobserved_factors_mean']
             unobs.append(unobs_factors)
@@ -2112,9 +2334,9 @@ class NTSSB(object):
     def get_node_unobs_affected_genes(self):
         nodes = self.get_nodes(None)
         unobs = []
-        estimated = np.var(nodes[0].variational_parameters['locals']['unobserved_factors_kernel_log_mean']) != 0
+        estimated = np.var(nodes[1].variational_parameters['locals']['unobserved_factors_kernel_log_mean']) != 0
         if estimated:
-            print("Getting the learned unobserved factors.")
+            logger.debug("Getting the learned unobserved factors.")
         for node in nodes:
             unobs_factors = node.unobserved_factors if not estimated else node.variational_parameters['locals']['unobserved_factors_mean']
             unobs_factors_kernel = node.unobserved_factors_kernel if not estimated else node.variational_parameters['locals']['unobserved_factors_kernel_log_mean']
@@ -2165,7 +2387,7 @@ class NTSSB(object):
             obs.append(subtree.root['node'].cnvs)
         return subtrees, obs
 
-    def initialize_gene_node_colormaps(self, node_obs=None, node_avg_exp=None, gene_specific=True):
+    def initialize_gene_node_colormaps(self, node_obs=None, node_avg_exp=None, gene_specific=False):
         nodes, vals = self.get_node_unobs()
         vals = np.array(vals)
         cmap = self.exp_cmap
@@ -2181,7 +2403,7 @@ class NTSSB(object):
         else:
             global_min, global_max = np.nanmin(vals), np.nanmax(vals)
             cmap = self.exp_cmap
-            norm = matplotlib.colors.Normalize(vmin=global_min, vmax=global_max)
+            norm = matplotlib.colors.Normalize(vmin=-1., vmax=1.)
             mapper = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap)
             self.gene_node_colormaps['unobserved'] = dict()
             self.gene_node_colormaps['unobserved']['vals'] = dict(zip([node.label for node in nodes], vals))
@@ -2225,7 +2447,7 @@ class NTSSB(object):
             self.gene_node_colormaps['avg']['vals'] = dict(zip(nodes_labels, vals))
             self.gene_node_colormaps['avg']['mapper'] = mapper
 
-        print(f'Created `self.gene_node_colormaps` with keys {list(self.gene_node_colormaps.keys())}')
+        logger.debug(f'Created `self.gene_node_colormaps` with keys {list(self.gene_node_colormaps.keys())}')
 
     def plot_tree(self, super_only=False, counts=False, root_fillcolor=None, events=False, color_subclusters=False, reset_names=True, ordered=False,
                     genemode='avg', show_labels=True, color_by_weight=False, gene=None, fontcolor='black', pivot_probabilities=None, node_color_dict=None):
@@ -2331,34 +2553,34 @@ class NTSSB(object):
             for child in list(node.children()):
                 descend(child)
         descend(self.root['node'].root['node'])
-
-    def path_to_node(self, node_id):
-        path = []
-        path.append(node_id)
-        parent_id = self.node_dict[node_id]['parent']
-        while parent_id != 'NULL':
-            path.append(parent_id)
-            parent_id = self.node_dict[parent_id]['parent']
-        return path[::-1][:]
-
-    def path_between_nodes(self, nodeA, nodeB):
-        pathA = np.array(self.path_to_node(nodeA))
-        pathB = np.array(self.path_to_node(nodeB))
-        path = []
-        # Get MRCA
-        i = -1
-        for node in pathA:
-            if node in pathB:
-                i += 1
-            else:
-                break
-        mrca = pathA[i]
-        pathA = np.array(pathA[::-1])
-        # Get path from A to MRCA
-        path = path + list(pathA[:np.where(pathA == mrca)[0][0]])
-        # Get path from MRCA to B
-        path = path + list(pathB[np.where(pathB == mrca)[0][0]:])
-        return path
+    #
+    # def path_to_node(self, node_id):
+    #     path = []
+    #     path.append(node_id)
+    #     parent_id = self.node_dict[node_id]['parent']
+    #     while parent_id != 'NULL':
+    #         path.append(parent_id)
+    #         parent_id = self.node_dict[parent_id]['parent']
+    #     return path[::-1][:]
+    #
+    # def path_between_nodes(self, nodeA, nodeB):
+    #     pathA = np.array(self.path_to_node(nodeA))
+    #     pathB = np.array(self.path_to_node(nodeB))
+    #     path = []
+    #     # Get MRCA
+    #     i = -1
+    #     for node in pathA:
+    #         if node in pathB:
+    #             i += 1
+    #         else:
+    #             break
+    #     mrca = pathA[i]
+    #     pathA = np.array(pathA[::-1])
+    #     # Get path from A to MRCA
+    #     path = path + list(pathA[:np.where(pathA == mrca)[0][0]])
+    #     # Get path from MRCA to B
+    #     path = path + list(pathB[np.where(pathB == mrca)[0][0]:])
+    #     return path
 
     # TODO: Should have a distance that counts the number of changed genes while going through the path
     def get_distance(self, id1, id2, distance='n_nodes'):
@@ -2371,11 +2593,18 @@ class NTSSB(object):
             prev_node = path[0]
             for node in path:
                 if node != prev_node:
-                    dist += np.sqrt(np.sum(
-                                        (self.node_dict[node]['node'].variational_parameters['locals']['unobserved_factors_mean'] -
-                                            self.node_dict[prev_node]['node'].variational_parameters['locals']['unobserved_factors_mean'])**2
-                                            )
-                                    )
+                    if dist == 'estimated':
+                        dist += np.sqrt(np.sum(
+                                            (self.node_dict[node]['node'].variational_parameters['locals']['unobserved_factors_mean'] -
+                                                self.node_dict[prev_node]['node'].variational_parameters['locals']['unobserved_factors_mean'])**2
+                                                )
+                                        )
+                    else:
+                        dist += np.sqrt(np.sum(
+                                            (self.node_dict[node].unobserved_factors -
+                                                self.node_dict[prev_node]['node'].unobserved_factors)**2
+                                                )
+                                        )
                     prev_node = node
                 dist += self.node_dict[node][distance]
 

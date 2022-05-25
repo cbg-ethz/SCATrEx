@@ -17,15 +17,15 @@ from ...ntssb.node import *
 from ...ntssb.tree import *
 
 MIN_CNV = 1e-6
-MAX_XI = 3
+MAX_XI = 1
 
 class Node(AbstractNode):
     def __init__(self, is_observed, observed_parameters, log_lib_size_mean=7.1, log_lib_size_std=.6,
-                        num_global_noise_factors=4, global_noise_factors_precisions_shape=5.,
+                        num_global_noise_factors=4, global_noise_factors_precisions_shape=100.,
                         cell_global_noise_factors_weights_scale=1.,
                         unobserved_factors_root_kernel=0.1, unobserved_factors_kernel=1.,
-                        unobserved_factors_kernel_concentration=.02,
-                        unobserved_factors_kernel_rate=1., frac_dosage=1, baseline_shape=0.7, **kwargs):
+                        unobserved_factors_kernel_concentration=.01,
+                        unobserved_factors_kernel_rate=100., frac_dosage=1, baseline_shape=0.7, **kwargs):
         super(Node, self).__init__(is_observed, observed_parameters, **kwargs)
 
         # The observed parameters are the CNVs of all genes
@@ -204,8 +204,9 @@ class Node(AbstractNode):
 
             self.inert_genes = np.random.choice(self.n_genes, size=int(self.n_genes*(1.-self.frac_dosage)), replace=False)
 
-            self.unobserved_factors_kernel = np.array([self.unobserved_factors_root_kernel] * self.n_genes)
-            self.unobserved_factors = normal_sample(0., self.unobserved_factors_kernel)
+            # Root should not have unobserved factors
+            self.unobserved_factors_kernel = 0*np.array([self.unobserved_factors_root_kernel] * self.n_genes)
+            self.unobserved_factors = 0*normal_sample(0., self.unobserved_factors_kernel)
 
             self.set_mean()
 
@@ -233,7 +234,7 @@ class Node(AbstractNode):
             self.node_mean = node_mean
         else:
             if variational:
-                self.node_mean = np.append(1, np.exp(self.log_baseline_caller())) * self.cnvs/2 * np.exp(self.variational_parameters['locals']['unobserved_factors_mean'])
+                self.node_mean = np.append(1, np.exp(self.log_baseline_caller())) * self.cnvs/2 * np.exp((self.parent() is not None) * self.variational_parameters['locals']['unobserved_factors_mean'])
             else:
                 self.node_mean = self.baseline_caller() * self.cnvs/2 * np.exp(self.unobserved_factors)
             self.node_mean = self.node_mean / np.sum(self.node_mean)
@@ -241,6 +242,7 @@ class Node(AbstractNode):
     def get_mean(self, baseline=None, unobserved_factors=None, noise=None, cell_factors=None, global_factors=None, cnvs=None, norm=True, inert_genes=None):
         baseline = np.append(1, np.exp(self.log_baseline_caller())) if baseline is None else baseline
         unobserved_factors = self.variational_parameters['locals']['unobserved_factors_mean'] if unobserved_factors is None else unobserved_factors
+        unobserved_factors *= (self.parent() is not None)
         cnvs = self.cnvs if cnvs is None else cnvs
         if inert_genes is not None:
             cnvs = np.array(cnvs)
@@ -452,16 +454,16 @@ class Node(AbstractNode):
         cell_noise = diag_gaussian_sample(rng, cell_noise_mean, cell_noise_log_std)
         noise = jnp.dot(cell_noise, noise_factors)
 
-        log_unobserved_factors_kernel_means = jnp.clip(log_unobserved_factors_kernel_means, a_min=jnp.log(1e-2), a_max=jnp.log(1e2))
-        log_unobserved_factors_kernel_log_stds = jnp.clip(log_unobserved_factors_kernel_log_stds, a_min=jnp.log(1e-2), a_max=jnp.log(1e2))
+        log_unobserved_factors_kernel_means = jnp.clip(log_unobserved_factors_kernel_means, a_min=jnp.log(1e-6), a_max=jnp.log(1e2))
+        log_unobserved_factors_kernel_log_stds = jnp.clip(log_unobserved_factors_kernel_log_stds, a_min=jnp.log(1e-6), a_max=jnp.log(1e2))
         def sample_unobs_kernel(i):
-            return jnp.clip(diag_gaussian_sample(rng, log_unobserved_factors_kernel_means[i], log_unobserved_factors_kernel_log_stds[i]), a_min=jnp.log(1e-2))
+            return jnp.clip(diag_gaussian_sample(rng, log_unobserved_factors_kernel_means[i], log_unobserved_factors_kernel_log_stds[i]), a_min=jnp.log(1e-6))
         def sample_all_unobs_kernel(i):
             return jax.lax.cond(node_mask[i] >= 0, sample_unobs_kernel, lambda i: zeros_vec, i)
         nodes_log_unobserved_factors_kernels = vmap(sample_all_unobs_kernel)(jnp.arange(len(cnvs)))
 
         unobserved_means = jnp.clip(unobserved_means, a_min=jnp.log(1e-3), a_max=10)
-        unobserved_log_stds = jnp.clip(unobserved_log_stds, a_min=jnp.log(1e-2), a_max=jnp.log(1e2))
+        unobserved_log_stds = jnp.clip(unobserved_log_stds, a_min=jnp.log(1e-6), a_max=jnp.log(1e2))
         def sample_unobs(i):
             return diag_gaussian_sample(rng, unobserved_means[i], unobserved_log_stds[i])
         def sample_all_unobs(i):
@@ -498,7 +500,7 @@ class Node(AbstractNode):
         data = jnp.array(self.full_data)[indices]
         baseline = jnp.exp(jnp.append(0, log_baseline))
         def compute_node_ll(i):
-            unobserved_factors = nodes_unobserved_factors[i]
+            unobserved_factors = nodes_unobserved_factors[i] * (parent_vector[i] != -1)
 
             node_mean = baseline * cnvs[i]/2 * jnp.exp(unobserved_factors + noise)
             sum = jnp.sum(node_mean, axis=1).reshape(mb_size, 1)
@@ -539,30 +541,32 @@ class Node(AbstractNode):
         def compute_node_kl(i):
             kl = 0.
             # # unobserved_factors_kernel -- USING JUST A SPARSE GAMMA DOES NOT PENALIZE KERNELS EQUAL TO ZERO
-            pl = diag_gamma_logpdf(jnp.clip(jnp.exp(nodes_log_unobserved_factors_kernels[i]), a_min=1e-2), broadcasted_concentration,
-                                    (parent_vector[i] != -1)*(log_rate + jnp.abs(nodes_unobserved_factors[parent_vector[i]])))
-            ent = - diag_gaussian_logpdf(jnp.clip(nodes_log_unobserved_factors_kernels[i], a_min=jnp.log(1e-2)), log_unobserved_factors_kernel_means[i], log_unobserved_factors_kernel_log_stds[i])
+            pl = diag_gamma_logpdf(jnp.clip(jnp.exp(nodes_log_unobserved_factors_kernels[i]), a_min=1e-6),
+                                    broadcasted_concentration,
+                                    log_rate + (parent_vector[i] != -1)*(parent_vector[i] != 0)*(jnp.abs(nodes_unobserved_factors[parent_vector[i]])))
+            ent = - diag_loggaussian_logpdf(jnp.clip(jnp.exp(nodes_log_unobserved_factors_kernels[i]), a_min=1e-6), log_unobserved_factors_kernel_means[i], log_unobserved_factors_kernel_log_stds[i])
             kl += (parent_vector[i] != -1) * (pl + ent)
 
-            # Penalize copies in unobserved nodes
-            pl = diag_gamma_logpdf(1e-2 * jnp.ones(broadcasted_concentration.shape), broadcasted_concentration,
-                                    (parent_vector[i] != -1)*(log_rate + jnp.abs(nodes_unobserved_factors[parent_vector[i]])))
-            ent = - diag_gaussian_logpdf(jnp.log(1e-2 * jnp.ones(broadcasted_concentration.shape)), log_unobserved_factors_kernel_means[i], log_unobserved_factors_kernel_log_stds[i])
-            kl -= (parent_vector[i] != -1) * jnp.all(tssb_indices[i] == tssb_indices[parent_vector[i]]) * (pl + 0*ent)
+            # # Penalize copies in unobserved nodes
+            # pl = diag_gamma_logpdf(1e-6 * jnp.ones(broadcasted_concentration.shape), broadcasted_concentration,
+            #                         (parent_vector[i] != -1)*(log_rate + jnp.abs(nodes_unobserved_factors[parent_vector[i]])))
+            # ent = - diag_gaussian_logpdf(jnp.log(1e-6 * jnp.ones(broadcasted_concentration.shape)), log_unobserved_factors_kernel_means[i], log_unobserved_factors_kernel_log_stds[i])
+            # kl -= (parent_vector[i] != -1) * jnp.all(tssb_indices[i] == tssb_indices[parent_vector[i]]) * (pl + 0*ent)
 
             # unobserved_factors
+            is_root_subtree = jnp.all(tssb_indices[i] == tssb_indices[0])
             pl = diag_gaussian_logpdf(nodes_unobserved_factors[i],
-                        (parent_vector[i] != -1) * nodes_unobserved_factors[parent_vector[i]],
-                        jnp.clip(nodes_log_unobserved_factors_kernels[i], a_min=jnp.log(1e-2))*(parent_vector[i] != -1) + log_kernel*(parent_vector[i] == -1))
+                        (parent_vector[i] != -1) * (parent_vector[i] != 0) * nodes_unobserved_factors[parent_vector[i]] + (parent_vector[i]!=-1)*is_root_subtree*(jnp.exp(nodes_log_unobserved_factors_kernels[i]) > 0.1)*0.2,
+                        jnp.clip(nodes_log_unobserved_factors_kernels[i], a_min=jnp.log(1e-6))*(parent_vector[i] != -1))
             ent = - diag_gaussian_logpdf(nodes_unobserved_factors[i], unobserved_means[i], unobserved_log_stds[i])
-            kl += pl + ent
+            kl += (parent_vector[i] != -1) * (pl + ent)
 
-            # Penalize copied unobserved_factors
-            pl = diag_gaussian_logpdf(nodes_unobserved_factors[parent_vector[i]],
-                        (parent_vector[i] != -1) * nodes_unobserved_factors[parent_vector[i]],
-                        jnp.clip(nodes_log_unobserved_factors_kernels[i], a_min=jnp.log(1e-2))*(parent_vector[i] != -1) + log_kernel*(parent_vector[i] == -1))
-            ent = - diag_gaussian_logpdf(nodes_unobserved_factors[parent_vector[i]], unobserved_means[i], unobserved_log_stds[i])
-            kl -= (parent_vector[i] != -1) * jnp.all(tssb_indices[i] == tssb_indices[parent_vector[i]]) * (pl + 0*ent)
+            # # Penalize copied unobserved_factors
+            # pl = diag_gaussian_logpdf(nodes_unobserved_factors[parent_vector[i]],
+            #             (parent_vector[i] != -1) * nodes_unobserved_factors[parent_vector[i]],
+            #             jnp.clip(nodes_log_unobserved_factors_kernels[i], a_min=jnp.log(1e-6))*(parent_vector[i] != -1) + log_kernel*(parent_vector[i] == -1))
+            # ent = - diag_gaussian_logpdf(nodes_unobserved_factors[parent_vector[i]], unobserved_means[i], unobserved_log_stds[i])
+            # kl -= (parent_vector[i] != -1) * jnp.all(tssb_indices[i] == tssb_indices[parent_vector[i]]) * (pl + 0*ent)
 
             # sticks
             nu_pl = has_children(i) * beta_logpdf(nu_sticks[i], jnp.log(jnp.array([1.])), jnp.log(jnp.array([dp_alphas[i]])))
@@ -584,7 +588,7 @@ class Node(AbstractNode):
         baseline_kl = diag_gaussian_logpdf(log_baseline, zeros_vec[1:], zeros_vec[1:]) - diag_gaussian_logpdf(log_baseline, log_baseline_mean, log_baseline_log_std)
         ones_mat = jnp.ones(log_factors_precisions.shape)
         zeros_mat = jnp.zeros(log_factors_precisions.shape)
-        factor_precision_kl = diag_gamma_logpdf(jnp.exp(log_factors_precisions), jnp.log(self.global_noise_factors_precisions_shape)*ones_mat, zeros_mat) - diag_gaussian_logpdf(log_factors_precisions, factor_precision_log_means, factor_precision_log_stds)
+        factor_precision_kl = diag_gamma_logpdf(jnp.exp(log_factors_precisions), jnp.log(self.global_noise_factors_precisions_shape)*ones_mat, zeros_mat) - diag_loggaussian_logpdf(log_factors_precisions, factor_precision_log_means, factor_precision_log_stds)
         noise_factors_kl = diag_gaussian_logpdf(noise_factors, jnp.zeros(noise_factors.shape), jnp.log(jnp.sqrt(1./jnp.exp(log_factors_precisions)).reshape(-1,1)) * jnp.ones(noise_factors.shape)) - diag_gaussian_logpdf(noise_factors, noise_factors_mean, noise_factors_log_std)
         total_kl = node_kl + baseline_kl + factor_precision_kl + noise_factors_kl
 

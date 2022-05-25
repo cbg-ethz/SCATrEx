@@ -1,6 +1,9 @@
 import collections
 import numpy as np
 
+import logging
+logger = logging.getLogger(__name__)
+
 def relative(current, prev, eps=1e-6):
     return (np.abs(current - prev) + eps) / (np.abs(prev) + eps)
 
@@ -25,7 +28,8 @@ def elbos_callback(elbos, window=50, every=50, threshold=1e-2):
     latest_avg = np.median(elbos[-window:])
     error = _diff['relative'](latest_avg, prev_avg)
     if error < threshold:
-        raise StopIteration(f"Convergence achieved at {i}")
+        logger.debug(f"Convergence achieved at {i}")
+        raise StopIteration
 
 def vi_callback_params(i, new_params, old_params, every=100, tolerance=1e-3, diff="relative", ord=np.inf):
     """
@@ -39,7 +43,8 @@ def vi_callback_params(i, new_params, old_params, every=100, tolerance=1e-3, dif
     delta = _diff[diff](new_params, old_params)  # type: np.ndarray
     norm = np.linalg.norm(delta, ord)
     if norm < tolerance:
-        raise StopIteration("Convergence achieved at %d" % i)
+        logger.debug(f"Convergence achieved at {i}")
+        raise StopIteration
     return new_params
 
 def tree_callback(i, new_params, old_params, every=100, tolerance=1e-3, diff="relative", ord=np.inf):

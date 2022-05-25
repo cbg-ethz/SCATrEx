@@ -17,6 +17,9 @@ import numpy as np
 import matplotlib
 from ..util import *
 
+import logging
+logger = logging.getLogger(__name__)
+
 class TSSB(object):
     min_dp_alpha    = 0.001
     max_dp_alpha    = 10.0
@@ -240,7 +243,7 @@ class TSSB(object):
                     reassign += 1
                 break
             elif abs(max_u-min_u) < epsilon:
-                print ("Slice sampler shrank down.  Keep current state.")
+                logger.debug ("Slice sampler shrank down.  Keep current state.")
                 break
             else:
                 path_comp = path_lt(indices, new_path)
@@ -302,7 +305,7 @@ class TSSB(object):
                         reassign += 1
                     break
                 elif abs(max_u-min_u) < epsilon:
-                    print ("Slice sampler shrank down.  Keep current state.")
+                    logger.debug ("Slice sampler shrank down.  Keep current state.")
                     break
                 else:
                     path_comp = path_lt(indices, new_path)
@@ -317,7 +320,7 @@ class TSSB(object):
                         raise Exception("Slice sampler weirdness.")
             lengths.append(len(new_path))
         lengths = array(lengths)
-        #print "reassign: "+str(reassign)+" better: "+str(better)
+        #logger.debug "reassign: "+str(reassign)+" better: "+str(better)
 
     # def resample_birth(self):
     #     # Break sticks to choose node
@@ -357,7 +360,7 @@ class TSSB(object):
         empty_root = False
         if len(nodes)>1:
             if len(nodes[0].data) == 0:
-                print('Swapping root')
+                logger.debug('Swapping root')
                 empty_root = True
                 nodeAnum = 0
             else:
@@ -417,19 +420,18 @@ class TSSB(object):
                             child['pivot_node'] = nodeA['node']
                             child['node'].root['node'].set_parent(nodeA['node'], reset=False)
 
-                if verbose:
-                    print(f"Swapped {nodeA['node'].label} with {nodeB['node'].label}")
+                logger.debug(f"Swapped {nodeA['node'].label} with {nodeB['node'].label}")
 
             if empty_root:
-                print('checking alternative root')
+                logger.debug('checking alternative root')
                 nodenum = []
                 for ii, nn in enumerate(nodes):
                     if len(nodes[ii].data) > 0:
                         nodenum.append(ii)
                 post_temp = zeros(len(nodenum))
                 for idx, nodeBnum in enumerate(nodenum):
-                    print(f'nodeBnum: {nodeBnum}')
-                    print(f'nodeAnum: {nodeAnum}')
+                    logger.debug(f'nodeBnum: {nodeBnum}')
+                    logger.debug(f'nodeAnum: {nodeAnum}')
                     swap_nodes(nodeAnum, nodeBnum)
                     for i in range(5):
                         self.resample_sticks()
@@ -446,7 +448,7 @@ class TSSB(object):
                             self.ntssb.root['node'].root['node'].resample_cell_params()
 
                         if nodeBnum == len(nodes)-1:
-                            print('forced swapping')
+                            logger.debug('forced swapping')
                             nodeBnum = post_temp.argmax() + 1
                             swap_nodes(nodeAnum,nodeBnum)
                             for i in range(5):
@@ -456,7 +458,7 @@ class TSSB(object):
                             self.resample_node_params()
                             self.resample_stick_orders()
                     else:
-                        print("Successful swap!")
+                        logger.debug("Successful swap!")
                         self.resample_node_params()
                         self.resample_stick_orders()
                         break
@@ -469,14 +471,14 @@ class TSSB(object):
             #     post_new = self.ntssb.unnormalized_posterior()
             #     accept_prob = np.exp(np.min([0., post_new - post]))
             #     if (rand() > accept_prob):
-            #         print("Unsuccessful swap.")
+            #         logger.debug("Unsuccessful swap.")
             #         swap_nodes(nodeAnum,nodeBnum) # swap back
             #         for i in range(5):
             #             self.resample_sticks()
             #             self.ntssb.root['node'].root['node'].resample_cell_params()
             #
             #     else:
-            #         print("Successful swap!")
+            #         logger.debug("Successful swap!")
             #         self.resample_node_params()
             #         self.resample_stick_orders()
 
@@ -493,8 +495,7 @@ class TSSB(object):
 
             if len(tokill) > 0:
                 for child in list(array(root['children'])[tokill]):
-                    if verbose:
-                        print(f"Removing {child['node'].label}")
+                    logger.debug(f"Removing {child['node'].label}")
                     culled.append(child['node'])
                     child['node'].kill()
                     del child['node']
@@ -657,8 +658,8 @@ class TSSB(object):
 
                 j = j + 1
                 if j > 10:
-                    print(j, new_order, root['sticks'].shape[0], all_weights)
-                    print(new_order[10000])
+                    logger.debug(j, new_order, root['sticks'].shape[0], all_weights)
+                    logger.debug(new_order[10000])
                 sub_indices = list(filter(lambda i: i not in new_order, range(root['sticks'].shape[0])))
                 sub_weights = all_weights[sub_indices]
                 sub_weights = sub_weights / sum(sub_weights)
@@ -802,7 +803,7 @@ class TSSB(object):
     def find_node(self, u, truncated=False):
         def descend(root, u, depth=0):
             if depth >= self.max_depth:
-                #print >>sys.stderr, "WARNING: Reached maximum depth."
+                #logger.debug >>sys.stderr, "WARNING: Reached maximum depth."
                 return (root['node'], [], root)
             elif u < root['main']:
                 return (root['node'], [], root)
@@ -903,7 +904,7 @@ class TSSB(object):
             node    = [ root['node'] ]
             roots   = [root]
             depths  = [depth]
-            sticks  = np.array([1. if i == len(root['children']) - 1 else jnn.sigmoid(root['children'][i]['node'].variational_parameters['locals']['psi_log_mean']) for i in range(len(root['children']))]).astype(float)
+            sticks  = np.array([1. if i == len(root['children']) - 1 else jnn.sigmoid(root['children'][i]['node'].variational_parameters['locals']['psi_log_mean']) for i in range(len(root['children']))], dtype='object').astype(float)
             edges   = sticks_to_edges(sticks)
             weights = diff(hstack([0.0, edges]))
 
