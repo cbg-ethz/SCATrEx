@@ -123,6 +123,9 @@ class ObservedTree(Tree):
         kwds['vmax'] = 4 if 'vmax' not in kwds else kwds['vmax']
         kwds['vmin'] = 0 if 'vmin' not in kwds else kwds['vmin']
 
+        if kwds['vmax'] > 4:
+            cmap = get_cnv_cmap(vmax=kwds['vmax'])
+
         ax = sc.pl.heatmap(self.adata, var_names, groupby='node', cmap=cmap, show=False, **kwds)
         yticks = ax['groupby_ax'].get_yticks()
         ax['groupby_ax'].set_yticks(yticks - 0.5)
