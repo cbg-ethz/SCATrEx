@@ -4,16 +4,18 @@ from scatrex import models
 import scanpy as sc
 import numpy as np
 
-simulated_data = snakemake.input['simulated_data']
-simulated_clones = snakemake.input['simulated_clones']
-simulated_clones_labels = snakemake.input['simulated_clones_labels']
-simulated_observed_tree = snakemake.input['simulated_observed_tree']
-n_tries = snakemake.params['n_tries']
-output_file = snakemake.output['fname']
+simulated_data = snakemake.input["simulated_data"]
+simulated_clones = snakemake.input["simulated_clones"]
+simulated_clones_labels = snakemake.input["simulated_clones_labels"]
+simulated_observed_tree = snakemake.input["simulated_observed_tree"]
+n_tries = snakemake.params["n_tries"]
+output_file = snakemake.output["fname"]
 
 adata = sc.read_csv(simulated_data)
 clones_adata = sc.read_csv(simulated_clones)
-clones_adata.obs['node'] = np.loadtxt(simulated_clones_labels, delimiter=',', dtype='str')
+clones_adata.obs["node"] = np.loadtxt(
+    simulated_clones_labels, delimiter=",", dtype="str"
+)
 
 args = dict(global_noise_factors_precisions_shape=2, num_global_noise_factors=6)
 
@@ -32,6 +34,6 @@ for i in range(n_tries):
 best_sca = sca_list[np.argmax([sca.ntssb.elbo for sca in sca_list])]
 
 best_sca.ntssb.plot_tree()
-est_labels = np.array(best_sca.adata.obs['obs_node'])
+est_labels = np.array(best_sca.adata.obs["obs_node"])
 
-np.savetxt(output_file, est_labels, delimiter=',', fmt="%s")
+np.savetxt(output_file, est_labels, delimiter=",", fmt="%s")
