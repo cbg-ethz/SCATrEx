@@ -1,14 +1,28 @@
-[build-system]
-requires = [
-    "setuptools>=42",
-    "wheel",
-    "jax[cpu]==0.2.20",
-    "scipy",
-    "tqdm",
-    "scikit-learn",
-    "graphviz",
-    "gseapy",
-    "scanpy",
-    "anndata",
-]
-build-backend = "setuptools.build_meta"
+[tool.poetry]
+name = "scatrex"
+version = "0.1.0"
+description = "Map single-cell transcriptomes to copy number evolutionary trees."
+license = "GNU GENERAL PUBLIC LICENSE 3"
+authors = ["pedrofale <pedro.miguel.ferreira.pf@gmail.com>"]
+readme = "README.md"
+repository = "https://github.com/cbg-ethz/SCATrEx"
+
+[tool.poetry.dependencies]
+python = ">=3.7.1,<3.10"
+pandas = "^1.3.2"
+numpy = "^1.21.2"
+networkx = "^2.6.2"
+pygraphviz = "^1.7"
+tqdm = "^4.57.0"
+jax = "0.2.20",
+scipy = "^1.7.3",
+scikit-learn = "^0.23.2",
+graphviz = "^0.14.1",
+gseapy = "^0.10.5",
+scanpy = "^1.7.0",
+anndata = "^0.7.5"
+
+[tool.poetry.dev-dependencies]
+bump2version = "^1.0.1"
+black = "^22.3.0"
+pytest = "^6.2.4"
