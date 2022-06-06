@@ -1,6 +1,7 @@
 <div align="left">
   <img src="https://github.com/cbg-ethz/SCATrEx/raw/main/figures/scatrex.png", width="300px">
 </div>
+<p></p>
 
 [![PyPI](https://img.shields.io/pypi/v/scatrex.svg?style=flat)](https://pypi.python.org/pypi/scatrex)
 [![Build](https://github.com/cbg-ethz/SCATrEx/actions/workflows/main.yaml/badge.svg)](https://github.com/cbg-ethz/SCATrEx/actions/workflows/main.yaml)
