@@ -20,6 +20,7 @@ scipy = "^1.7.3"
 scikit-learn = "^0.23.2"
 graphviz = "^0.14.1"
 gseapy = "^0.10.5"
+pybiomart = "^0.2.0"
 scanpy = "^1.7.0"
 anndata = "^0.7.5"
 
