@@ -2,7 +2,9 @@
   <img src="https://github.com/cbg-ethz/SCATrEx/raw/main/figures/scatrex.png", width="300px">
 </div>
 
-[![pypi](https://img.shields.io/pypi/v/scatrex.svg)](https://pypi.python.org/pypi/scatrex)
+[![PyPI](https://img.shields.io/pypi/v/scatrex.svg?style=flat)](https://pypi.python.org/pypi/scatrex)
+[![Build](https://github.com/cbg-ethz/SCATrEx/actions/workflows/main.yaml/badge.svg)](https://github.com/cbg-ethz/SCATrEx/actions/workflows/main.yaml)
+
 
 Map single-cell transcriptomes to copy number evolutionary trees. Check out the [tutorial](https://github.com/cbg-ethz/SCATrEx/blob/main/notebooks/tutorial.ipynb) for more information.
 
