@@ -39,22 +39,38 @@ class Tree(ABC):
             params.append(self.tree_dict[node]['params'])
         return np.array(params, dtype=np.float)
 
-    def change_names(self):
+    def change_names(self, keep='root'):
         nodes = list(self.tree_dict.keys())
         alphabet = list(string.ascii_uppercase)
-        new_names = dict(zip(nodes, alphabet[:len(nodes)]))
-        new_names['-1'] = '-1'
 
-        for i, node in enumerate(nodes):
+        tochange = [node for node in nodes if node != keep]
+        new_names = alphabet[:len(tochange)]
+        new_names = dict(zip(tochange, new_names))
+        new_names['-1'] = '-1'
+        new_names[keep] = keep
+
+        for i, node in enumerate(tochange):
             self.tree_dict[node]['parent'] = new_names[self.tree_dict[node]['parent']]
             self.tree_dict[node]['children'] = []
             self.tree_dict[alphabet[i]] = self.tree_dict[node]
+            self.tree_dict[alphabet[i]]['label'] = alphabet[i]
             del self.tree_dict[node]
+
+        for i in self.tree_dict:
+            self.tree_dict[i]['children'] = []
 
         for i in self.tree_dict:
             for j in self.tree_dict:
                 if self.tree_dict[j]['parent'] == i:
                     self.tree_dict[i]['children'].append(j)
+
+    def set_colors(self, root_node=None):
+        idx = 0
+        if root_node in self.tree_dict:
+            self.tree_dict[root_node]['color'] = 'gray'
+            idx += 1
+        for i, node in enumerate(list(self.tree_dict.keys())[idx:]):
+            self.tree_dict[node]['color'] = constants.CLONES_PAL[i]
 
     def add_tree_parameters(self, change_name=True):
 
@@ -138,7 +154,7 @@ class Tree(ABC):
 
         return sum
 
-    def plot_tree(self, fillcolor=None, labels=False):
+    def plot_tree(self, fillcolor=None, labels=False, counts=True):
         u = Digraph()
         start = 0
         end = self.n_nodes
@@ -164,6 +180,14 @@ class Tree(ABC):
                 try:
                     parent_label = parent_label + '\n\n' + self.tree_dict[parent]['params_label']
                     node_label = node_label + '\n\n' + self.tree_dict[node]['params_label']
+                except:
+                    pass
+
+            parent_label, node_label = parent, node
+            if counts:
+                try:
+                    parent_label = parent_label + '\n\n' + str(self.tree_dict[parent]['size']) + ' cells'
+                    node_label = node_label + '\n\n' + str(self.tree_dict[node]['size']) + ' cells'
                 except:
                     pass
 
@@ -209,6 +233,9 @@ class Tree(ABC):
         kwds['vmax'] = 4 if 'vmax' not in kwds else kwds['vmax']
         kwds['vmin'] = 0 if 'vmin' not in kwds else kwds['vmin']
 
+        if kwds['vmax'] > 4:
+            cmap = None
+
         ax = sc.pl.heatmap(self.adata, var_names, groupby='node', cmap=cmap, show=False, **kwds)
         yticks = ax['groupby_ax'].get_yticks()
         ax['groupby_ax'].set_yticks(yticks - 0.5)
@@ -219,6 +246,10 @@ class Tree(ABC):
 
     def read_tree_from_dict(self, tree_dict, input_params_key='params', input_label_key='label', input_parent_key='parent', input_sizes_key='size', root_parent='NULL'):
         self.tree_dict = dict()
+        self.n_nodes = len(self.tree_dict.keys())
+        fixed_color = None
+        if self.n_nodes > len(constants.CLONES_PAL):
+            fixed_color = 'gray'
 
         sizes = None
         try:
@@ -235,14 +266,17 @@ class Tree(ABC):
             parent_id = tree_dict[node][input_parent_key]
             if parent_id == root_parent:
                 parent_id = '-1'
-            color = constants.CLONES_PAL[idx] if 'color' not in tree_dict[node] else tree_dict[node]['color']
+            if fixed_color is not None:
+                color = fixed_color
+            else:
+                color = constants.CLONES_PAL[idx] if 'color' not in tree_dict[node] else tree_dict[node]['color']
             label = node if input_label_key not in tree_dict[node] else tree_dict[node][input_label_key]
             size = 0.
             weight = 0.
             self.tree_dict[node] = dict(
                 parent=parent_id,
                 children=[],
-                params=np.array(tree_dict[node][input_params_key]),
+                params=np.array(tree_dict[node][input_params_key]).ravel(),
                 dp_alpha_subtree=self.dp_alpha_subtree,
                 alpha_decay_subtree=self.alpha_decay_subtree,
                 dp_gamma_subtree=self.dp_gamma_subtree,
@@ -279,9 +313,9 @@ class Tree(ABC):
                 self.tree_dict[node]['weight'] = 1.0/len(list(self.tree_dict.keys()))
 
     def subset_genes(self, gene_list):
-        self.adata = self.adata[:,gene_list]
         for node in self.tree_dict:
-            self.tree_dict[node]['params'] = pd.DataFrame(self.tree_dict[node]['params'], columns=self.adata.var_names)[gene_list].values
+            self.tree_dict[node]['params'] = pd.DataFrame(self.tree_dict[node]['params'][:,np.newaxis].T, columns=self.adata.var_names)[gene_list].values.ravel()
+        self.adata = self.adata[:,gene_list]
 
     @abstractmethod
     def add_node_params(self):
