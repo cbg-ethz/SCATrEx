@@ -81,7 +81,7 @@ class StructureSearch(object):
     def pretrain(n_iters_elbo=1000, joint_init=True, thin=10, num_samples=1, step_size=0.001, tol=1e-6, mb_size=100, max_nodes=5, debug=False, callback=None,
                     opt=adam, **callback_kwargs):
         # Find the best initial \mu and \xi before starting to learn the augmented tree
-        init_baseline = np.median(self.tree.data, axis=0)
+        init_baseline = np.mean(self.tree.data, axis=0)
         init_baseline = init_baseline / np.mean(self.tree.input_tree.adata.X/2, axis=0)
         init_baseline = init_baseline / np.std(init_baseline)
         init_baseline = init_baseline / init_baseline[0]
@@ -146,7 +146,7 @@ class StructureSearch(object):
 
         n_factors = self.tree.root['node'].root['node'].num_global_noise_factors
 
-        init_baseline = np.median(self.tree.data, axis=0)
+        init_baseline = np.mean(self.tree.data, axis=0)
         init_baseline = init_baseline / np.mean(self.tree.input_tree.adata.X/2, axis=0)
         init_baseline = init_baseline / np.std(init_baseline)
         init_baseline = init_baseline / init_baseline[0]
