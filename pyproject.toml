@@ -14,12 +14,12 @@ numpy = "^1.21.2"
 networkx = "^2.6.2"
 pygraphviz = "^1.7"
 tqdm = "^4.57.0"
-jax = "0.2.20",
-scipy = "^1.7.3",
-scikit-learn = "^0.23.2",
-graphviz = "^0.14.1",
-gseapy = "^0.10.5",
-scanpy = "^1.7.0",
+jax = "0.2.20"
+scipy = "^1.7.3"
+scikit-learn = "^0.23.2"
+graphviz = "^0.14.1"
+gseapy = "^0.10.5"
+scanpy = "^1.7.0"
 anndata = "^0.7.5"
 
 [tool.poetry.dev-dependencies]
