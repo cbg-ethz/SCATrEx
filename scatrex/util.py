@@ -366,16 +366,23 @@ def annotate_bins(bins_df):
 
     return annotated_bins
 
+
 def annotate_matrix(matrix, annotated_bins):
     # Takes a dataframe of cells by bins and a dataframe with gene lists for each bin
     # and returns a dataframe of cells by genes
     df_list = []
+    chrs = []
     for bin, row in annotated_bins.iterrows():
         genes = row['genes']
+        chr = row['chr']
         if len(genes) > 0:
             df_list.append(pd.concat([matrix[bin]] * len(genes), axis=1, ignore_index=True).rename(columns=dict(zip(range(len(genes)), genes))))
-    df = pd.concat(df_list)
-    return df
+            chrs.append([chr]*df_list[-1].shape[1])
+    chrs = np.concatenate(chrs)
+    df = pd.concat(df_list, axis=1)
+    chrs = chrs[np.where(~df.columns.duplicated())[0]]
+    df = df.loc[:,~df.columns.duplicated()]
+    return df, chrs
 
 def convert_phylogeny_to_clonal_tree(threshold):
     # Converts a phylogenetic tree to a clonal tree by choosing the main clades
