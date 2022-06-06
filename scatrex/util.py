@@ -12,6 +12,9 @@ import jax.nn as jnn
 from jax.scipy.stats import norm, gamma, laplace, beta, dirichlet, poisson
 from jax.scipy.special import digamma, betaln
 
+from pybiomart import Server
+import pandas as pd
+
 def relative_difference(current, prev, eps=1e-6):
     return (jnp.abs(current - prev) + eps) / (jnp.abs(prev) + eps)
 
