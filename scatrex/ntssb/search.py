@@ -916,21 +916,21 @@ class StructureSearch(object):
                 .root["node"]
                 .global_noise_factors_precisions_shape
             )
-            self.tree.root["node"].root["node"].variational_parameters["globals"][
-                "factor_precision_log_stds"
-            ][factor_idx] = -1.0
+            # self.tree.root["node"].root["node"].variational_parameters["globals"][
+            #     "factor_precision_log_stds"
+            # ][factor_idx] = -1.0
             self.tree.root["node"].root["node"].variational_parameters["globals"][
                 "noise_factors_mean"
             ][factor_idx] *= 0.0
-            self.tree.root["node"].root["node"].variational_parameters["globals"][
-                "noise_factors_log_std"
-            ][factor_idx] = -1
+            # self.tree.root["node"].root["node"].variational_parameters["globals"][
+            #     "noise_factors_log_std"
+            # ][factor_idx] = -1
             self.tree.root["node"].root["node"].variational_parameters["globals"][
                 "cell_noise_mean"
             ][:, factor_idx] = 0.0
-            self.tree.root["node"].root["node"].variational_parameters["globals"][
-                "cell_noise_log_std"
-            ][:, factor_idx] = -1
+            # self.tree.root["node"].root["node"].variational_parameters["globals"][
+            #     "cell_noise_log_std"
+            # ][:, factor_idx] = -1
             elbos = self.tree.optimize_elbo(
                 local_node=None,
                 root_node=None,
@@ -2003,9 +2003,9 @@ class StructureSearch(object):
             logger.debug(f"Trying to clean all nodes...")
             for node in nodes:
                 node.variational_parameters["locals"]["unobserved_factors_mean"] *= 0.0
-                node.variational_parameters["locals"][
-                    "unobserved_factors_log_std"
-                ] = -2 * np.ones((n_genes,))
+                # node.variational_parameters["locals"][
+                #     "unobserved_factors_log_std"
+                # ] = -2 * np.ones((n_genes,))
                 node.variational_parameters["locals"][
                     "unobserved_factors_kernel_log_mean"
                 ] = np.log(
@@ -2013,9 +2013,9 @@ class StructureSearch(object):
                 ) * np.ones(
                     (n_genes,)
                 )
-                node.variational_parameters["locals"][
-                    "unobserved_factors_kernel_log_std"
-                ] = -2 * np.ones((n_genes,))
+                # node.variational_parameters["locals"][
+                #     "unobserved_factors_kernel_log_std"
+                # ] = -2 * np.ones((n_genes,))
 
             root_node = nodes[0]
             if not local:
@@ -2040,17 +2040,17 @@ class StructureSearch(object):
             logger.debug(f"Trying to clean {node.label}...")
 
             node.variational_parameters["locals"]["unobserved_factors_mean"] *= 0.0
-            node.variational_parameters["locals"][
-                "unobserved_factors_log_std"
-            ] = -2 * np.ones((n_genes,))
+            # node.variational_parameters["locals"][
+            #     "unobserved_factors_log_std"
+            # ] = -2 * np.ones((n_genes,))
             node.variational_parameters["locals"][
                 "unobserved_factors_kernel_log_mean"
             ] = np.log(node.unobserved_factors_kernel_concentration_caller()) * np.ones(
                 (n_genes,)
             )
-            node.variational_parameters["locals"][
-                "unobserved_factors_kernel_log_std"
-            ] = -2 * np.ones((n_genes,))
+            # node.variational_parameters["locals"][
+            #     "unobserved_factors_kernel_log_std"
+            # ] = -2 * np.ones((n_genes,))
             root_node = node
             if not local:
                 root_node = None
