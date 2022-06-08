@@ -1534,3 +1534,41 @@ class SCATrEx(object):
         # Plots the combined effect of each CNV across a lineage
         # Can be useful to check if the provided CNV tree is true
         raise NotImplementedError
+
+    def plot_proportions(self, dna=True, rna=True, show=True):
+        if dna:
+            dna_props = np.array([self.observed_tree.tree_dict[node]['weight'] for node in self.observed_tree.tree_dict])
+            nodes_labels = np.array([node for node in self.observed_tree.tree_dict])
+            colors = np.array([self.observed_tree.tree_dict[node]['color'] for node in self.observed_tree.tree_dict])
+            s = np.argsort(np.array(nodes_labels))
+            dna_nodes_labels = nodes_labels[s]
+            dna_colors = colors[s]
+            dna_props = dna_props[s]
+
+        if rna:
+            rna_nodes, rna_props = self.ntssb.get_node_data_sizes(normalized=True, super_only=True)
+            nodes_labels = [node.label for node in nodes]
+            s = np.argsort(np.array(nodes_labels))
+            rna_nodes = np.array(rna_nodes)[s]
+            rna_nodes_labels = np.array(nodes_labels)[s]
+            rna_props = np.array(rna_props)[s]
+            rna_colors = [node.tssb.color for node in nodes]
+
+        if dna and rna:
+            if set(dna_nodes_labels) != set(rna_nodes_labels):
+                raise ValueError(f"DNA and RNA nodes are not the same! DNA: {dna_nodes_labels}, RNA: {rna_nodes_labels}")
+            handles = []
+            for i, node in enumerate(rna_nodes):
+                dna_bottom = np.sum(dna_props[:i])
+                rna_bottom = np.sum(rna_props[:i])
+                h = plt.bar(['DNA', 'RNA'], [dna_props[i], rna_props[i]], color=[dna_colors[i], rna_colors[i]], bottom=[dna_bottom, rna_bottom])
+                handles.append(h[0])
+                plt.legend(handles, nodes_labels)
+        else:
+            if dna:
+                plt.bar(dna_nodes_labels, dna_props, color=dna_colors)
+            if rna:
+                plt.bar(rna_nodes_labels, rna_props, color=rna_colors)
+
+        if show:
+            plt.show()
