@@ -557,11 +557,18 @@ class NTSSB(object):
 
         return descend(self.root, 1.0)
 
-    def get_node_data_sizes(self, normalized=False):
-        nodes = self.get_nodes()
+    def get_node_data_sizes(self, normalized=False, super_only=True):
+        nodes, _ = self.get_node_mixture()
         sizes = []
+
+        if super_only:
+            nodes = [node for node in nodes if node.is_observed]
+
         for node in nodes:
-            sizes.append(len(node.data))
+            if super_only:
+                sizes.append(node.tssb.num_data())
+            else:
+                sizes.append(len(node.data))
 
         sizes = np.array(sizes)
         if normalized:
