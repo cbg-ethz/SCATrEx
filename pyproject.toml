@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "scatrex"
-version = "0.1.1"
+version = "0.2.0"
 description = "Map single-cell transcriptomes to copy number evolutionary trees."
 license = "GNU GENERAL PUBLIC LICENSE 3"
 authors = ["pedrofale <pedro.miguel.ferreira.pf@gmail.com>"]
