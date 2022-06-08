@@ -859,7 +859,9 @@ class SCATrEx(object):
 
     def plot_unobserved_parameters(
         self,
+        node_names=None,
         gene=None,
+        gene_names=None,
         ax=None,
         figsize=(4, 4),
         lw=4,
@@ -870,9 +872,18 @@ class SCATrEx(object):
         estimated=False,
         x_max=1,
         name="unobserved_factors",
+        show_names=False,
         save=None,
     ):
         nodes, _ = self.ntssb.get_node_mixture()
+
+        if node_names is not None:
+            nodes = [node for node in nodes if node.label in node_names]
+
+        genes = None
+        if gene_names is not None:
+            # Transform gene names into gene indices
+            genes = np.array([self.adata.var_names.get_loc(g) for g in gene_names])
 
         if self.search is not None:
             if len(self.search.traces["elbo"]) > 0:
@@ -928,14 +939,17 @@ class SCATrEx(object):
                     )
                 else:
                     plt.plot(
-                        unobs - step * i,
+                        unobs[genes].ravel() - step * i,
                         label=node.label,
                         color=node.tssb.color,
                         lw=4,
                         alpha=0.7,
                         ls=ls,
                     )
-                    plt.xticks([])
+                    if gene_names is not None and show_names:
+                        plt.xticks(np.arange(len(gene_names)), labels=gene_names)
+                    else:
+                        plt.xticks([])
                 tickpos.append(-step * i)
                 ticklabs.append(rf"{node.label.replace('-', '')}")
         plt.yticks(tickpos, labels=ticklabs, fontsize=fontsize)
