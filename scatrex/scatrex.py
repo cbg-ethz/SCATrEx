@@ -1573,7 +1573,7 @@ class SCATrEx(object):
             rna_nodes, rna_props = self.ntssb.get_node_data_sizes(
                 normalized=True, super_only=True
             )
-            nodes_labels = [node.label for node in nodes]
+            nodes_labels = [node.label for node in rna_nodes]
             s = np.argsort(np.array(nodes_labels))
             rna_nodes = np.array(rna_nodes)[s]
             rna_nodes_labels = np.array(nodes_labels)[s]
