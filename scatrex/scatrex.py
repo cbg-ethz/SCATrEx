@@ -831,9 +831,28 @@ class SCATrEx(object):
         )
 
     def plot_observed_parameters(
-        self, figsize=(4, 4), lw=4, alpha=0.7, title="", fontsize=18, step=4, save=None
+        self,
+        figsize=(4, 4),
+        lw=4,
+        alpha=0.7,
+        title="",
+        fontsize=18,
+        step=4,
+        node_names=None,
+        gene_names=None,
+        show_names=False,
+        save=None,
     ):
         nodes, _ = self.ntssb.get_node_mixture()
+
+        if node_names is not None:
+            nodes = [node for node in nodes if node.label in node_names]
+
+        genes = None
+        if gene_names is not None:
+            # Transform gene names into gene indices
+            genes = np.array([self.adata.var_names.get_loc(g) for g in gene_names])
+
         plt.figure(figsize=figsize)
         ticklabs = []
         tickpos = []
@@ -841,16 +860,19 @@ class SCATrEx(object):
             ls = "-"
             tickpos.append(-step * i)
             ticklabs.append(rf"{node.label.replace('-', '')}")
-            obs = node.observed_parameters
+            obs = node.observed_parameters.ravel()
             plt.plot(
-                obs - step * i,
+                obs[genes].ravel() - step * i,
                 label=node.label,
                 color=node.tssb.color,
                 lw=4,
                 alpha=0.7,
                 ls=ls,
             )
-            plt.xticks([])
+            if gene_names is not None and show_names:
+                plt.xticks(np.arange(len(gene_names)), labels=gene_names)
+            else:
+                plt.xticks([])
         plt.yticks(tickpos, labels=ticklabs, fontsize=fontsize)
         plt.title(title, fontsize=fontsize)
         if save is not None:
@@ -1578,7 +1600,7 @@ class SCATrEx(object):
             rna_nodes = np.array(rna_nodes)[s]
             rna_nodes_labels = np.array(nodes_labels)[s]
             rna_props = np.array(rna_props)[s]
-            rna_colors = [node.tssb.color for node in nodes]
+            rna_colors = [node.tssb.color for node in rna_nodes]
 
         if dna and rna:
             if set(dna_nodes_labels) != set(rna_nodes_labels):
