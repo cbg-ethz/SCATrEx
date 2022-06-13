@@ -2228,7 +2228,7 @@ class NTSSB(object):
                     np.abs(
                         nA.variational_parameters["locals"]["unobserved_factors_mean"]
                     )
-                    < 0.1
+                    > 0.1
                 )[0]
                 nA.variational_parameters["locals"][
                     "unobserved_factors_kernel_log_mean"
@@ -2254,7 +2254,7 @@ class NTSSB(object):
                     np.abs(
                         nB.variational_parameters["locals"]["unobserved_factors_mean"]
                     )
-                    < 0.1
+                    > 0.1
                 )[0]
                 nB.variational_parameters["locals"][
                     "unobserved_factors_kernel_log_mean"
