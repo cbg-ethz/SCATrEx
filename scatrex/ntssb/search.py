@@ -30,6 +30,7 @@ MOVE_WEIGHTS = {
     "perturb_node": 1,
     "perturb_globals": 1,
     "optimize_node": 1,
+    "transfer_factor": 0.5,
 }
 
 
@@ -236,6 +237,7 @@ class StructureSearch(object):
 
         if move_weights is None:
             move_weights = MOVE_WEIGHTS
+
         moves = list(move_weights.keys())
         move_weights = list(move_weights.values())
 
@@ -262,6 +264,9 @@ class StructureSearch(object):
             local = True
 
         n_factors = self.tree.root["node"].root["node"].num_global_noise_factors
+
+        if n_factors == 0 and 'transfer_factor' in move_weights:
+            move_weights['transfer_factor'] = 0.0
 
         init_baseline = np.mean(self.tree.data, axis=0)
         init_baseline = init_baseline / np.mean(
@@ -610,6 +615,21 @@ class StructureSearch(object):
                 # init_root, init_elbo, success, elbos = self.perturb_node(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, tol=tol, debug=debug, mb_size=mb_size, max_nodes=max_nodes, opt=opt, callback=callback, **callback_kwargs)
             elif move_id == "clean_node":
                 success, elbos = self.clean_node(
+                    local=local,
+                    num_samples=num_samples,
+                    n_iters=n_iters_elbo,
+                    thin=thin,
+                    step_size=step_size,
+                    tol=tol,
+                    debug=debug,
+                    mb_size=mb_size,
+                    max_nodes=max_nodes,
+                    opt=opt,
+                    callback=callback,
+                    **callback_kwargs,
+                )
+            elif move_id == "transfer_factor":
+                success, elbos = self.transfer_factor(
                     local=local,
                     num_samples=num_samples,
                     n_iters=n_iters_elbo,
@@ -1881,6 +1901,95 @@ class StructureSearch(object):
                     callback=callback,
                     **callback_kwargs,
                 )
+
+        return success, elbos
+
+    def transfer_factor(
+        self,
+        local=False,
+        num_samples=1,
+        n_iters=100,
+        thin=10,
+        tol=1e-7,
+        step_size=0.05,
+        mb_size=100,
+        max_nodes=5,
+        debug=False,
+        opt=None,
+        callback=None,
+        **callback_kwargs,
+    ):
+        # Take events from a factor and put them in the node that contains
+        # cells that use that factor the most
+
+        success = True
+        elbos = []
+
+        # Randomly choose a factor
+        factor_idx = np.random.randint(self.tree.root['node'].root['node'].num_global_noise_factors)
+
+        # Get genes in the factor
+        target_genes = np.argsort(
+            np.abs(
+                self.tree.root["node"]
+                .root["node"]
+                .variational_parameters["globals"]["noise_factors_mean"][
+                    factor_idx
+                ]
+            )
+        )[-10:]
+
+        # Get cells that give large weight to it
+        thres = np.quantile(np.abs(self.tree.root['node'].root['node'].variational_parameters['globals']['cell_noise_mean'][:,factor_idx]),
+            0.75)
+        target_cells = np.where(
+            np.abs(
+                self.tree.root['node']
+                .root['node']
+                .variational_parameters['globals']['cell_noise_mean'][
+                    :,factor_idx
+                ]
+            ) > thres
+        )[0]
+
+        # Get node that most of them attach to
+        target_node = max(list(np.array(self.tree.assignments)[target_cells]),key=list(np.array(self.tree.assignments)[target_cells]).count)
+
+        # Increase kernel on the genes that are affected by that factor
+        target_node.variational_parameters["locals"][
+            "unobserved_factors_kernel_log_mean"
+        ][target_genes] = -1.0
+
+        # Remove these genes from the factor
+        self.tree.root['node'].root['node'].variational_parameters['globals']['noise_factors_mean'][
+                factor_idx,target_genes
+        ] *= 0.0
+
+        # Remove weight of this factor from the target cells
+        self.tree.root['node'].root['node'].variational_parameters['globals']['cell_noise_mean'][
+                target_cells,factor_idx
+        ] *= 0.0
+
+        logger.debug(f"Trying to move factor {factor_idx} to node {target_node.label}...")
+
+        # This move has to be global because we mess with a noise factor
+        root_node = None
+        elbos = self.tree.optimize_elbo(
+            root_node=root_node,
+            num_samples=num_samples,
+            n_iters=n_iters,
+            thin=thin,
+            tol=tol,
+            step_size=step_size,
+            mb_size=mb_size,
+            max_nodes=max_nodes,
+            init=False,
+            debug=debug,
+            opt=opt,
+            opt_triplet=self.opt_triplet,
+            callback=callback,
+            **callback_kwargs,
+        )
 
         return success, elbos
 
