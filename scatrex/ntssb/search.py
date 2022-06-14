@@ -667,6 +667,10 @@ class StructureSearch(object):
                 self.tree.root["node"].root["node"].variational_parameters["globals"][
                     "log_baseline_mean"
                 ] += perturbation
+                perturbation = np.random.normal(0, 0.1, size=(self.tree.root["node"].root["node"].num_global_noise_factors, init_log_baseline.size+1))
+                self.tree.root["node"].root["node"].variational_parameters["globals"][
+                    "noise_factors_mean"
+                ] += perturbation
                 self.tree.root["node"].root["node"].variational_parameters["locals"][
                     "unobserved_factors_mean"
                 ] *= 0
