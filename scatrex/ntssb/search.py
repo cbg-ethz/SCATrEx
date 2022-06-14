@@ -238,13 +238,6 @@ class StructureSearch(object):
         if move_weights is None:
             move_weights = MOVE_WEIGHTS
 
-        moves = list(move_weights.keys())
-        move_weights = list(move_weights.values())
-
-        logger.debug(
-            f"Will search for the maximum marginal likelihood tree with the following moves: {moves}\n"
-        )
-
         self.tree.max_nodes = (
             len(self.tree.input_tree_dict.keys()) * max_nodes
         )  # upper bound on number of nodes
@@ -265,8 +258,11 @@ class StructureSearch(object):
 
         n_factors = self.tree.root["node"].root["node"].num_global_noise_factors
 
-        if n_factors == 0 and "transfer_factor" in move_weights:
-            move_weights["transfer_factor"] = 0.0
+        transfer_factor_weight = 0.0
+        if "transfer_factor" in move_weights:
+            if n_factors == 0:
+                move_weights["transfer_factor"] = 0.0
+            transfer_factor_weight = move_weights["transfer_factor"]
 
         init_baseline = np.mean(self.tree.data, axis=0)
         init_baseline = init_baseline / np.mean(
@@ -283,7 +279,6 @@ class StructureSearch(object):
             if n_factors > 0 and factor_delay > 0:
                 self.tree.root["node"].root["node"].num_global_noise_factors = 0
                 if "transfer_factor" in move_weights:
-                    transfer_factor_weight = move_weights["transfer_factor"]
                     move_weights["transfer_factor"] = 0.0
 
             # Compute score of initial tree -- should we really optimize the baseline to the max before doing it with the unobs factors?
@@ -338,12 +333,19 @@ class StructureSearch(object):
             self.tree.elbo = self.best_tree.elbo
             gamma = self.traces["gamma"][-1]
 
+        moves = list(move_weights.keys())
+        moves_weights = list(move_weights.values())
+
+        logger.debug(
+            f"Will search for the maximum marginal likelihood tree with the following moves: {moves}\n"
+        )
+
         init_score = self.tree.elbo if score_type == "elbo" else self.tree.ll
         init_root = deepcopy(self.tree.root)
         move_id = "full"
         n_merge = 0
         # Search tree
-        p = np.array(move_weights)
+        p = np.array(moves_weights)
         p = p / np.sum(p)
         for i in tqdm(range(n_iters)):
 
@@ -361,7 +363,7 @@ class StructureSearch(object):
                         add_rule = "improve"
                     else:
                         # Keep uniform move probability and always accept adds
-                        p = np.array(move_weights)
+                        p = np.array(moves_weights)
                         add_rule = "accept"
             except:
                 pass
@@ -381,6 +383,8 @@ class StructureSearch(object):
                 self.tree.root["node"].root["node"].num_global_noise_factors = n_factors
                 self.tree.root["node"].root["node"].init_noise_factors()
                 move_weights["transfer_factor"] = transfer_factor_weight
+                moves = list(move_weights.keys())
+                moves_weights = list(move_weights.values())
                 move_id = "full"
 
             if step_size < main_step_size:
