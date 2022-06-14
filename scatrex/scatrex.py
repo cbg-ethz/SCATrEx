@@ -1593,7 +1593,7 @@ class SCATrEx(object):
         # Can be useful to check if the provided CNV tree is true
         raise NotImplementedError
 
-    def plot_proportions(self, dna=True, rna=True, show=True):
+    def plot_proportions(self, dna=True, rna=True, remove_empty_nodes=True, show=True):
         if dna:
             dna_props = np.array(
                 [
@@ -1643,8 +1643,18 @@ class SCATrEx(object):
             plt.legend(handles, rna_nodes_labels)
         else:
             if dna:
+                if remove_empty_nodes:
+                    tokeep = np.where(np.array(dna_props) != 0)[0]
+                    dna_nodes_labels = np.array(dna_nodes_labels)[tokeep]
+                    dna_props = np.array(dna_props)[tokeep]
+                    dna_colors = np.array(dna_colors)[tokeep]
                 plt.bar(dna_nodes_labels, dna_props, color=dna_colors)
             if rna:
+                if remove_empty_nodes:
+                    tokeep = np.where(np.array(rna_props) != 0)[0]
+                    rna_nodes_labels = np.array(rna_nodes_labels)[tokeep]
+                    rna_props = np.array(rna_props)[tokeep]
+                    rna_colors = np.array(rna_colors)[tokeep]
                 plt.bar(rna_nodes_labels, rna_props, color=rna_colors)
 
         if show:
