@@ -121,8 +121,9 @@ class Tree(ABC):
 
     def generate_tree(self):
         alphabet = list(string.ascii_uppercase)
+        # Add healthy node
         self.tree_dict = dict(
-            A=dict(
+            root=dict(
                 parent="-1",
                 children=[],
                 params=None,
@@ -132,11 +133,27 @@ class Tree(ABC):
                 dp_alpha_parent_edge=self.dp_alpha_parent_edge,
                 alpha_decay_parent_edge=self.alpha_decay_parent_edge,
                 eta=self.eta,
-                weight=self.node_weights[0],
-                size=int(self.node_weights[0] * 100),
-                color=constants.CLONES_PAL[0],
-                label="A",
+                weight=0,
+                size=int(0),
+                color="gray",
+                label="root",
             )
+        )
+        # Add MRCA node
+        self.tree_dict["A"] = dict(
+            parent="root",
+            children=[],
+            params=None,
+            dp_alpha_subtree=self.dp_alpha_subtree,
+            alpha_decay_subtree=self.alpha_decay_subtree,
+            dp_gamma_subtree=self.dp_gamma_subtree,
+            dp_alpha_parent_edge=self.dp_alpha_parent_edge,
+            alpha_decay_parent_edge=self.alpha_decay_parent_edge,
+            eta=self.eta,
+            weight=self.node_weights[0],
+            size=int(self.node_weights[0] * 100),
+            color=constants.CLONES_PAL[0],
+            label="A",
         )
         for c in range(1, self.n_nodes):
             parent = alphabet[np.random.choice(np.arange(0, c))]
