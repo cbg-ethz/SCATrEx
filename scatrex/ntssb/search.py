@@ -948,13 +948,13 @@ class StructureSearch(object):
 
         if from_factor:
             # Remove factor
-            self.tree.root["node"].root["node"].variational_parameters["globals"][
-                "factor_precision_log_means"
-            ][factor_idx] = np.log(
-                self.tree.root["node"]
-                .root["node"]
-                .global_noise_factors_precisions_shape
-            )
+            # self.tree.root["node"].root["node"].variational_parameters["globals"][
+            #     "factor_precision_log_means"
+            # ][factor_idx] = np.log(
+            #     self.tree.root["node"]
+            #     .root["node"]
+            #     .global_noise_factors_precisions_shape
+            # )
             # self.tree.root["node"].root["node"].variational_parameters["globals"][
             #     "factor_precision_log_stds"
             # ][factor_idx] = -1.0
@@ -974,7 +974,7 @@ class StructureSearch(object):
                 local_node=None,
                 root_node=None,
                 num_samples=num_samples,
-                n_iters=2 * n_iters,
+                n_iters=n_iters * 5,
                 thin=thin,
                 tol=tol,
                 step_size=step_size,
