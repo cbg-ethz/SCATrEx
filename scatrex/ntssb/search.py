@@ -1998,7 +1998,7 @@ class StructureSearch(object):
         elbos = self.tree.optimize_elbo(
             root_node=root_node,
             num_samples=num_samples,
-            n_iters=n_iters,
+            n_iters=n_iters*5,
             thin=thin,
             tol=tol,
             step_size=step_size,
