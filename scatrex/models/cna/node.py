@@ -165,7 +165,10 @@ class Node(AbstractNode):
                         "factor_precision_log_stds"
                     ] = -np.ones((self.num_global_noise_factors))
 
-        self.data_ass_logits = np.zeros((self.tssb.ntssb.num_data))
+
+        self.data_ass_logits = np.array([])
+        if self.tssb.ntssb.num_data is not None:
+            self.data_ass_logits = np.zeros((self.tssb.ntssb.num_data))
 
         # Sticks
         if means:
