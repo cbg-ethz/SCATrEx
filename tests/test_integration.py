@@ -48,7 +48,7 @@ def test_scatrex():
     assert len(sim_sca.observed_tree.tree_dict.keys()) == n_clones
     assert len(sim_nodes) == n_clones + n_clones * n_extra_per_observed
 
-    args = dict(num_global_noise_factors=0)
+    args = dict(num_global_noise_factors=2)
     sca = scatrex.SCATrEx(model=models.cna, model_args=args)
     sca.model_args = args
     sca.add_data(sim_sca.adata.raw.to_adata())
@@ -56,8 +56,26 @@ def test_scatrex():
     sca.normalize_data()
     sca.project_data()
 
+    move_weights = {
+        "add": 1.0,
+        "merge": 1.0,
+        "prune_reattach": 1.0,
+        "pivot_reattach": 1.0,
+        "swap": 1.0,
+        "add_reattach_pivot": 1.0,
+        "subtree_reattach": 1.0,
+        "push_subtree": 1.0,
+        "extract_pivot": 1.0,
+        "subtree_pivot_reattach": 1.0,
+        "perturb_node": 1.0,
+        "perturb_globals": 1.0,
+        "optimize_node": 1.0,
+        "transfer_factor": 1.0,
+    }
+
     search_kwargs = {
-        "n_iters": 10,
+        "n_iters": 50,
+        "move_weights": move_weights,
         "n_iters_elbo": 1,
         "local": True,
         "factor_delay": 0,
