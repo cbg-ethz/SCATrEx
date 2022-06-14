@@ -1640,7 +1640,7 @@ class SCATrEx(object):
                     bottom=[dna_bottom, rna_bottom],
                 )
                 handles.append(h[0])
-                plt.legend(handles, nodes_labels)
+            plt.legend(handles, rna_nodes_labels)
         else:
             if dna:
                 plt.bar(dna_nodes_labels, dna_props, color=dna_colors)
