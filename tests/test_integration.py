@@ -78,7 +78,7 @@ def test_scatrex():
         "move_weights": move_weights,
         "n_iters_elbo": 1,
         "local": True,
-        "factor_delay": 0,
+        "factor_delay": 25,
         "step_size": 0.01,
         "posterior_delay": 10,
         "mb_size": 200,
