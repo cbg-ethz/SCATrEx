@@ -45,8 +45,8 @@ def test_scatrex():
     # Check data was simulated as expected
     assert sim_sca.adata.shape[0] == n_cells
     assert sim_sca.adata.shape[1] == n_genes
-    assert len(sim_sca.observed_tree.tree_dict.keys()) == n_clones
-    assert len(sim_nodes) == n_clones + n_clones * n_extra_per_observed
+    assert len(sim_sca.observed_tree.tree_dict.keys()) == n_clones + 1
+    assert len(sim_nodes) == n_clones + 1 + n_clones * n_extra_per_observed
 
     args = dict(num_global_noise_factors=2)
     sca = scatrex.SCATrEx(model=models.cna, model_args=args)
