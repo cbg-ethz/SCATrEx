@@ -282,6 +282,9 @@ class StructureSearch(object):
 
             if n_factors > 0 and factor_delay > 0:
                 self.tree.root["node"].root["node"].num_global_noise_factors = 0
+                if "transfer_factor" in move_weights:
+                    transfer_factor_weight = move_weights["transfer_factor"]
+                    move_weights["transfer_factor"] = 0.0
 
             # Compute score of initial tree -- should we really optimize the baseline to the max before doing it with the unobs factors?
             self.tree.reset_variational_parameters()
@@ -377,6 +380,7 @@ class StructureSearch(object):
                 self.tree = deepcopy(self.best_tree)
                 self.tree.root["node"].root["node"].num_global_noise_factors = n_factors
                 self.tree.root["node"].root["node"].init_noise_factors()
+                move_weights["transfer_factor"] = transfer_factor_weight
                 move_id = "full"
 
             if step_size < main_step_size:
