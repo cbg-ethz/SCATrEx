@@ -1142,7 +1142,6 @@ class Node(AbstractNode):
 
         def compute_node_kl(i):
             kl = 0.0
-            # # unobserved_factors_kernel -- USING JUST A SPARSE GAMMA DOES NOT PENALIZE KERNELS EQUAL TO ZERO
             pl = diag_gamma_logpdf(
                 jnp.clip(jnp.exp(nodes_log_unobserved_factors_kernels[i]), a_min=1e-6),
                 broadcasted_concentration,
