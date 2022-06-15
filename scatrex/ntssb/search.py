@@ -265,7 +265,7 @@ class StructureSearch(object):
             transfer_factor_weight = move_weights["transfer_factor"]
 
         init_baseline = np.mean(self.tree.data, axis=0)
-        init_baseline = init_baseline / np.mean(
+        init_baseline = init_baseline / np.median(
             self.tree.input_tree.adata.X / 2, axis=0
         )
         init_baseline = init_baseline / np.std(init_baseline)
