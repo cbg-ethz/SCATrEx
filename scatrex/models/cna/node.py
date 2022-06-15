@@ -1171,7 +1171,7 @@ class Node(AbstractNode):
                 * (parent_vector[i] != 0)
                 * nodes_unobserved_factors[parent_vector[i]]
                 + (parent_vector[i] != -1)
-                * (parent_vector[i] == 0)  # promote overexpressing events near the root
+                * is_root_subtree  # promote overexpressing events near the root 
                 * (jnp.exp(nodes_log_unobserved_factors_kernels[i]) > 0.1)
                 * 0.2,
                 jnp.clip(nodes_log_unobserved_factors_kernels[i], a_min=jnp.log(1e-6))
