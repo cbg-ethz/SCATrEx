@@ -366,14 +366,13 @@ class NTSSB(object):
         subtrees = self.get_subtrees()
         for subtree in subtrees:
             n_nodes = 0
-            if subtree.weight != 0:
-                while n_nodes < n_extra_per_observed:
-                    _, nodes = subtree.get_mixture()
-                    # Uniformly choose a node from the subtree
-                    snode = np.random.choice(nodes)
-                    self.add_node_to(snode.label, optimal_init=False)
-                    self.plot_tree(super_only=False)  # update names
-                    n_nodes = n_nodes + 1
+            while n_nodes < n_extra_per_observed:
+                _, nodes = subtree.get_mixture()
+                # Uniformly choose a node from the subtree
+                snode = np.random.choice(nodes)
+                self.add_node_to(snode.label, optimal_init=False)
+                self.plot_tree(super_only=False)  # update names
+                n_nodes = n_nodes + 1
 
         # Choose pivots
         def descend(super_tree):
