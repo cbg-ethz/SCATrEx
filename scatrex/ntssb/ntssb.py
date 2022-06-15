@@ -118,8 +118,8 @@ class NTSSB(object):
 
         input_tree_dict = self.input_tree_dict
 
-        # Get root node
-        root_node = self.input_tree.root()
+        # Get MRCA node
+        root_node = self.input_tree.mrca()
 
         obj = self.node_constructor(
             True,
