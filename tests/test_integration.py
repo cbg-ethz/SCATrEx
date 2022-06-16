@@ -56,6 +56,12 @@ def test_scatrex():
     sca.normalize_data()
     sca.project_data()
 
+    # Run clonemap
+    elbos = sca.learn_clonemap(n_iters=2, filter_genes=True)
+    assert "node" in sca.adata.obs.columns
+    assert "obs_node" in sca.adata.obs.columns
+
+    # Run SCATrEx
     move_weights = {
         "add": 1.0,
         "merge": 1.0,
@@ -105,6 +111,9 @@ def test_scatrex():
         assert np.var(
             node.variational_parameters["locals"]["unobserved_factors_mean"] > 0
         )
+
+    assert "scatrex_node" in sca.adata.obs.columns
+    assert "scatrex_obs_node" in sca.adata.obs.columns
 
     # Check if all plots run
     # Run in interactive mode to disable blocking behavior of matplotlib
