@@ -105,3 +105,78 @@ def test_scatrex():
         assert np.var(
             node.variational_parameters["locals"]["unobserved_factors_mean"] > 0
         )
+
+    # Check if all plots run
+    # Run in interactive mode to disable blocking behavior of matplotlib
+    import matplotlib as mpl
+
+    mpl.rcParams["interactive"] = True
+
+    sca.ntssb.plot_tree(counts=True, show_root=True)
+
+    sca.plot_unobserved_parameters(estimated=True, figsize=(12, 3), step=2)
+    sca.plot_unobserved_parameters(
+        estimated=True, figsize=(12, 3), step=0.2, name="unobserved_factors_kernel"
+    )
+
+    sca.search.plot_traces(["elbo", "n_nodes"])
+    sc.pl.heatmap(
+        sca.adata,
+        groupby="scatrex_node",
+        var_names=sca.adata.var_names,
+        layer="scatrex_noise",
+        figsize=(16, 8),
+    )
+    sc.pl.heatmap(
+        sca.adata,
+        groupby="scatrex_node",
+        var_names=sca.adata.var_names,
+        layer="scatrex_cnvs",
+        figsize=(16, 8),
+    )
+    sc.pl.heatmap(
+        sca.adata,
+        groupby="scatrex_node",
+        var_names=sca.adata.var_names,
+        layer="scatrex_xi",
+        figsize=(16, 8),
+    )
+
+    sca.plot_proportions()
+
+    # Comparing the CNVs with the cell state factors at each node highlights non-dosage-sensitive genes
+    concordances = sca.get_concordances()
+    cnv_state = sca.get_cnv_vs_state()
+    nodes = sorted(list(cnv_state.keys()))
+
+    sca.plot_cnv_vs_state(
+        nodes,
+        mapping=cnv_state,
+        state_range=[-1.5, 1.5],
+        figsize=(16, 2),
+        alpha=0.8,
+        concordances=concordances,
+    )
+    is_dosage_sensitive = np.array([True] * 100)
+    is_dosage_sensitive[sim_sca.ntssb.root["node"].root["node"].inert_genes] = False
+
+    # We can also rank the most discordant events across the whole tree
+    (
+        sorted_discordant_genes,
+        sorted_concordances,
+        sorted_nodes,
+    ) = sca.get_discordant_genes(concordances)
+    sca.plot_discordant_genes(
+        sorted_discordant_genes,
+        sorted_concordances,
+        sorted_nodes=None,
+        gene_annots=is_dosage_sensitive,
+    )
+    sca.plot_unobserved_parameters(estimated=True, gene="24", x_max=1.5, step=10)
+
+    genes = np.arange(15, 35).astype(int).astype(str)
+    sca.plot_unobserved_parameters(estimated=True, gene_names=genes, x_max=1.5, step=10)
+    sca.plot_observed_parameters(gene_names=genes, show_names=True)
+
+    sca.plot_tree(gene="17", genemode="unobserved", title="Cell state")
+    sca.plot_tree(gene="17", genemode="observed", title="CNV")
