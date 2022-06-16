@@ -573,10 +573,7 @@ class SCATrEx(object):
             adata = adata[:, var_genes]
             adata.raw = adata.copy()
             rna_filtered = np.array(adata.X)
-            for node in observed_tree_filtered.tree_dict:
-                observed_tree_filtered.tree_dict[node][
-                    "params"
-                ] = observed_tree_filtered.tree_dict[node]["params"][var_genes]
+            observed_tree_filtered.subset_genes(adata.var_names.values)
 
             # Subset the data to the highest variable genes
             sc.pp.normalize_total(adata, target_sum=1e4)
@@ -588,11 +585,7 @@ class SCATrEx(object):
             hvgenes = np.where(np.array(adata.var.highly_variable).ravel())[0]
             clones_filtered = clones_filtered[:, hvgenes]
             rna_filtered = np.array(rna_filtered[:, hvgenes])
-
-            for node in observed_tree_filtered.tree_dict:
-                observed_tree_filtered.tree_dict[node][
-                    "params"
-                ] = observed_tree_filtered.tree_dict[node]["params"][hvgenes]
+            observed_tree_filtered.subset_genes(adata.var_names[hvgenes].values)
 
         logger.debug(f"Filtered scRNA data for clonemap shape: {rna_filtered.shape}")
 
