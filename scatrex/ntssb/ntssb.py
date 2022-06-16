@@ -3543,6 +3543,7 @@ class NTSSB(object):
         fontcolor="black",
         pivot_probabilities=None,
         node_color_dict=None,
+        show_root=False,
     ):
 
         if node_color_dict is None:
@@ -3649,6 +3650,17 @@ class NTSSB(object):
                 return g
 
             g = descend(self.root, g)
+
+            if show_root:
+                style = None
+                fillcolor = self.input_tree_dict["root"]["color"]
+                g.node(
+                    "root",
+                    "root",
+                    fillcolor=fillcolor,
+                    style="filled",
+                )
+                g.edge("root", self.root["label"])
 
         return g
 
