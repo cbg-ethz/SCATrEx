@@ -21,7 +21,7 @@ def flatten_shared(shared_list):
     return np.concatenate([sh.flatten() for sh in shared_list])
 
 
-def elbos_callback(elbos, window=50, every=50, threshold=1e-2):
+def elbos_callback(elbos, window=50, every=50, threshold=1e-3):
     """
     Computes mean of history of elbos and checks if the relative change is smaller the threshold
     """
