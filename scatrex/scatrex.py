@@ -660,16 +660,17 @@ class SCATrEx(object):
             cnv_mat[cells] = np.array(clones[clone_idx])
         self.adata.layers["clonemap_cnvs"] = np.array(cnv_mat)
 
-        self.adata.layers["clonemap_noise"] = (
-            self.ntssb.root["node"]
-            .root["node"]
-            .variational_parameters["globals"]["cell_noise_mean"]
-            .dot(
+        if not filter_genes:
+            self.adata.layers["clonemap_noise"] = (
                 self.ntssb.root["node"]
                 .root["node"]
-                .variational_parameters["globals"]["noise_factors_mean"]
+                .variational_parameters["globals"]["cell_noise_mean"]
+                .dot(
+                    self.ntssb.root["node"]
+                    .root["node"]
+                    .variational_parameters["globals"]["noise_factors_mean"]
+                )
             )
-        )
 
         # Initialize colormaps and account for filtered genes
         # node_obs = dict(zip([self.observed_tree.tree_dict[node]['label'] for node in self.observed_tree.tree_dict], [self.observed_tree.tree_dict[node]['params'] for node in self.observed_tree.tree_dict]))
