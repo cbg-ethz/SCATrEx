@@ -1623,12 +1623,35 @@ class SCATrEx(object):
             rna_nodes_labels = np.array(nodes_labels)[s]
             rna_props = np.array(rna_props)[s]
             rna_colors = [node.tssb.color for node in rna_nodes]
+            if dna and "root" not in rna_nodes_labels:
+                # Add root
+                rna_nodes_labels = list(rna_nodes_labels)
+                rna_nodes_labels.append("root")
+                rna_nodes_labels = np.array(rna_nodes_labels)
+                rna_props = list(rna_props)
+                rna_props.append(0.0)
+                rna_props = np.array(rna_props)
+                rna_colors = list(rna_colors)
+                rna_colors.append(self.observed_tree.tree_dict["root"]["color"])
+                rna_colors = np.array(rna_colors)
 
         if dna and rna:
             if set(dna_nodes_labels) != set(rna_nodes_labels):
                 raise ValueError(
                     f"DNA and RNA nodes are not the same! DNA: {dna_nodes_labels}, RNA: {rna_nodes_labels}"
                 )
+
+            if remove_empty_nodes:  # In both RNA and DNA
+                tokeep = np.where(
+                    np.logical_and(np.array(dna_props) != 0, np.array(rna_props) != 0)
+                )[0]
+                dna_nodes_labels = np.array(dna_nodes_labels)[tokeep]
+                dna_props = np.array(dna_props)[tokeep]
+                dna_colors = np.array(dna_colors)[tokeep]
+                rna_nodes_labels = np.array(rna_nodes_labels)[tokeep]
+                rna_props = np.array(rna_props)[tokeep]
+                rna_colors = np.array(rna_colors)[tokeep]
+
             handles = []
             for i, node in enumerate(rna_nodes):
                 dna_bottom = np.sum(dna_props[:i])
