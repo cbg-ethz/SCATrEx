@@ -605,17 +605,19 @@ class SCATrEx(object):
         self.ntssb.add_data(np.array(rna_filtered), to_root=True)
         self.ntssb.root["node"].root["node"].reset_data_parameters()
         self.ntssb.reset_variational_parameters()
-        init_baseline = np.mean(
-            self.ntssb.data
-            / np.sum(self.ntssb.data, axis=1).reshape(-1, 1)
-            * self.ntssb.data.shape[1],
-            axis=0,
+
+        init_baseline = np.mean(self.ntssb.data, axis=0)
+        init_baseline = init_baseline / np.median(
+            self.ntssb.input_tree.adata.X / 2, axis=0
         )
+        init_baseline = init_baseline / np.std(init_baseline)
         init_baseline = init_baseline / init_baseline[0]
         init_log_baseline = np.log(init_baseline[1:] + 1e-6)
+        init_log_baseline = np.clip(init_log_baseline, -2, 2)
+
         self.ntssb.root["node"].root["node"].variational_parameters["globals"][
             "log_baseline_mean"
-        ] = np.clip(init_log_baseline, -1, 1)
+        ] = init_log_baseline
         optimize_kwargs.setdefault(
             "sticks_only", True
         )  # ignore other node-specific parameters
