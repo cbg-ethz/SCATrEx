@@ -287,6 +287,15 @@ class SCATrEx(object):
         self.adata.obs["scatrex_node"] = node_assignments
         self.adata.obs["scatrex_obs_node"] = obs_node_assignments.astype(str)
 
+        self.adata.uns["scatrex_node_colors"] = [
+            self.observed_tree.tree_dict[node]["color"]
+            for node in np.unique(self.adata.obs["scatrex_node"])
+        ]
+        self.adata.uns["scatrex_obs_node_colors"] = [
+            self.observed_tree.tree_dict[node]["color"]
+            for node in np.unique(self.adata.obs["scatrex_obs_node"])
+        ]
+
         labels = list(self.observed_tree.tree_dict.keys())
         sizes = [
             np.count_nonzero(self.adata.obs["scatrex_obs_node"] == label)
@@ -637,6 +646,15 @@ class SCATrEx(object):
 
         self.adata.obs["node"] = assignments.astype(str)
         self.adata.obs["obs_node"] = assignments.astype(str)
+
+        self.adata.uns["obs_node_colors"] = [
+            self.observed_tree.tree_dict[node]["color"]
+            for node in np.unique(self.adata.obs["obs_node"])
+        ]
+        self.adata.uns["node_colors"] = [
+            self.observed_tree.tree_dict[node]["color"]
+            for node in np.unique(self.adata.obs["node"])
+        ]
 
         # scdna_labels = [self.observed_tree.tree_dict[node]['label'] for node in self.observed_tree.tree_dict if self.observed_tree.tree_dict[node]['size'] > 0]
         scdna_labels = list(self.observed_tree.tree_dict.keys())
