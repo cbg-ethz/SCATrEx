@@ -288,7 +288,7 @@ class SCATrEx(object):
         self.adata.obs["scatrex_obs_node"] = obs_node_assignments.astype(str)
 
         self.adata.uns["scatrex_node_colors"] = [
-            self.observed_tree.tree_dict[node]["color"]
+            self.observed_tree.tree_dict[node.split("-")[0]]["color"]
             for node in np.unique(self.adata.obs["scatrex_node"])
         ]
         self.adata.uns["scatrex_obs_node_colors"] = [
