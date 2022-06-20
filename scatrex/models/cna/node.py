@@ -1233,7 +1233,7 @@ class Node(AbstractNode):
             jnp.log(self.global_noise_factors_precisions_shape) * ones_mat,
             zeros_mat,
         ) - diag_loggaussian_logpdf(
-            log_factors_precisions,
+            jnp.exp(log_factors_precisions),
             factor_precision_log_means,
             factor_precision_log_stds,
         )
