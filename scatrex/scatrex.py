@@ -440,14 +440,18 @@ class SCATrEx(object):
         else:
             sc.pp.normalize_total(adata, target_sum=1e4)
             sc.pp.log1p(adata)
-            sc.pp.highly_variable_genes(adata, n_top_genes=np.min([500, adata.shape[1]]))
+            sc.pp.highly_variable_genes(
+                adata, n_top_genes=np.min([500, adata.shape[1]])
+            )
             hvgenes = np.where(np.array(adata.var.highly_variable).ravel())[0]
             clones_filtered = clones[:, hvgenes]
             rna_filtered = np.array(adata.raw.X[:, hvgenes])
 
         if layer != "smoothed":
             # Subset the data to the genes with varying copy number across malignant clones
-            var_genes = np.where(np.var(clones_filtered[malignant_indices], axis=0) > 0)[0]
+            var_genes = np.where(
+                np.var(clones_filtered[malignant_indices], axis=0) > 0
+            )[0]
             clones_filtered = clones_filtered[:, var_genes]
             rna_filtered = rna_filtered[:, var_genes]
 
