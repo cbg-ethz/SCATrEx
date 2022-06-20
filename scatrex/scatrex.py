@@ -503,16 +503,6 @@ class SCATrEx(object):
         if observed_tree:
             self.observed_tree = observed_tree
 
-        # import numpy as np
-        # import scatrex
-        # from copy import deepcopy
-        # import scanpy as sc
-        # self = sca
-        # cell_filter='Melanoma'
-        # dna_diploid_threshold=0.95
-        # filter_genes=True
-        # filter_diploid_cells=True
-
         cell_idx = np.arange(self.adata.shape[0])
         others_idx = np.array([])
         if cell_filter:
