@@ -362,7 +362,7 @@ class SCATrEx(object):
         self,
         observed_tree=None,
         cell_filter=None,
-        layer="scaled",
+        layer=None,
         dna_diploid_threshold=0.95,
     ):
         if not self.observed_tree and observed_tree is None:
@@ -434,17 +434,22 @@ class SCATrEx(object):
         # Subset the data to the highest variable genes
         adata = deepcopy(self.adata)
         adata = adata[cell_idx]
-        sc.pp.normalize_total(adata, target_sum=1e4)
-        sc.pp.log1p(adata)
-        sc.pp.highly_variable_genes(adata, n_top_genes=np.min([500, adata.shape[1]]))
-        hvgenes = np.where(np.array(adata.var.highly_variable).ravel())[0]
-        clones_filtered = clones[:, hvgenes]
-        rna_filtered = np.array(adata.raw.X[:, hvgenes])
+        if layer is not None:
+            rna_filtered = adata.layers[layer]
+            clones_filtered = clones
+        else:
+            sc.pp.normalize_total(adata, target_sum=1e4)
+            sc.pp.log1p(adata)
+            sc.pp.highly_variable_genes(adata, n_top_genes=np.min([500, adata.shape[1]]))
+            hvgenes = np.where(np.array(adata.var.highly_variable).ravel())[0]
+            clones_filtered = clones[:, hvgenes]
+            rna_filtered = np.array(adata.raw.X[:, hvgenes])
 
-        # Subset the data to the genes with varying copy number across malignant clones
-        var_genes = np.where(np.var(clones_filtered[malignant_indices], axis=0) > 0)[0]
-        clones_filtered = clones_filtered[:, var_genes]
-        rna_filtered = rna_filtered[:, var_genes]
+        if layer != "smoothed":
+            # Subset the data to the genes with varying copy number across malignant clones
+            var_genes = np.where(np.var(clones_filtered[malignant_indices], axis=0) > 0)[0]
+            clones_filtered = clones_filtered[:, var_genes]
+            rna_filtered = rna_filtered[:, var_genes]
 
         assignments = [0] * self.adata.shape[0]
         for i, cell in enumerate(cell_idx):
