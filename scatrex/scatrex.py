@@ -487,6 +487,7 @@ class SCATrEx(object):
         filter_genes=True,
         filter_diploid_cells=False,
         max_genes=500,
+        filter_var=False,
         **optimize_kwargs,
     ):
         """Provides an equivalent of clonealign (for CNV nodes) or cardelino (for SNV nodes)"""
@@ -565,8 +566,11 @@ class SCATrEx(object):
 
         if filter_genes:
             # Subset the data to the genes with varying copy number across malignant clones
-            # var_genes = np.where(np.var(clones_filtered[malignant_indices], axis=0) > 0)[0]
             var_genes = np.where(np.any(clones[malignant_indices] != 2, axis=0))[0]
+            if filter_var:
+                var_genes = np.where(
+                    np.var(clones_filtered[malignant_indices], axis=0) > 0
+                )[0]
 
             clones_filtered = clones[:, var_genes]
             adata = adata[:, var_genes]
