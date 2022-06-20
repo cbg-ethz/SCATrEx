@@ -53,8 +53,6 @@ def test_scatrex():
     sca.model_args = args
     sca.add_data(sim_sca.adata.raw.to_adata())
     sca.set_observed_tree(sim_sca.observed_tree)
-    sca.normalize_data()
-    sca.project_data()
 
     # Run clonemap
     elbos = sca.learn_clonemap(n_iters=2, filter_genes=True)
