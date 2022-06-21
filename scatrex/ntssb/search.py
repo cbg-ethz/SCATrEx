@@ -31,6 +31,7 @@ MOVE_WEIGHTS = {
     "perturb_globals": 1,
     "optimize_node": 1,
     "transfer_factor": 0.5,
+    "transfer_unobserved": 0.5,
 }
 
 
@@ -262,6 +263,7 @@ class StructureSearch(object):
         if "transfer_factor" in move_weights:
             if n_factors == 0:
                 move_weights["transfer_factor"] = 0.0
+                move_weights["transfer_unobserved"] = 0.0
             transfer_factor_weight = move_weights["transfer_factor"]
 
         init_baseline = np.mean(self.tree.data, axis=0)
@@ -280,6 +282,7 @@ class StructureSearch(object):
                 self.tree.root["node"].root["node"].num_global_noise_factors = 0
                 if "transfer_factor" in move_weights:
                     move_weights["transfer_factor"] = 0.0
+                    move_weights["transfer_unobserved"] = 0.0
 
             # Compute score of initial tree -- should we really optimize the baseline to the max before doing it with the unobs factors?
             self.tree.reset_variational_parameters()
@@ -383,6 +386,7 @@ class StructureSearch(object):
                 self.tree.root["node"].root["node"].num_global_noise_factors = n_factors
                 self.tree.root["node"].root["node"].init_noise_factors()
                 move_weights["transfer_factor"] = transfer_factor_weight
+                move_weights["transfer_unobserved"] = transfer_factor_weight
                 moves = list(move_weights.keys())
                 moves_weights = list(move_weights.values())
                 move_id = "full"
@@ -638,6 +642,22 @@ class StructureSearch(object):
                 )
             elif move_id == "transfer_factor":
                 success, elbos = self.transfer_factor(
+                    local=local,
+                    num_samples=num_samples,
+                    n_iters=n_iters_elbo,
+                    thin=thin,
+                    step_size=step_size,
+                    tol=tol,
+                    debug=debug,
+                    mb_size=mb_size,
+                    max_nodes=max_nodes,
+                    opt=opt,
+                    callback=callback,
+                    **callback_kwargs,
+                )
+
+            elif move_id == "transfer_unobserved":
+                success, elbos = self.transfer_unobserved(
                     local=local,
                     num_samples=num_samples,
                     n_iters=n_iters_elbo,
@@ -1999,6 +2019,108 @@ class StructureSearch(object):
 
         logger.debug(
             f"Trying to move factor {factor_idx} to node {target_node.label}..."
+        )
+
+        # This move has to be global because we mess with a noise factor
+        root_node = None
+        elbos = self.tree.optimize_elbo(
+            root_node=root_node,
+            num_samples=num_samples,
+            n_iters=n_iters * 5,
+            thin=thin,
+            tol=tol,
+            step_size=step_size,
+            mb_size=mb_size,
+            max_nodes=max_nodes,
+            init=False,
+            debug=debug,
+            opt=opt,
+            opt_triplet=self.opt_triplet,
+            callback=callback,
+            **callback_kwargs,
+        )
+
+        return success, elbos
+
+    def transfer_unobserved(
+        self,
+        local=False,
+        num_samples=1,
+        n_iters=100,
+        thin=10,
+        tol=1e-7,
+        step_size=0.05,
+        mb_size=100,
+        max_nodes=5,
+        debug=False,
+        opt=None,
+        callback=None,
+        **callback_kwargs,
+    ):
+        # Take events from a node and put them in the factor that cells below
+        # that node most use
+
+        success = True
+        elbos = []
+
+        # Randomly choose a node, biased towards nodes with most events
+        nodes = self.tree.get_nodes()
+        n_events = [
+            np.sum(
+                np.exp(
+                    node.variational_parameters["locals"][
+                        "unobserved_factors_kernel_log_mean"
+                    ]
+                )
+            )
+            for node in nodes[1:]
+        ]
+        node = np.random.choice(nodes[1:], p=n_events / np.sum(n_events))
+
+        # Get all descendants of node
+        nodes = node.get_descendants()
+
+        # Get cells in those nodes
+        data = np.concatenate([list(n.data) for n in nodes])
+
+        # Get a factor (biased towards the ones those cells like the most)
+        factor_counts = np.bincount(
+            np.argmax(
+                np.abs(
+                    self.tree.root["node"]
+                    .root["node"]
+                    .variational_parameters["globals"]["cell_noise_mean"][data]
+                ),
+                axis=1,
+            )
+        )
+        target_factor = np.random.choice(
+            np.arange(n_factors), p=factor_counts / np.sum(factor_counts)
+        )
+
+        # Get events from node and put them in factor
+        node_event_locs = np.where(
+            node.variational_parameters["locals"]["unobserved_factors_kernel_log_mean"]
+            > -1
+        )[0]
+        node_event_vec = node.variational_parameters["locals"][
+            "unobserved_factors_mean"
+        ]
+        self.tree.root["node"].root["node"].variational_parameters["globals"][
+            "noise_factors_mean"
+        ][target_factor, node_event_locs] = node_event_vec[node_event_locs]
+
+        # Remove those events from node and its descendants
+        node.variational_parameters["locals"]["unobserved_factors_kernel_log_mean"][
+            node_event_locs
+        ] = -2.0
+        for desc in nodes:
+            desc.variational_parameters["locals"]["unobserved_factors_mean"][
+                node_event_locs
+            ] = 0.0
+
+        logger.debug(
+            f"Trying to move events in node {node.label} to factor {target_factor}..."
         )
 
         # This move has to be global because we mess with a noise factor
