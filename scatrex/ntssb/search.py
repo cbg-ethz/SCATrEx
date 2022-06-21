@@ -2081,7 +2081,7 @@ class StructureSearch(object):
         nodes = node.get_descendants()
 
         # Get cells in those nodes
-        data = np.concatenate([list(n.data) for n in nodes])
+        data = np.concatenate([list(n.data) for n in nodes]).astype(int)
         if len(data) != 0:
 
             # Get a factor (biased towards the ones those cells like the most)
