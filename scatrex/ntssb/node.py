@@ -139,6 +139,17 @@ class AbstractNode(object):
             ancestors.append(self)
             return ancestors
 
+    def get_descendants(self):
+        l = []
+
+        def descend(node):
+            l.append(node)
+            for child in node.children():
+                descend(child)
+
+        descend(self)
+        return l
+
     def parameter_log_prior(self):
         return 0
 
