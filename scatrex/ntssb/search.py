@@ -2082,21 +2082,26 @@ class StructureSearch(object):
 
         # Get cells in those nodes
         data = np.concatenate([list(n.data) for n in nodes])
+        if len(data) != 0:
 
-        # Get a factor (biased towards the ones those cells like the most)
-        factor_counts = np.bincount(
-            np.argmax(
-                np.abs(
-                    self.tree.root["node"]
-                    .root["node"]
-                    .variational_parameters["globals"]["cell_noise_mean"][data]
-                ),
-                axis=1,
+            # Get a factor (biased towards the ones those cells like the most)
+            factor_counts = np.bincount(
+                np.argmax(
+                    np.abs(
+                        self.tree.root["node"]
+                        .root["node"]
+                        .variational_parameters["globals"]["cell_noise_mean"][data]
+                    ),
+                    axis=1,
+                )
             )
-        )
-        target_factor = np.random.choice(
-            np.arange(n_factors), p=factor_counts / np.sum(factor_counts)
-        )
+            target_factor = np.random.choice(
+                np.arange(len(factor_counts)), p=factor_counts / np.sum(factor_counts)
+            )
+        else:
+            target_factor = np.random.choice(
+                np.arange(self.tree.root["node"].root["node"].num_global_noise_factors)
+            )
 
         # Get events from node and put them in factor
         node_event_locs = np.where(
