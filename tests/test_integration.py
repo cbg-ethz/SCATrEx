@@ -79,7 +79,7 @@ def test_scatrex():
     }
 
     search_kwargs = {
-        "n_iters": 50,
+        "n_iters": 60,
         "move_weights": move_weights,
         "n_iters_elbo": 1,
         "local": True,
