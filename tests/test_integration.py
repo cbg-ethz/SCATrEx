@@ -75,6 +75,7 @@ def test_scatrex():
         "perturb_globals": 1.0,
         "optimize_node": 1.0,
         "transfer_factor": 1.0,
+        "transfer_unobserved": 1.0,
     }
 
     search_kwargs = {
