@@ -36,6 +36,7 @@ def test_scatrex():
             num_global_noise_factors=0,
             frac_dosage=0.95,
             baseline_shape=1.0,
+            num_batches=2,
         )
     )
 
