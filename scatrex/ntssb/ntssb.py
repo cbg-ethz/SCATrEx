@@ -94,6 +94,7 @@ class NTSSB(object):
         self.node_kl = -np.inf
         self.data = None
         self.num_data = None
+        self.covariates = None
 
         self.max_nodes = (
             len(self.input_tree_dict.keys()) * 1
@@ -296,9 +297,15 @@ class NTSSB(object):
             10000 * self.data / np.sum(self.data, axis=1).reshape(self.num_data, 1) + 1
         )
 
-    def add_data(self, data, to_root=False):
+    def add_data(self, data, covariates=None, to_root=False):
         self.data = data
         self.num_data = 0 if data is None else data.shape[0]
+        if covariates is None:
+            self.covariates = np.zeros((self.num_data, 0))
+        else:
+            self.covariates = covariates
+        assert self.covariates.shape[0] == self.num_data
+
         logger.debug(f"Adding data of shape {data.shape} to NTSSB")
 
         self.assignments = []

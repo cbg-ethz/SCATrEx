@@ -155,11 +155,17 @@ class SCATrEx(object):
         self.ntssb.data = observations
         self.ntssb.num_data = observations.shape[0]
 
+        if self.ntssb.root["node"].root["node"].num_batches > 1:
+            self.ntssb.covariates = self.ntssb.root["node"].root["node"].cell_covariates
+
         logger.info("Labeled data are stored in `self.adata`")
 
         self.adata = AnnData(observations)
         self.adata.obs["node"] = assignments_labels
         self.adata.obs["obs_node"] = assignments_obs_labels
+        if self.ntssb.root["node"].root["node"].num_batches > 1:
+            self.adata.obs["batch"] = np.argmax(self.ntssb.covariates, axis=1)
+
         self.adata.uns["obs_node_colors"] = [
             self.observed_tree.tree_dict[node]["color"]
             for node in self.observed_tree.tree_dict
@@ -175,6 +181,7 @@ class SCATrEx(object):
         cell_filter=None,
         filter_genes=False,
         max_genes=1000,
+        batch_key="batch",
         search_kwargs=dict(),
     ):
         if not self.observed_tree and observed_tree is None:
@@ -253,13 +260,25 @@ class SCATrEx(object):
         logger.debug(f"Filtered scRNA data for clonemap shape: {rna_filtered.shape}")
 
         if reset:
+
+            cell_covariates = None
+            if batch_key in adata.obs:
+                batches = adata.obs[batch_key].unique()
+                n_batches = len(batches)
+                if n_batches > 1:
+                    cell_covariates = np.zeros((adata.shape[0], n_batches))
+                    for i, batch in enumerate(batches):
+                        cells_in_batch = np.where(adata.obs[batch_key] == batch)[0]
+                        cell_covariates[cells_in_batch, i] = 1
             self.ntssb = NTSSB(
                 observed_tree_filtered,
                 self.model.Node,
                 node_hyperparams=self.model_args,
                 verbosity=self.verbosity,
             )
-            self.ntssb.add_data(np.array(rna_filtered), to_root=True)
+            self.ntssb.add_data(
+                np.array(rna_filtered), covariates=cell_covariates, to_root=True
+            )
             self.ntssb.root["node"].root["node"].reset_data_parameters()
             self.ntssb.reset_variational_parameters()
             self.ntssb.update_ass_logits(variational=True)
@@ -497,6 +516,7 @@ class SCATrEx(object):
         filter_diploid_cells=False,
         max_genes=500,
         filter_var=False,
+        batch_key="batch",
         **optimize_kwargs,
     ):
         """Provides an equivalent of clonealign (for CNV nodes) or cardelino (for SNV nodes)"""
@@ -611,10 +631,22 @@ class SCATrEx(object):
                     f"Assigning no weight to diploid clones: {diploid_labels} ({diploid_ids})"
                 )
 
+        cell_covariates = None
+        if batch_key in adata.obs:
+            batches = adata.obs[batch_key].unique()
+            n_batches = len(batches)
+            if n_batches > 1:
+                cell_covariates = np.zeros((adata.shape[0], n_batches))
+                for i, batch in enumerate(batches):
+                    cells_in_batch = np.where(adata.obs[batch_key] == batch)[0]
+                    cell_covariates[cells_in_batch, i] = 1
+                logger.info(f"Detected {n_batches} batches in \`{batch_key}\`")
         self.ntssb = NTSSB(
             observed_tree_filtered, self.model.Node, node_hyperparams=self.model_args
         )
-        self.ntssb.add_data(np.array(rna_filtered), to_root=True)
+        self.ntssb.add_data(
+            np.array(rna_filtered), covariates=cell_covariates, to_root=True
+        )
         self.ntssb.root["node"].root["node"].reset_data_parameters()
         self.ntssb.reset_variational_parameters()
 

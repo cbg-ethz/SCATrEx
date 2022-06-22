@@ -36,6 +36,7 @@ class Node(AbstractNode):
         unobserved_factors_kernel_rate=100.0,
         frac_dosage=1,
         baseline_shape=0.7,
+        num_batches=0,
         **kwargs,
     ):
         super(Node, self).__init__(is_observed, observed_parameters, **kwargs)
@@ -61,6 +62,7 @@ class Node(AbstractNode):
                 unobserved_factors_kernel_rate=unobserved_factors_kernel_rate,
                 frac_dosage=frac_dosage,
                 baseline_shape=baseline_shape,
+                num_batches=num_batches,
             )
         else:
             self.node_hyperparams = self.node_hyperparams_caller()
@@ -99,6 +101,14 @@ class Node(AbstractNode):
         ) * np.ones((self.num_global_noise_factors))
         self.variational_parameters["globals"]["factor_precision_log_stds"] = -np.ones(
             (self.num_global_noise_factors)
+        )
+
+        # Batch effects
+        self.variational_parameters["globals"]["batch_effects_mean"] = np.zeros(
+            (self.num_batches, self.n_genes)
+        )
+        self.variational_parameters["globals"]["batch_effects_log_std"] = -np.ones(
+            (self.num_batches, self.n_genes)
         )
 
     def reset_variational_parameters(self, means=True, variances=True):
@@ -164,6 +174,14 @@ class Node(AbstractNode):
                     self.variational_parameters["globals"][
                         "factor_precision_log_stds"
                     ] = -np.ones((self.num_global_noise_factors))
+                if means:
+                    self.variational_parameters["globals"][
+                        "batch_effects_mean"
+                    ] = np.random.normal(0, 0.1, (self.num_batches, self.n_genes))
+                if variances:
+                    self.variational_parameters["globals"][
+                        "batch_effects_log_std"
+                    ] = -np.ones((self.num_batches, self.n_genes))
 
         self.data_ass_logits = np.array([])
         if self.tssb.ntssb.num_data is not None:
@@ -234,6 +252,8 @@ class Node(AbstractNode):
             self.cell_global_noise_factors_weights_scale,
             size=[self.tssb.ntssb.num_data, self.num_global_noise_factors],
         )
+        self.cell_covariates = jnp.array(self.tssb.ntssb.covariates)
+        self.num_batches = self.cell_covariates.shape[1]
 
     def generate_data_params(self):
         self.lib_sizes = 20.0 + np.exp(
@@ -249,6 +269,14 @@ class Node(AbstractNode):
             self.cell_global_noise_factors_weights_scale,
             size=[self.tssb.ntssb.num_data, self.num_global_noise_factors],
         )
+        n_cells = self.tssb.ntssb.num_data
+        self.cell_covariates = np.zeros((n_cells, self.num_batches))
+        if self.num_batches > 1:
+            batches = np.random.choice(self.num_batches, size=n_cells)
+            self.cell_covariates[range(n_cells), batches] = 1
+        else:
+            self.cell_covariates = np.zeros((n_cells, 0))
+            self.num_batches = 0
 
     def reset_parameters(
         self,
@@ -265,6 +293,7 @@ class Node(AbstractNode):
         unobserved_factors_kernel_rate=1.0,
         frac_dosage=1.0,
         baseline_shape=0.1,
+        num_batches=0,
     ):
         parent = self.parent()
 
@@ -281,6 +310,7 @@ class Node(AbstractNode):
                 unobserved_factors_kernel_rate=unobserved_factors_kernel_rate,
                 frac_dosage=frac_dosage,
                 baseline_shape=baseline_shape,
+                num_batches=num_batches,
             )
 
             if root_params:
@@ -317,6 +347,14 @@ class Node(AbstractNode):
                     0,
                     1.0 / np.sqrt(self.global_noise_factors_precisions),
                     size=[self.n_genes, self.num_global_noise_factors],
+                ).T  # K x P
+
+                # Batch effects
+                self.num_batches = num_batches
+                self.batch_effects_factors = normal_sample(
+                    0,
+                    1.0,
+                    size=[self.n_genes, self.num_batches],
                 ).T  # K x P
 
                 self.unobserved_factors_root_kernel = unobserved_factors_root_kernel
@@ -403,7 +441,8 @@ class Node(AbstractNode):
         self,
         baseline=None,
         unobserved_factors=None,
-        noise=None,
+        noise=0.0,
+        batch_effects=0.0,
         cell_factors=None,
         global_factors=None,
         cnvs=None,
@@ -430,11 +469,9 @@ class Node(AbstractNode):
                 inert_genes
             ] = 2.0  # set these genes to 2, i.e., act like they have no CNV
             cnvs[zero_genes] = MIN_CNV  # (except if they are zero)
-        node_mean = None
-        if noise is not None:
-            node_mean = baseline * cnvs / 2 * np.exp(unobserved_factors + noise)
-        else:
-            node_mean = baseline * cnvs / 2 * np.exp(unobserved_factors)
+        node_mean = (
+            baseline * cnvs / 2 * np.exp(unobserved_factors + noise + batch_effects)
+        )
         if norm:
             if len(node_mean.shape) == 1:
                 sum = np.sum(node_mean)
@@ -450,15 +487,24 @@ class Node(AbstractNode):
             variational=variational
         ).dot(self.global_noise_factors_caller(variational=variational))
 
+    def get_batch_effects(self, variational=False):
+        return self.cell_covariates_caller().dot(
+            self.batch_effects_factors_caller(variational=variational)
+        )
+
     # ========= Functions to take samples from node. =========
     def sample_observation(self, n):
         noise = self.cell_global_noise_factors_weights_caller()[n].dot(
+            self.global_noise_factors_caller()
+        )
+        batch_effects = self.cell_global_noise_factors_weights_caller()[n].dot(
             self.global_noise_factors_caller()
         )
         node_mean = self.get_mean(
             unobserved_factors=self.unobserved_factors,
             baseline=self.baseline_caller(),
             noise=noise,
+            batch_effects=batch_effects,
             inert_genes=self.inert_genes_caller(),
         )
         s = multinomial_sample(self.lib_sizes_caller()[n], node_mean)
@@ -525,6 +571,7 @@ class Node(AbstractNode):
 
     def loglh(self, n, variational=False, axis=None):
         noise = self.get_noise(variational=variational)[n]
+        batch_effects = self.get_batch_effects(variational=variational)[n]
         unobs_factors = self.unobserved_factors
         baseline = self.baseline_caller()
         if variational:
@@ -533,7 +580,10 @@ class Node(AbstractNode):
             ]
             baseline = np.append(1, np.exp(self.log_baseline_caller(variational=True)))
         node_mean = self.get_mean(
-            baseline=baseline, unobserved_factors=unobs_factors, noise=noise
+            baseline=baseline,
+            unobserved_factors=unobs_factors,
+            noise=noise,
+            batch_effects=batch_effects,
         )
         lib_sizes = self.lib_sizes_caller()[n]
         return jax.partial(jit, static_argnums=2)(poisson_lpmf)(
@@ -597,6 +647,8 @@ class Node(AbstractNode):
         noise_factors_log_std,
         factor_precision_log_means,
         factor_precision_log_stds,
+        batch_effects_mean,
+        batch_effects_log_std,
     ):
         elbo, ll, kl, node_kl = self._compute_elbo(
             rng,
@@ -631,6 +683,8 @@ class Node(AbstractNode):
             noise_factors_log_std,
             factor_precision_log_means,
             factor_precision_log_stds,
+            batch_effects_mean,
+            batch_effects_log_std,
         )
         return elbo
 
@@ -669,6 +723,8 @@ class Node(AbstractNode):
         noise_factors_log_std,
         factor_precision_log_means,
         factor_precision_log_stds,
+        batch_effects_mean,
+        batch_effects_log_std,
     ):
 
         # single-sample Monte Carlo estimate of the variational lower bound
@@ -682,7 +738,18 @@ class Node(AbstractNode):
                 noise_factors_log_std,
                 factor_precision_log_means,
                 factor_precision_log_stds,
-            ) = (globals[0], globals[1], globals[2], globals[3], globals[4], globals[5])
+                batch_effects_mean,
+                batch_effects_log_std,
+            ) = (
+                globals[0],
+                globals[1],
+                globals[2],
+                globals[3],
+                globals[4],
+                globals[5],
+                globals[6],
+                globals[7],
+            )
             log_baseline_mean = jax.lax.stop_gradient(log_baseline_mean)
             log_baseline_log_std = jax.lax.stop_gradient(log_baseline_log_std)
             noise_factors_mean = jax.lax.stop_gradient(noise_factors_mean)
@@ -691,6 +758,8 @@ class Node(AbstractNode):
                 factor_precision_log_means
             )
             factor_precision_log_stds = jax.lax.stop_gradient(factor_precision_log_stds)
+            batch_effects_mean = jax.lax.stop_gradient(batch_effects_mean)
+            batch_effects_log_std = jax.lax.stop_gradient(batch_effects_log_std)
             return (
                 log_baseline_mean,
                 log_baseline_log_std,
@@ -698,6 +767,8 @@ class Node(AbstractNode):
                 noise_factors_log_std,
                 factor_precision_log_means,
                 factor_precision_log_stds,
+                batch_effects_mean,
+                batch_effects_log_std,
             )
 
         def alt_global(globals):
@@ -708,7 +779,18 @@ class Node(AbstractNode):
                 noise_factors_log_std,
                 factor_precision_log_means,
                 factor_precision_log_stds,
-            ) = (globals[0], globals[1], globals[2], globals[3], globals[4], globals[5])
+                batch_effects_mean,
+                batch_effects_log_std,
+            ) = (
+                globals[0],
+                globals[1],
+                globals[2],
+                globals[3],
+                globals[4],
+                globals[5],
+                globals[6],
+                globals[7],
+            )
             return (
                 log_baseline_mean,
                 log_baseline_log_std,
@@ -716,6 +798,8 @@ class Node(AbstractNode):
                 noise_factors_log_std,
                 factor_precision_log_means,
                 factor_precision_log_stds,
+                batch_effects_mean,
+                batch_effects_log_std,
             )
 
         (
@@ -725,6 +809,8 @@ class Node(AbstractNode):
             noise_factors_log_std,
             factor_precision_log_means,
             factor_precision_log_stds,
+            batch_effects_mean,
+            batch_effects_log_std,
         ) = jax.lax.cond(
             do_global,
             alt_global,
@@ -736,6 +822,8 @@ class Node(AbstractNode):
                 noise_factors_log_std,
                 factor_precision_log_means,
                 factor_precision_log_stds,
+                batch_effects_mean,
+                batch_effects_log_std,
             ),
         )
 
@@ -963,6 +1051,18 @@ class Node(AbstractNode):
         cell_noise = diag_gaussian_sample(rng, cell_noise_mean, cell_noise_log_std)
         noise = jnp.dot(cell_noise, noise_factors)
 
+        # batch effects
+        batch_effects_mean = jnp.clip(batch_effects_mean, a_min=-10.0, a_max=10.0)
+        batch_effects_log_std = jnp.clip(
+            batch_effects_log_std, a_min=jnp.log(1e-2), a_max=jnp.log(1e2)
+        )
+        batch_effects_factors = diag_gaussian_sample(
+            rng, batch_effects_mean, batch_effects_log_std
+        )
+        cell_covariates = jnp.array(self.cell_covariates)[indices]
+        batch_effects = jnp.dot(cell_covariates, batch_effects_factors)
+
+        # unobserved factors
         log_unobserved_factors_kernel_means = jnp.clip(
             log_unobserved_factors_kernel_means, a_min=jnp.log(1e-6), a_max=jnp.log(1e2)
         )
@@ -1087,7 +1187,12 @@ class Node(AbstractNode):
         def compute_node_ll(i):
             unobserved_factors = nodes_unobserved_factors[i] * (parent_vector[i] != -1)
 
-            node_mean = baseline * cnvs[i] / 2 * jnp.exp(unobserved_factors + noise)
+            node_mean = (
+                baseline
+                * cnvs[i]
+                / 2
+                * jnp.exp(unobserved_factors + noise + batch_effects)
+            )
             sum = jnp.sum(node_mean, axis=1).reshape(mb_size, 1)
             node_mean = node_mean / sum
             node_mean = node_mean * lib_sizes
@@ -1245,7 +1350,20 @@ class Node(AbstractNode):
         ) - diag_gaussian_logpdf(
             noise_factors, noise_factors_mean, noise_factors_log_std
         )
-        total_kl = node_kl + baseline_kl + factor_precision_kl + noise_factors_kl
+        batch_effects_kl = diag_gaussian_logpdf(
+            batch_effects_factors,
+            jnp.zeros(batch_effects_factors.shape),
+            jnp.zeros(batch_effects_factors.shape),
+        ) - diag_gaussian_logpdf(
+            batch_effects_factors, batch_effects_mean, batch_effects_log_std
+        )
+        total_kl = (
+            node_kl
+            + baseline_kl
+            + factor_precision_kl
+            + noise_factors_kl
+            + batch_effects_kl
+        )
 
         # Scale the KL by the data size
         total_kl = total_kl * jnp.sum(data_mask_subset != 0) / self.tssb.ntssb.num_data
@@ -1275,6 +1393,12 @@ class Node(AbstractNode):
             return self.global_noise_factors_precisions_shape
         else:
             return self.parent().global_noise_factors_precisions_shape_caller()
+
+    def cell_covariates_caller(self):
+        if self.parent() is None:
+            return self.cell_covariates
+        else:
+            return self.parent().cell_covariates_caller()
 
     def lib_sizes_caller(self):
         if self.parent() is None:
@@ -1376,6 +1500,15 @@ class Node(AbstractNode):
                 return self.global_noise_factors
         else:
             return self.parent().global_noise_factors_caller(variational=variational)
+
+    def batch_effects_factors_caller(self, variational=False):
+        if self.parent() is None:
+            if variational:
+                return self.variational_parameters["globals"]["batch_effects_mean"]
+            else:
+                return self.batch_effects_factors
+        else:
+            return self.parent().batch_effects_factors_caller(variational=variational)
 
     def set_event_string(
         self,
