@@ -395,9 +395,12 @@ class Tree(ABC):
 
     def mrca(self):
         if "root" in self.tree_dict:
-            for node in self.tree_dict:
-                if self.tree_dict[node]["parent"] == "root":
-                    return node
+            if len(self.tree_dict['children']) > 1:
+                return self.root()
+            else:
+                for node in self.tree_dict:
+                    if self.tree_dict[node]["parent"] == "root":
+                        return node
         else:
             return self.root()
 
