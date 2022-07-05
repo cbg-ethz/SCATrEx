@@ -411,14 +411,14 @@ def logsumexp(X, axis=None):
     return numpy.log(numpy.sum(numpy.exp(X - maxes), axis=axis)) + maxes
 
 
-def convert_tidy_to_matrix(tidy_df):
+def convert_tidy_to_matrix(tidy_df, rows="single_cell_id", columns="copy_number"):
     # Takes a tidy dataframe specifying the CNVs of cells along genomic bins
     # and converts it to a cell by bin matrix
-    cell_df = tidy_df.loc[tidy_df.single_cell_id == tidy_df.single_cell_id[0]]
-    bins_df = cell_df.drop(columns=["copy_number", "single_cell_id"], inplace=False)
-    tidy_df["bin_id"] = np.tile(bins_df.index, tidy_df.single_cell_id.unique().size)
-    matrix = tidy_df[["copy_number", "single_cell_id", "bin_id"]].pivot_table(
-        values="copy_number", index="single_cell_id", columns="bin_id"
+    cell_df = tidy_df.loc[tidy_df[rows] == tidy_df[rows][0]]
+    bins_df = cell_df.drop(columns=[columns, rows], inplace=False)
+    tidy_df["bin_id"] = np.tile(bins_df.index, tidy_df[rows].unique().size)
+    matrix = tidy_df[[columns, rows, "bin_id"]].pivot_table(
+        values=columns, index=rows, columns="bin_id"
     )
 
     return matrix, bins_df
