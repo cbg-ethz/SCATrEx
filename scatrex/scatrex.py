@@ -270,7 +270,7 @@ class SCATrEx(object):
                     for i, batch in enumerate(batches):
                         cells_in_batch = np.where(adata.obs[batch_key] == batch)[0]
                         cell_covariates[cells_in_batch, i] = 1
-                    logger.info(f"Detected {n_batches} batches in {batch_key}")
+                    logger.info(f"Detected {n_batches} batches in `{batch_key}`")
             self.ntssb = NTSSB(
                 observed_tree_filtered,
                 self.model.Node,
