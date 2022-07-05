@@ -3659,15 +3659,16 @@ class NTSSB(object):
             g = descend(self.root, g)
 
             if show_root:
-                style = None
-                fillcolor = self.input_tree_dict["root"]["color"]
-                g.node(
-                    "root",
-                    "root",
-                    fillcolor=fillcolor,
-                    style="filled",
-                )
-                g.edge("root", self.root["label"])
+                if self.root["label"] != "root":
+                    style = None
+                    fillcolor = self.input_tree_dict["root"]["color"]
+                    g.node(
+                        "root",
+                        "root",
+                        fillcolor=fillcolor,
+                        style="filled",
+                    )
+                    g.edge("root", self.root["label"])
 
         return g
 
