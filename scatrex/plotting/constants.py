@@ -22,3 +22,4 @@ CNV_CMAP = matplotlib.colors.LinearSegmentedColormap.from_list(
 PATHWAY_CMAP = matplotlib.cm.viridis
 PATHWAY_NORM = matplotlib.colors.Normalize(vmin=0.0, vmax=5.0)
 PATHWAY_CMAPPER = matplotlib.cm.ScalarMappable(norm=PATHWAY_NORM, cmap=PATHWAY_CMAP)
+LABEL_COLORS_DICT = dict(zip(list(string.ascii_uppercase)[:len(CLONES_PAL)], CLONES_PAL))
