@@ -1915,7 +1915,7 @@ class StructureSearch(object):
                                 root_node.variational_parameters["locals"][
                                     "unobserved_factors_kernel_log_mean"
                                 ],
-                                -3,
+                                -10,
                                 10,
                             )
                         # root_node = self.tree.root['node'].root['node']
