@@ -1005,13 +1005,16 @@ class SCATrEx(object):
                                 node.variational_parameters["locals"][name + "_log_std"]
                             )
                         except KeyError:
-                            unobs = np.exp(
-                                node.variational_parameters["locals"][
-                                    name + "_log_mean"
-                                ]
-                            )
+                            unobs = node.variational_parameters["locals"][
+                                name + "_log_mean"
+                            ]
                             std = np.exp(
                                 node.variational_parameters["locals"][name + "_log_std"]
+                            )
+                            # Get mean and variance of log-Gaussian variational distribution
+                            unobs = np.exp(unobs + std**2 / 2)
+                            std = np.sqrt(
+                                (np.exp(std**2) - 1) * np.exp(2 * unobs + std**2)
                             )
                 if estimated and gene is not None:
                     gene_pos = np.where(self.adata.var_names == gene)[0][0]
