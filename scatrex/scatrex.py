@@ -1027,8 +1027,8 @@ class SCATrEx(object):
                         density - step * i,
                         label=node.label,
                         color=node.tssb.color,
-                        lw=4,
-                        alpha=0.7,
+                        lw=lw,
+                        alpha=alpha,
                         ls=ls,
                     )
                 else:
@@ -1036,8 +1036,8 @@ class SCATrEx(object):
                         unobs[genes].ravel() - step * i,
                         label=node.label,
                         color=node.tssb.color,
-                        lw=4,
-                        alpha=0.7,
+                        lw=lw,
+                        alpha=alpha,
                         ls=ls,
                     )
                     if gene_names is not None and show_names:
