@@ -220,6 +220,7 @@ class StructureSearch(object):
                 opt=opt,
                 opt_triplet=self.opt_triplet,
                 callback=callback,
+                **callback_kwargs,
             )
 
             # full update -- maybe without globals?
@@ -600,6 +601,7 @@ class StructureSearch(object):
                     max_nodes=max_nodes,
                     init=False,
                     debug=debug,
+                    opt_triplet=self.opt_triplet,
                     opt=opt,
                     callback=None,
                     **callback_kwargs,
@@ -637,6 +639,7 @@ class StructureSearch(object):
                     max_nodes=max_nodes,
                     init=False,
                     debug=debug,
+                    opt_triplet=self.opt_triplet,
                     opt=opt,
                     callback=None,
                     **callback_kwargs,
@@ -654,8 +657,9 @@ class StructureSearch(object):
                     max_nodes=max_nodes,
                     init=False,
                     debug=debug,
+                    opt_triplet=self.opt_triplet,
                     opt=opt,
-                    callback=None,
+                    callback=callback,
                     **callback_kwargs,
                 )
             self.traces["times"].append(time() - start)
