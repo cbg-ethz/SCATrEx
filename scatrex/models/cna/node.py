@@ -222,16 +222,39 @@ class Node(AbstractNode):
                 "unobserved_factors_log_std"
             ] = -2.0 * np.ones((self.n_genes,))
         if means:
-            self.variational_parameters["locals"][
-                "unobserved_factors_kernel_log_mean"
-            ] = np.log(self.unobserved_factors_kernel_concentration_caller()) * np.ones(
-                (self.n_genes,)
-            )
+            try:
+                kernel_means = np.clip(
+                    self.unobserved_factors_kernel_concentration_caller()
+                    / (
+                        np.exp(
+                            (self.parent() != None)
+                            * (self.parent().parent() != None)
+                            * self.unobserved_factors_kernel_rate_caller()
+                            * np.abs(
+                                self.parent().variational_parameters["locals"][
+                                    "unobserved_factors_mean"
+                                ]
+                            )
+                        )
+                    ),
+                    self.unobserved_factors_kernel_concentration_caller() / 10,
+                    1e2,
+                )
+                self.variational_parameters["locals"][
+                    "unobserved_factors_kernel_log_mean"
+                ] = (np.log(kernel_means) - (np.exp(-2) ** 2) / 2)
+            except AttributeError:
+                self.variational_parameters["locals"][
+                    "unobserved_factors_kernel_log_mean"
+                ] = np.log(
+                    self.unobserved_factors_kernel_concentration_caller()
+                ) * np.ones(
+                    (self.n_genes,)
+                )
         if variances:
             self.variational_parameters["locals"][
                 "unobserved_factors_kernel_log_std"
             ] = -2.0 * np.ones((self.n_genes,))
-
         self.set_mean(
             self.get_mean(
                 baseline=np.append(1, np.exp(self.log_baseline_caller())),
