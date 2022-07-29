@@ -2,19 +2,19 @@ import matplotlib
 import string
 
 CLONES_PAL = [
-    "#7630A9",
-    "#CC79A7",
-    "#D55E00",
-    "#E69F00",
-    "#0072B2",
-    "#56B4E9",
-    "#56DDA0",
-    "#49BD48",
-    "#5E752B",
-    "#D4D948",
-    "#A8722F",
-    "#A83D2F",
-    "#CF1F1F",
+    "#7630A9B3",
+    "#CC79A7B3",
+    "#D55E00B3",
+    "#E69F00B3",
+    "#0072B2B3",
+    "#56B4E9B3",
+    "#56DDA0B3",
+    "#49BD48B3",
+    "#5E752BB3",
+    "#D4D948B3",
+    "#A8722FB3",
+    "#A83D2FB3",
+    "#CF1F1FB3",
 ]
 BLUE_WHITE_RED = ["#2040C8", "white", "#EE241D"]
 CNV_CMAP = matplotlib.colors.LinearSegmentedColormap.from_list(

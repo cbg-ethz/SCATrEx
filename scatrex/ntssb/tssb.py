@@ -1458,6 +1458,8 @@ class TSSB(object):
         fontcolor="black",
         fontname=None,
         node_color_dict=None,
+        label_fontsize=24,
+        size_fontsize=12,
     ):
         if g is None:
             g = Digraph()
@@ -1529,15 +1531,14 @@ class TSSB(object):
 
         root_label = ""
         if show_labels:
-            root_label = self.root["label"]
+            root_label = f'<FONT POINT-SIZE="{label_fontsize}" FACE="Arial"><B>{self.root["label"].replace("-", "")}</B></FONT>'
         if counts:
-            root_label = self.root["node"].num_local_data()
+            root_label = f'<FONT POINT-SIZE="{size_fontsize}" FACE="Arial">{self.root["node"].num_local_data()}</FONT>'
         if show_labels and counts:
             root_label = (
-                self.root["label"]
+                f'<FONT POINT-SIZE="{label_fontsize}" FACE="Arial"><B>{self.root["label"].replace("-", "")}</B></FONT>'
                 + "<br/><br/>"
-                + str(self.root["node"].num_local_data())
-                + " cells"
+                + f'<FONT FACE="Arial">{str(self.root["node"].num_local_data())} cells</FONT>'
             )
         if events:
             root_label = self.root["node"].event_str
@@ -1559,7 +1560,7 @@ class TSSB(object):
             fillcolor = self.color
         g.node(
             str(self.root["label"]),
-            "<" + str(root_label).replace("-", "") + ">",
+            "<" + str(root_label) + ">",
             fillcolor=fillcolor,
             style=style,
         )
@@ -1570,17 +1571,16 @@ class TSSB(object):
                 child_name = child["label"]
                 child_label = ""
                 if show_labels:
-                    child_label = child_name
+                    child_label = f'<FONT POINT-SIZE="{label_fontsize}" FACE="Arial"><B>{child_name.replace("-", "")}</B></FONT>'
 
                 if counts:
-                    child_label = root["children"][i]["node"].num_local_data()
+                    child_label = f'<FONT POINT-SIZE="{size_fontsize}" FACE="Arial">{str(root["children"][i]["node"].num_local_data())} cells</FONT>'
 
                 if show_labels and counts:
                     child_label = (
-                        child_name
+                        f'<FONT POINT-SIZE="{label_fontsize}" FACE="Arial"><B>{child_name.replace("-", "")}</B></FONT>'
                         + "<br/><br/>"
-                        + str(root["children"][i]["node"].num_local_data())
-                        + " cells"
+                        + f'<FONT FACE="Arial">{str(root["children"][i]["node"].num_local_data())} cells</FONT>'
                     )
 
                 if events:
@@ -1604,7 +1604,7 @@ class TSSB(object):
                     style = "filled"
                 g.node(
                     str(child_name),
-                    "<" + str(child_label).replace("-", "") + ">",
+                    "<" + str(child_label) + ">",
                     fillcolor=fillcolor,
                     style=style,
                 )
@@ -1637,6 +1637,8 @@ class TSSB(object):
         fontcolor="black",
         fontname=None,
         node_color_dict=None,
+        label_fontsize=24,
+        size_fontsize=12,
     ):
         if reset_names:
             self.set_node_names(root_name=self.label)
@@ -1656,6 +1658,8 @@ class TSSB(object):
             fontcolor=fontcolor,
             fontname=fontname,
             node_color_dict=node_color_dict,
+            label_fontsize=label_fontsize,
+            size_fontsize=size_fontsize,
         )
 
         return g

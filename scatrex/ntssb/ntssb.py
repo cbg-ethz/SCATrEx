@@ -3265,6 +3265,8 @@ class NTSSB(object):
         gene=None,
         genemode="raw",
         fontcolor="black",
+        label_fontsize=24,
+        size_fontsize=12,
     ):
         if g is None:
             g = Digraph()
@@ -3298,20 +3300,23 @@ class NTSSB(object):
 
         root_label = ""
         if show_labels:
-            root_label = self.root["label"]
+            root_label = f'<FONT POINT-SIZE="{label_fontsize}" FACE="Arial"><B>{self.root["label"].replace("-", "")}</B></FONT>'
         if counts:
-            root_label = self.root["node"].num_data()
+            root_label = f'<FONT POINT-SIZE="{size_fontsize}" FACE="Arial">{str(self.root["node"].num_data())} cells</FONT>'
         if show_labels and counts:
             root_label = (
-                self.root["label"]
+                f'<FONT POINT-SIZE="{label_fontsize}" FACE="Arial"><B>{self.root["label"].replace("-", "")}</B></FONT>'
                 + "<br/><br/>"
-                + str(self.root["node"].num_data())
-                + " cells"
+                + f'<FONT FACE="Arial">{str(self.root["node"].num_data())} cells</FONT>'
             )
         if events:
             root_label = self.root["node"].event_str
         if show_labels and events:
-            root_label = self.root["label"] + "<br/><br/>" + self.root["node"].event_str
+            root_label = (
+                f'<FONT POINT-SIZE="{label_fontsize}" FACE="Arial"><B>{self.root["label"].replace("-", "")}</B></FONT>'
+                + "<br/><br/>"
+                + self.root["node"].event_str
+            )
 
         style = "filled"
         if root_fillcolor is None:
@@ -3320,7 +3325,7 @@ class NTSSB(object):
             fillcolor = name_color_dict[str(self.root["label"])]
         g.node(
             str(self.root["label"]),
-            "<" + str(root_label).replace("-", "") + ">",
+            "<" + str(root_label) + ">",
             fillcolor=root_fillcolor,
             style=style,
         )
@@ -3333,17 +3338,16 @@ class NTSSB(object):
                 child_name = child["label"]
                 child_label = ""
                 if show_labels:
-                    child_label = child_name
+                    child_label = f'<FONT POINT-SIZE="{label_fontsize}" FACE="Arial"><B>{child_name.replace("-", "")}</B></FONT>'
 
                 if counts:
-                    child_label = root["children"][i]["node"].num_data()
+                    child_label = f'<FONT POINT-SIZE="{size_fontsize}" FACE="Arial">{str(root["children"][i]["node"].num_data())} cells</FONT>'
 
                 if show_labels and counts:
                     child_label = (
-                        child_name
+                        f'<FONT POINT-SIZE="{label_fontsize}" FACE="Arial"><B>{child_name.replace("-", "")}</B></FONT>'
                         + "<br/><br/>"
-                        + str(root["children"][i]["node"].num_data())
-                        + " cells"
+                        + f'<FONT FACE="Arial">{str(root["children"][i]["node"].num_data())} cells</FONT>'
                     )
 
                 if events:
@@ -3351,7 +3355,9 @@ class NTSSB(object):
 
                 if show_labels and events:
                     child_label = (
-                        child_name + "<br/><br/>" + self.root["node"].event_str
+                        f'<FONT POINT-SIZE="{label_fontsize}" FACE="Arial"><B>{child_name.replace("-", "")}</B></FONT>'
+                        + "<br/><br/>"
+                        + self.root["node"].event_str
                     )
 
                 fillcolor = child["node"].color
@@ -3359,7 +3365,7 @@ class NTSSB(object):
                     fillcolor = name_color_dict[str(child_name)]
                 g.node(
                     str(child_name),
-                    "<" + str(child_label).replace("-", "") + ">",
+                    "<" + str(child_label) + ">",
                     fillcolor=fillcolor,
                     style=style,
                 )
@@ -3551,6 +3557,8 @@ class NTSSB(object):
         pivot_probabilities=None,
         node_color_dict=None,
         show_root=False,
+        label_fontsize=24,
+        size_fontsize=12,
     ):
 
         if node_color_dict is None:
@@ -3580,6 +3588,8 @@ class NTSSB(object):
                 gene=gene,
                 genemode=genemode,
                 fontcolor=fontcolor,
+                label_fontsize=label_fontsize,
+                size_fontsize=size_fontsize,
             )
         else:
             g = self.root["node"].plot_tree(
@@ -3607,26 +3617,29 @@ class NTSSB(object):
                         fontcolor=fontcolor,
                         events=events,
                         node_color_dict=node_color_dict,
+                        label_fontsize=label_fontsize,
+                        size_fontsize=size_fontsize,
                     )
                     if counts:
                         lab = str(child["pivot_node"].num_local_data())
                         if show_labels:
                             lab = (
-                                child["pivot_node"].label
+                                "<"
+                                + f'<FONT POINT-SIZE="{label_fontsize}" FACE="Arial"><B>{child["pivot_node"].label.replace("-", "")}</B></FONT>'
                                 + "<br/><br/>"
-                                + lab
-                                + " cells"
+                                + f'<FONT FACE="Arial">{lab} cells</FONT>'
+                                + ">"
                             )
-                        g.node(
-                            child["pivot_node"].label, "<" + lab.replace("-", "") + ">"
-                        )
+                        g.node(child["pivot_node"].label, lab)
                     elif events:
                         lab = child["pivot_node"].event_str
                         if show_labels:
-                            lab = child["pivot_node"].label + "<br/><br/>" + lab
-                        g.node(
-                            child["pivot_node"].label, "<" + lab.replace("-", "") + ">"
-                        )
+                            lab = (
+                                f'<FONT POINT-SIZE="{label_fontsize}" FACE="Arial"><B>{child["pivot_node"].label.replace("-", "")}</B></FONT>'
+                                + "<br/><br/>"
+                                + lab
+                            )
+                        g.node(child["pivot_node"].label, "<" + lab + ">")
                     if pivot_probabilities is not None:
                         if child["node"].root["label"] in pivot_probabilities:
                             for pivot in pivot_probabilities[
@@ -3664,7 +3677,7 @@ class NTSSB(object):
                     fillcolor = self.input_tree_dict["root"]["color"]
                     g.node(
                         "root",
-                        "root",
+                        f'<<FONT POINT-SIZE="{label_fontsize}" FACE="Arial"><B>root</B></FONT>>',
                         fillcolor=fillcolor,
                         style="filled",
                     )

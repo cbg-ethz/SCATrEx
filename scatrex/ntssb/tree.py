@@ -75,10 +75,13 @@ class Tree(ABC):
     def set_colors(self, root_node=None):
         idx = 0
         if root_node in self.tree_dict:
-            self.tree_dict[root_node]["color"] = "gray"
+            self.tree_dict[root_node]["color"] = "lightgray"
             idx += 1
         for i, node in enumerate(list(self.tree_dict.keys())[idx:]):
-            self.tree_dict[node]["color"] = constants.CLONES_PAL[i]
+            try:
+                self.tree_dict[node]["color"] = constants.LABEL_COLORS_DICT[node]
+            except:
+                self.tree_dict[node]["color"] = constants.CLONES_PAL[i]
 
     def add_tree_parameters(self, change_name=True):
 
@@ -135,7 +138,7 @@ class Tree(ABC):
                 eta=self.eta,
                 weight=0,
                 size=int(0),
-                color="gray",
+                color="lightgray",
                 label="root",
             )
         )
@@ -194,7 +197,14 @@ class Tree(ABC):
 
         return sum
 
-    def plot_tree(self, fillcolor=None, labels=False, counts=True):
+    def plot_tree(
+        self,
+        fillcolor=None,
+        labels=False,
+        counts=True,
+        label_fontsize=24,
+        size_fontsize=12,
+    ):
         u = Digraph()
         start = 0
         end = self.n_nodes
@@ -228,25 +238,31 @@ class Tree(ABC):
                     pass
 
             parent_label, node_label = parent, node
+            parent_label = f'<FONT POINT-SIZE="{label_fontsize}" FACE="Arial"><B>{parent_label}</B></FONT>'
+            node_label = f'<FONT POINT-SIZE="{label_fontsize}" FACE="Arial"><B>{node_label}</B></FONT>'
+
             if counts:
                 try:
                     parent_label = (
                         parent_label
-                        + "\n\n"
-                        + str(self.tree_dict[parent]["size"])
-                        + " cells"
+                        + "<br/><br/>"
+                        + f'<FONT FACE="Arial">{str(self.tree_dict[parent]["size"])} cells</FONT>'
                     )
                     node_label = (
                         node_label
-                        + "\n\n"
-                        + str(self.tree_dict[node]["size"])
-                        + " cells"
+                        + "<br/><br/>"
+                        + f'<FONT FACE="Arial">{str(self.tree_dict[node]["size"])} cells</FONT>'
                     )
                 except:
                     pass
 
-            u.node(parent, parent_label, fillcolor=parent_fillcolor, style=style)
-            u.node(node, node_label, fillcolor=node_fillcolor, style=style)
+            u.node(
+                parent,
+                "<" + parent_label + ">",
+                fillcolor=parent_fillcolor,
+                style=style,
+            )
+            u.node(node, "<" + node_label + ">", fillcolor=node_fillcolor, style=style)
             u.edge(parent, node, arrowhead="none")
 
         return u
@@ -324,12 +340,13 @@ class Tree(ABC):
         input_parent_key="parent",
         input_sizes_key="size",
         root_parent="NULL",
+        use_labels=False,
     ):
         self.tree_dict = dict()
         self.n_nodes = len(self.tree_dict.keys())
         fixed_color = None
         if self.n_nodes > len(constants.CLONES_PAL):
-            fixed_color = "gray"
+            fixed_color = "lightgray"
 
         sizes = None
         try:
@@ -346,14 +363,25 @@ class Tree(ABC):
             parent_id = tree_dict[node][input_parent_key]
             if parent_id == root_parent:
                 parent_id = "-1"
+            elif use_labels:
+                parent_id = tree_dict[parent_id][input_label_key]
             if fixed_color is not None:
                 color = fixed_color
             else:
-                color = (
-                    constants.CLONES_PAL[idx]
-                    if "color" not in tree_dict[node]
-                    else tree_dict[node]["color"]
-                )
+                if use_labels:
+                    color = (
+                        "lightgray"
+                        if parent_id == "-1"
+                        else constants.LABEL_COLORS_DICT[
+                            tree_dict[node][input_label_key]
+                        ]
+                    )
+                else:
+                    color = (
+                        constants.CLONES_PAL[idx]
+                        if "color" not in tree_dict[node]
+                        else tree_dict[node]["color"]
+                    )
             label = (
                 node
                 if input_label_key not in tree_dict[node]
@@ -361,7 +389,10 @@ class Tree(ABC):
             )
             size = 0.0
             weight = 0.0
-            self.tree_dict[node] = dict(
+            new_key = node
+            if use_labels:
+                new_key = tree_dict[node][input_label_key]
+            self.tree_dict[new_key] = dict(
                 parent=parent_id,
                 children=[],
                 params=np.array(tree_dict[node][input_params_key]).ravel(),
@@ -377,8 +408,8 @@ class Tree(ABC):
                 label=label,
             )
             if sizes:
-                self.tree_dict[node]["size"] = int(tree_dict[node][input_sizes_key])
-                self.tree_dict[node]["weight"] = (
+                self.tree_dict[new_key]["size"] = int(tree_dict[node][input_sizes_key])
+                self.tree_dict[new_key]["weight"] = (
                     tree_dict[node][input_sizes_key] / sum(sizes) + 1e-10
                 )
 
