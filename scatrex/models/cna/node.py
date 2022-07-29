@@ -1273,9 +1273,9 @@ class Node(AbstractNode):
             pl = diag_gamma_logpdf(
                 jnp.clip(jnp.exp(nodes_log_unobserved_factors_kernels[i]), a_min=1e-6),
                 broadcasted_concentration,
-                log_rate
-                + (parent_vector[i] != -1)
+                (parent_vector[i] != -1)
                 * (parent_vector[i] != 0)
+                * self.unobserved_factors_kernel_rate
                 * (jnp.abs(nodes_unobserved_factors[parent_vector[i]])),
             )
             ent = -diag_loggaussian_logpdf(
@@ -1491,6 +1491,12 @@ class Node(AbstractNode):
             return self.unobserved_factors_kernel_concentration
         else:
             return self.parent().unobserved_factors_kernel_concentration_caller()
+
+    def unobserved_factors_kernel_rate_caller(self):
+        if self.parent() is None:
+            return self.unobserved_factors_kernel_rate
+        else:
+            return self.parent().unobserved_factors_kernel_rate_caller()
 
     def unobserved_factors_root_kernel_caller(self):
         if self.parent() is None:
