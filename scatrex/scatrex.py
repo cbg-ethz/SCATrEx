@@ -1239,9 +1239,9 @@ class SCATrEx(object):
 
         return node_dict
 
-    def get_concordances(self):
+    def get_concordances(self, key="scatrex_node"):
         node_dict = dict()
-        nodes, locs = np.unique(self.adata.obs["scatrex_node"], return_index=True)
+        nodes, locs = np.unique(self.adata.obs[key], return_index=True)
         for i, node in enumerate(nodes):
             cnv = self.adata.layers["scatrex_cnvs"][locs[i]]
             xi = self.adata.layers["scatrex_xi"][locs[i]]
