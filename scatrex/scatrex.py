@@ -1297,6 +1297,7 @@ class SCATrEx(object):
         gene_annots=None,
         top=20,
         figsize=None,
+        add_1_line=True,
     ):
         sorted_discordant_genes = np.array(sorted_discordant_genes)[:top]
         sorted_concordances = np.array(sorted_concordances)[:top]
@@ -1306,7 +1307,10 @@ class SCATrEx(object):
             gene_annots = gene_annots[sorted_discordant_genes]
 
         plt.figure(figsize=figsize)
-        plt.axhline(1, color="gray", alpha=0.6, ls="--", label="Perfect discordance")
+        if add_1_line:
+            plt.axhline(
+                1, color="gray", alpha=0.6, ls="--", label="Perfect discordance"
+            )
         if sorted_nodes is not None:
             for node in np.unique(sorted_nodes):
                 idx = np.where(sorted_nodes == node)[0]
