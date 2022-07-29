@@ -769,7 +769,7 @@ class StructureSearch(object):
                 self.best_tree = deepcopy(self.tree)
                 logger.debug(f"New best! {self.best_elbo}")
 
-            if i == factor_delay and n_factors > 0:
+            if i == factor_delay and factor_delay > 0 and n_factors > 0:
                 logger.debug(
                     "Setting current tree with complete number of factors as the best."
                 )
