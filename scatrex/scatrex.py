@@ -1700,7 +1700,7 @@ class SCATrEx(object):
 
             if remove_empty_nodes:  # In both RNA and DNA
                 tokeep = np.where(
-                    np.logical_and(np.array(dna_props) != 0, np.array(rna_props) != 0)
+                    np.logical_or(np.array(dna_props) != 0, np.array(rna_props) != 0)
                 )[0]
                 dna_nodes_labels = np.array(dna_nodes_labels)[tokeep]
                 dna_props = np.array(dna_props)[tokeep]
