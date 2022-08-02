@@ -30,15 +30,6 @@ rule annotate_dna_data:
         clone_sizes.to_csv(output.clone_sizes)
 
 
-rule filter_rna_data:
-    output:
-        fname = 'results/data/scrna/filtered_adata.h5ad',
-    input:
-        clonealign_data_path = directory('results/data/pbmc3k_filtered_gene_bc_matrices/'),
-    script:
-        'scripts/filter_rna_data.py'
-
-
 rule create_original_tree:
     output:
         fname = 'results/original/original_input_tree.json'
@@ -47,6 +38,15 @@ rule create_original_tree:
         clone_sizes_path = rules.annotate_dna_data.output.clone_sizes
     script:
         'scripts/make_cnv_tree.py'
+
+
+rule filter_rna_data:
+    output:
+        fname = 'results/data/scrna/filtered_adata.h5ad',
+    input:
+        clonealign_data_path = directory('results/data/pbmc3k_filtered_gene_bc_matrices/'),
+    script:
+        'scripts/filter_rna_data.py'
 
 
 rule align_data:
