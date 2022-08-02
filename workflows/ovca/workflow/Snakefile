@@ -1,0 +1,47 @@
+"""
+This workflow produces all the figures in the paper using the HGSOC cell line data.
+"""
+
+configfile: "config/config.yaml"
+
+include: "rules/preprocessing.smk"
+include: "rules/original_analysis.smk"
+include: "rules/test_analysis.smk"
+include: "rules/plotting.smk"
+
+TEST_MODES = ["test_pruned", "test_undetected", "test_linear"]
+
+rule all:
+    input:
+        all_done = expand('results/{mode}/plots/done.txt', mode=['original']+TEST_MODES)
+
+rule download_extract_data:
+    params:
+        clonealign_data = config['clonealign_data_url'],
+        ov2295_clone_cn = config['ov2295_cnvs_url'],
+        ov2295_clone_clusters = config['ov2295_clusters_url'],
+    output:
+        clonealign_data_path = directory('results/data/pbmc3k_filtered_gene_bc_matrices/'),
+        ov2295_cnvs_path = 'results/data/ov2295_clone_cn.csv',
+        ov2295_clone_clusters_path = 'results/data/ov2295_clone_clusters.csv'
+    shell:
+        "wget params.clonealign_data; \
+        wget params.ov2295_clone_cn; \
+        wget params.ov2295_clone_clusters; \
+        tar -xzf pbmc3k_filtered_gene_bc_matrices.tar.gz -f {output.clonealign_data_path}; \
+        gunzip ov2295_clone_cn.csv.gz {output.ov2295_cnvs_path}; \
+        gunzip ov2295_clone_clusters.csv.gz {output.ov2295_clone_clusters_path} "
+
+rule get_best_scatrex:
+    output:
+        fname = 'results/{mode}/scatrex/{mode}_best_sca.pkl'
+    input:
+        fname_list = expand('results/{{mode}}/scatrex/runs/{{mode}}_sca_{run_id}.pkl', run_id=range(config["scatrex"]["n_tries"]))
+    run:
+        # Get sca with highest NTSSB ELBO
+        import pickle
+        scas = [pickle.load(fname) for fname in fname_list]
+        best_idx = np.argmax([scas.ntssb.elbo for sca in scas])
+
+        # Link to best file
+        make_symlink(fname_list[best_idx], output.fname)
