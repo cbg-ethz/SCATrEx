@@ -4,7 +4,7 @@ ov2295_clusters_url: https://zenodo.org/record/5725635/files/ov2295_clone_cluste
 cnv_max: 8
 autosomes_only: true
 scatrex:
-  n_tries: 10
+  n_reps: 10
   n_iters: 5000
   n_factors: 4
 plotting:

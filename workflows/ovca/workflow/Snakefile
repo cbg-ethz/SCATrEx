@@ -36,7 +36,7 @@ rule get_best_scatrex:
     output:
         fname = 'results/{mode}/scatrex/{mode}_best_sca.pkl'
     input:
-        fname_list = expand('results/{{mode}}/scatrex/runs/{{mode}}_sca_{run_id}.pkl', run_id=range(config["scatrex"]["n_tries"]))
+        fname_list = expand('results/{{mode}}/scatrex/runs/{{mode}}_sca_{run_id}.pkl', run_id=range(config["scatrex"]["n_reps"]))
     run:
         # Get sca with highest NTSSB ELBO
         import pickle
