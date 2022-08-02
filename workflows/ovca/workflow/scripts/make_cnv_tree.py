@@ -11,16 +11,20 @@ clone_sizes_path = snakemake.input["clone_sizes_path"]
 output_file = snakemake.output["fname"]
 
 tree_dict = dict()
-tree_dict['root'] = {'parent': 'NULL',
-                    'params': 2*np.ones((cnv_matrix.shape[1])),
-                    'size': 0}
+tree_dict["root"] = {
+    "parent": "NULL",
+    "params": 2 * np.ones((cnv_matrix.shape[1])),
+    "size": 0,
+}
 for node in cnv_matrix.index:
     # Ignore A, B, C, D because we don't have scRNA data from it
-    if node == 'A' or node == 'B' or node == 'C' or node == 'D':
+    if node == "A" or node == "B" or node == "C" or node == "D":
         continue
-    tree_dict[node] = {'parent': 'root',
-                    'params': cnv_matrix.loc[node].values,
-                    'size': clone_sizes[node]}
+    tree_dict[node] = {
+        "parent": "root",
+        "params": cnv_matrix.loc[node].values,
+        "size": clone_sizes[node],
+    }
 
 # tree_dict['Anc1'] = {'parent': 'root',
 #                     'params': 2*np.ones((cnv_matrix.shape[1])),
@@ -32,26 +36,26 @@ for node in cnv_matrix.index:
 #                     'params': 2*np.ones((cnv_matrix.shape[1])),
 #                     'size': 0}
 
-tree_dict['E']['parent'] = 'root'
-tree_dict['F']['parent'] = 'root'
-tree_dict['I']['parent'] = 'root'
-tree_dict['G']['parent'] = 'I'
-tree_dict['H']['parent'] = 'I'
+tree_dict["E"]["parent"] = "root"
+tree_dict["F"]["parent"] = "root"
+tree_dict["I"]["parent"] = "root"
+tree_dict["G"]["parent"] = "I"
+tree_dict["H"]["parent"] = "I"
 
 # Change names of I G H to make I appear last
-tree_dict['IG'] = tree_dict['I']
-tree_dict['IG']['parent'] = 'root'
-tree_dict['GH'] = tree_dict['G']
-tree_dict['GH']['parent'] = 'G'
-tree_dict['HI'] = tree_dict['H']
-tree_dict['HI']['parent'] = 'G'
+tree_dict["IG"] = tree_dict["I"]
+tree_dict["IG"]["parent"] = "root"
+tree_dict["GH"] = tree_dict["G"]
+tree_dict["GH"]["parent"] = "G"
+tree_dict["HI"] = tree_dict["H"]
+tree_dict["HI"]["parent"] = "G"
 
-tree_dict['G'] = tree_dict['IG']
-tree_dict['H'] = tree_dict['GH']
-tree_dict['I'] = tree_dict['HI']
+tree_dict["G"] = tree_dict["IG"]
+tree_dict["H"] = tree_dict["GH"]
+tree_dict["I"] = tree_dict["HI"]
 
-del tree_dict['IG']
-del tree_dict['GH']
-del tree_dict['HI']
+del tree_dict["IG"]
+del tree_dict["GH"]
+del tree_dict["HI"]
 
 json.dumps(tree_dict)
