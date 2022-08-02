@@ -1,0 +1,25 @@
+clonealign_data_url: https://zenodo.org/record/2363826/files/clonealign-processed-data.tar.gz
+scdna_data_url: ???
+cnv_max: 6
+autosomes_only: true
+scicone:
+  build_path: "/cluster/work/bewi/members/pedrof/SCICoNE/build"
+  n_reps: 10
+  n_iters: 40000
+  threshold: 6
+  window_size: 100
+scatrex:
+  n_reps: 10
+  n_iters: 5000
+  n_factors: 4
+plotting:
+  dpi: 100
+  cellstate_cmap: "PRGn"
+  axislabel_fontsize: 14
+  tick_fontsize: 14
+  boxplot_width: 8
+  boxplot_height: 5
+  cnv_matrix_width: 8
+  cnv_matrix_height: 5
+  nodelabel_fontsize: 14
+  nodesize_fontsize: 12

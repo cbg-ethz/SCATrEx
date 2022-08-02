@@ -1,0 +1,42 @@
+"""
+This workflow produces all the figures in the paper using the TNBC xenograft data.
+"""
+
+configfile: "config/config.yaml"
+
+include: "rules/preprocessing.smk"
+include: "rules/scicone.smk"
+include: "rules/original_analysis.smk"
+include: "rules/test_analysis.smk"
+include: "rules/plotting.smk"
+
+rule all:
+    input:
+        all_done = expand('results/{mode}/plots/done.txt', mode=['original', 'test_pivot'])
+
+rule download_extract_data:
+    params:
+        clonealign_data = config['clonealign_data_url'],
+        raw_scdna_data = config['scdna_data_url'],
+    output:
+        clonealign_data_path = directory('results/data/pbmc3k_filtered_gene_bc_matrices/'),
+        scdna_counts_path = 'results/data/scdna_counts.csv',
+    shell:
+        "wget {params.clonealign_data}; \
+        wget {params.raw_scdna_data}; \
+        tar -xzf pbmc3k_filtered_gene_bc_matrices.tar.gz -f {output.clonealign_data_path}; \
+        gunzip ov2295_clone_cn.csv.gz {output.scdna_counts_path}; "
+
+rule get_best_scatrex:
+    output:
+        fname = 'results/{mode}/scatrex/{mode}_best_sca.pkl'
+    input:
+        fname_list = expand('results/{{mode}}/scatrex/runs/{{mode}}_sca_{run_id}.pkl', run_id=range(config["scatrex"]["n_reps"]))
+    run:
+        # Get sca with highest NTSSB ELBO
+        import pickle
+        scas = [pickle.load(fname) for fname in fname_list]
+        best_idx = np.argmax([scas.ntssb.elbo for sca in scas])
+
+        # Link to best file
+        make_symlink(fname_list[best_idx], output.fname)
