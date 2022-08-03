@@ -639,7 +639,10 @@ class NTSSB(object):
             parent_idx = [prev_idx]
             parent_idx = [prev_idx]
             prev_idx = idx
-            for i, child in enumerate(list(root.children())):
+            children = list(root.children())
+            labs = [c.label for c in children]
+            children = np.array(children)[np.argsort(labs)]
+            for i, child in enumerate(children):
                 nodes, idx, parents_idx = descend(child, idx, prev_idx - 1)
                 node.extend(nodes)
                 parent_idx.extend(parents_idx)
