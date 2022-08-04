@@ -876,10 +876,11 @@ class StructureSearch(object):
         if local:
             local_node = new_node
 
+        children = np.array(list(node.children()))
+        idx = np.argsort([n.label for n in children])
+        children = children[idx]
         unobs_children = [
-            child
-            for child in list(node.children())
-            if not child.is_observed and child != new_node
+            child for child in children if not child.is_observed and child != new_node
         ]
         if len(unobs_children) > 0:
             pr = np.random.binomial(1, 0.5)
@@ -890,6 +891,8 @@ class StructureSearch(object):
                 root_node = new_node
                 local_node = None
 
+        self.tree.plot_tree()
+        # Ensure constant node order
         if from_factor:
             # Remove factor
             # self.tree.root["node"].root["node"].variational_parameters["globals"][
@@ -1021,13 +1024,17 @@ class StructureSearch(object):
 
             # Get parent and siblings in the same subtree
             parent = nodeA.parent()
-            nodes = parent.children()
+            nodes = np.array(list(parent.children()))
+            idx = np.argsort([n.label for n in nodes])
+            nodes = nodes[idx]
             nodes = [s for s in nodes if s != nodeA and nodeA.tssb == s.tssb]
             nodes.append(parent)
 
             # If nodeA is pivot node, it's also possible to merge the child with it
             n_pivots = 0
-            nodeA_children = list(nodeA.children())
+            nodeA_children = np.array(list(nodeA.children()))
+            idx = np.argsort([n.label for n in nodeA_children])
+            nodeA_children = nodeA_children[idx]
             for nodeA_child in nodeA_children:
                 if nodeA_child.tssb != nodeA.tssb:
                     n_pivots += 1
@@ -1041,25 +1048,35 @@ class StructureSearch(object):
             # Choose nodeB proportionally to similarities
             nodeB = np.random.choice(nodes, p=sims / np.sum(sims))
 
+            # Choose initialization
+            optimal_params = True
+            if nodeB.parent() is None:
+                optimal_params = bool(np.random.choice(2, p=[0.8, 0.2]))
+
             local_node = None
             # If a pivot was chosen, choose merge root of subtree with it
             if nodeB.tssb != nodeA.tssb:
                 logger.debug(f"Trying to merge {nodeB.label} to {nodeA.label}...")
-                self.tree.merge_nodes(nodeB, nodeA)
+                self.tree.merge_nodes(nodeB, nodeA, optimal_params=optimal_params)
                 if local:
                     local_node = nodeB
             else:
                 logger.debug(f"Trying to merge {nodeA.label} to {nodeB.label}...")
-                self.tree.merge_nodes(nodeA, nodeB)
+                self.tree.merge_nodes(nodeA, nodeB, optimal_params=optimal_params)
                 if local:
                     local_node = nodeB.parent()
 
             # Account for merging to baseline
             if nodeB.parent() is None:
-                logger.debug(f"Global update since the baseline has been changed...")
-                local_node = None
-                n_iters = np.max([n_iters, 500])
+                if optimal_params:
+                    logger.debug(
+                        f"Global update since the baseline has been changed..."
+                    )
+                    local_node = None
+                    n_iters = np.max([n_iters, 500])
 
+            self.tree.plot_tree()
+            # Ensure constant node order
             elbos = self.tree.optimize_elbo(
                 unique_node=None,
                 root_node=local_node,
@@ -1162,6 +1179,8 @@ class StructureSearch(object):
             logger.debug(f"Trying to reattach {nodeA_label} to {nodeB_label}...")
 
             self.tree.prune_reattach(nodeA, nodeB)
+            self.tree.plot_tree()
+            # Ensure constant node order
             local_node = None
             if local:
                 local_node = nodeA
@@ -1267,6 +1286,8 @@ class StructureSearch(object):
                 # self.tree.optimize_elbo(sticks_only=True, root_node=init_pivot_node_parent, num_samples=num_samples, n_iters=n_iters, thin=thin, tol=tol, step_size=step_size, mb_size=mb_size, max_nodes=max_nodes, init=False, debug=debug, opt=opt, opt_triplet=self.opt_triplet, callback=callback, **callback_kwargs)
                 removed_pivot = True
 
+            self.tree.plot_tree()
+            # Ensure constant node order
             root_node = None
             if local:
                 root_node = subtree.root["node"]
@@ -1349,6 +1370,9 @@ class StructureSearch(object):
         )
 
         root_node = None
+        self.tree.plot_tree()
+        # Ensure constant node order
+        root_node = pivot_node
         n_iters_elbo = n_iters
         if pivot_node.parent().parent() is None:
             n_iters_elbo = n_iters * 10
@@ -1420,6 +1444,8 @@ class StructureSearch(object):
         root_node = None
         if local:
             root_node = subtree.root["node"].parent()
+        self.tree.plot_tree()
+        # Ensure constant node order
         elbos = self.tree.optimize_elbo(
             root_node=root_node,
             num_samples=num_samples,
@@ -1469,6 +1495,8 @@ class StructureSearch(object):
         root_node = None
         if local:
             root_node = new_node
+        self.tree.plot_tree()
+        # Ensure constant node order
         elbos = self.tree.optimize_elbo(
             root_node=root_node,
             num_samples=num_samples,
@@ -1574,6 +1602,8 @@ class StructureSearch(object):
             # init_baseline = jnp.mean(self.tree.data, axis=0)
             # init_log_baseline = jnp.log(init_baseline / init_baseline[0])[1:]
             # self.tree.root['node'].root['node'].log_baseline_mean = init_log_baseline + np.random.normal(0, .5, size=self.tree.data.shape[1]-1)
+            self.tree.plot_tree()
+            # Ensure constant node order
             root_node = None
             # if local and not pivot_changed:
             #     root_node = roots[nodeA_idx]['node']
@@ -1664,6 +1694,8 @@ class StructureSearch(object):
             # init_log_baseline = jnp.log(init_baseline / init_baseline[0])[1:]
             # self.tree.root['node'].root['node'].log_baseline_mean = init_log_baseline + np.random.normal(0, .5, size=self.tree.data.shape[1]-1)
 
+            self.tree.plot_tree()
+            # Ensure constant node order
             root_node = None
             # if local:
             #     root_node = roots[nodeA_idx]['node']
@@ -1726,6 +1758,8 @@ class StructureSearch(object):
                     # self.tree = deepcopy(ntree)
                     logger.debug(f"Swapped {nodeA.label} with {nodeB.label}")
                     # Go through all nodes below root and reset their unobserved_factors_kernel_log_std
+                    self.tree.plot_tree()
+                    # Ensure constant node order
                     ntree.optimize_elbo(
                         root_node=None,
                         num_samples=num_samples,
@@ -1760,6 +1794,8 @@ class StructureSearch(object):
                         if root_node.parent() is None:
                             root_node = None  # Update everything!
                             n_iters *= 10  # Big change, so give time to converge
+                    self.tree.plot_tree()
+                    # Ensure constant node order
                     ntree.optimize_elbo(
                         root_node=root_node,
                         num_samples=num_samples,
@@ -1848,6 +1884,8 @@ class StructureSearch(object):
                     new_n_iters = n_iters * 10
                 if not local:
                     root_node = None
+                self.tree.plot_tree()
+                # Ensure constant node order
                 elbos = self.tree.optimize_elbo(
                     root_node=root_node,
                     num_samples=num_samples,
@@ -2118,11 +2156,15 @@ class StructureSearch(object):
         parent = node.parent()
         if parent is not None:
             siblings = np.array([n for n in list(parent.children()) if n != node])
+            idx = np.argsort([n.label for n in siblings])
+            siblings = siblings[idx]
             parent = np.array([parent])
         else:
             parent = np.array([])
             siblings = np.array([])
         children = np.array(list(node.children()))
+        idx = np.argsort([n.label for n in children])
+        children = children[idx]
         if len(children) == 0:
             children = np.array([])
         possibilities = np.concatenate([parent, siblings, children])

@@ -868,7 +868,10 @@ class NTSSB(object):
         for node in nodes:
             indices = []
             if not node.is_observed:
-                for j, prev_child in enumerate(list(node.parent().children())):
+                children = np.array(list(node.parent().children()))
+                labs = [l.label for l in children]
+                children = children[np.argsort(labs)]
+                for j, prev_child in enumerate(children):
                     if prev_child.is_observed:
                         continue
                     if prev_child == node:
@@ -2067,7 +2070,9 @@ class NTSSB(object):
             raise ValueError("Can't pull unobserved node")
 
         parent_node = node.parent()
-        children = list(node.children())
+        children = np.array(list(node.children()))
+        idx = np.argsort([c.label for c in children])
+        children = children[idx]
         if len(children) > 0:
             children = [n for n in children if not n.is_observed]
         child_node = None
@@ -2305,7 +2310,11 @@ class NTSSB(object):
                         observed_node = [nodeA, nodeB][1 - unobserved_node_idx]
                         parent_unobserved = unobserved_node.parent()
                         # if unobserved node is parent of more than one subtree, update pivot of the others to parent of unobserved_node
-                        unobserved_node_children = unobserved_node.children()
+                        unobserved_node_children = np.array(
+                            list(unobserved_node.children())
+                        )
+                        idx = np.argsort([n.label for n in unobserved_node_children])
+                        unobserved_node_children = unobserved_node_children[idx]
                         if (
                             np.sum(
                                 np.array(
@@ -2504,14 +2513,21 @@ class NTSSB(object):
             non_root_node.data = dataRoot.copy()
             non_root_node.data_ass_logits = np.array(logitsRoot)
 
+            nodeA_children = np.array(list(nodeA.children()))
+            idx = np.argsort([n.label for n in nodeA_children])
+            nodeA_children = nodeA_children[idx]
             nodeA_children = [
                 node
-                for node in list(nodeA.children())
+                for node in nodeA_children
                 if not node.is_observed and node != nodeB
             ]
+
+            nodeB_children = np.array(list(nodeB.children()))
+            idx = np.argsort([n.label for n in nodeB_children])
+            nodeB_children = nodeB_children[idx]
             nodeB_children = [
                 node
-                for node in list(nodeB.children())
+                for node in nodeB_children
                 if not node.is_observed and node != nodeA
             ]
 
@@ -2701,7 +2717,9 @@ class NTSSB(object):
                 nodeA_root["children"] = []
 
                 # If nodeA was the pivot of a downstream tree, update the pivot to nodeB
-                nodeA_children = nodeA_root["node"].children().copy()
+                nodeA_children = np.array(list(nodeA_root["node"].children().copy()))
+                idx = np.argsort([n.label for n in nodeA_children])
+                nodeA_children = nodeA_children[idx]
                 for nodeA_child in nodeA_children:
                     if nodeA_child.tssb != nodeA_root["node"].tssb:
                         nodeA_child.set_parent(nodeB_root["node"], reset=False)
@@ -2751,7 +2769,9 @@ class NTSSB(object):
                 nodeB_root["children"] = []
 
                 # If nodeB was pivot of another tree, update the pivot to nodeB_parent
-                nodeB_children = nodeB_root["node"].children().copy()
+                nodeB_children = np.array(list(nodeB_root["node"].children().copy()))
+                idx = np.argsort([n.label for n in nodeB_children])
+                nodeB_children = nodeB_children[idx]
                 for nodeB_child in nodeB_children:
                     if (
                         nodeB_child.tssb != nodeB_root["node"].tssb
