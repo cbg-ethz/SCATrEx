@@ -1815,7 +1815,8 @@ class NTSSB(object):
                 #     total_rna = np.sum(baseline * root['node'].cnvs/2 * np.exp(root['node'].variational_parameters['locals']['unobserved_factors_mean'] + noise))
                 #     root['children'][-1]['node'].variational_parameters['locals']['unobserved_factors_mean'] = np.log((worst_datum+1) * total_rna/(self.root['node'].root['node'].lib_sizes[worst_index]*baseline * root['node'].cnvs/2 * np.exp(noise)))
                 #     root['children'][-1]['node'].set_mean(root['children'][-1]['node'].get_mean(unobserved_factors=root['children'][-1]['node'].variational_parameters['locals']['unobserved_factors_mean'], baseline=baseline))
-                data_indices = list(root["node"].data.copy())
+                # data_indices = list(root["node"].data.copy())
+                data_indices = np.where(np.array(self.assignments) == root["node"])[0]
                 if len(data_indices) > 0:
                     data_in_node = np.array(self.data)[data_indices]
                     target_genes = np.argsort(np.var(np.log(data_in_node + 1), axis=0))[
@@ -1836,7 +1837,8 @@ class NTSSB(object):
             node = nodes_list[np.where(node_labels == node)[0][0]]
             target = nodes_list[np.where(node_labels == target)[0][0]]
 
-        data_indices = list(target.data.copy())
+        # data_indices = list(target.data.copy())
+        data_indices = np.where(np.array(self.assignments) == target)[0]
 
         if len(data_indices) > 0:
             index = np.random.choice(np.array(data_indices))
@@ -2459,7 +2461,9 @@ class NTSSB(object):
                 # node.variational_parameters['locals']['unobserved_factors_kernel_log_std'] += .5
             # non_root_node.variational_parameters['locals']['unobserved_factors_mean'] = np.clip(normal_sample(0., gamma_sample(root_node.unobserved_factors_kernel_concentration_caller(),
             #                                                                                     root_node.unobserved_factors_kernel_concentration_caller(), size=self.data.shape[1])), a_min=-5, a_max=5)
-            data_indices = list(root_node.data)
+            data_indices = np.where(np.array(self.assignments) == root_node)[
+                0
+            ]  # list(root_node.data)
             if len(data_indices) > 0:
                 # idx = np.random.choice(np.array(data_indices))
                 # print(f'Setting new node to explain datum {idx}')
