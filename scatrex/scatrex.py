@@ -183,7 +183,9 @@ class SCATrEx(object):
         max_genes=1000,
         batch_key="batch",
         search_kwargs=dict(),
+        seed=42,
     ):
+        np.random.seed(seed)
         if not self.observed_tree and observed_tree is None:
             raise ValueError(
                 "No observed tree available. Please pass an observed tree object."
@@ -518,8 +520,10 @@ class SCATrEx(object):
         max_genes=500,
         filter_var=False,
         batch_key="batch",
+        seed=42,
         **optimize_kwargs,
     ):
+        np.random.seed(seed)
         """Provides an equivalent of clonealign (for CNV nodes) or cardelino (for SNV nodes)"""
         if not self.observed_tree and observed_tree is None:
             raise ValueError(
