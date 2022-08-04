@@ -1383,7 +1383,6 @@ class StructureSearch(object):
             f"Trying to add node {pivot_node.label} and setting it as pivot of {subtree['node'].label}"
         )
 
-        root_node = None
         self.tree.plot_tree()
         # Ensure constant node order
         root_node = pivot_node
@@ -1393,8 +1392,8 @@ class StructureSearch(object):
         elif local:
             root_node = pivot_node
             elbos = self.tree.optimize_elbo(
-                local_node=pivot_node,
-                root_node=None,
+                local_node=None,
+                root_node=root_node,
                 num_samples=num_samples,
                 n_iters=n_iters,
                 thin=thin,
@@ -1497,9 +1496,20 @@ class StructureSearch(object):
         success = True
         elbos = []
 
-        # Uniformly pick a subtree
+        # Pick a subtree biased by the weight of the parent TSSB
         subtrees = self.tree.get_mixture()[1][1:]  # without the root
-        subtree = np.random.choice(subtrees, p=[1.0 / len(subtrees)] * len(subtrees))
+        parent_subtree_weights = [
+            subtree.root["node"].parent().tssb.weight for subtree in subtrees
+        ]
+
+        # If every subtree has a parent with no weight, don't proceed
+        if np.sum(parent_subtree_weights) < 1e-10:
+            return False, elbos
+
+        parent_subtree_weights = np.array(parent_subtree_weights) / np.sum(
+            parent_subtree_weights
+        )
+        subtree = np.random.choice(subtrees, p=parent_subtree_weights)
 
         # Push subtree down
         new_node = self.tree.extract_pivot(subtree.root["node"])
@@ -1619,12 +1629,14 @@ class StructureSearch(object):
             self.tree.plot_tree()
             # Ensure constant node order
             root_node = None
-            # if local and not pivot_changed:
-            #     root_node = roots[nodeA_idx]['node']
+            if local:
+                root_node = roots[nodeA_idx]["node"]
+            if pivot_changed:
+                n_iters = n_iters * 5
             elbos = self.tree.optimize_elbo(
                 root_node=root_node,
                 num_samples=num_samples,
-                n_iters=n_iters * 5,
+                n_iters=n_iters,
                 thin=thin,
                 tol=tol,
                 step_size=step_size,
@@ -1707,12 +1719,11 @@ class StructureSearch(object):
             # init_baseline = jnp.mean(self.tree.data, axis=0)
             # init_log_baseline = jnp.log(init_baseline / init_baseline[0])[1:]
             # self.tree.root['node'].root['node'].log_baseline_mean = init_log_baseline + np.random.normal(0, .5, size=self.tree.data.shape[1]-1)
-
             self.tree.plot_tree()
             # Ensure constant node order
             root_node = None
-            # if local:
-            #     root_node = roots[nodeA_idx]['node']
+            if local:
+                root_node = roots[nodeA_idx]["node"]
             elbos = self.tree.optimize_elbo(
                 root_node=root_node,
                 num_samples=num_samples,
