@@ -1341,11 +1341,21 @@ class StructureSearch(object):
         nonleaf_subtrees = [
             subtree for subtree in subtrees if len(subtree[1]["children"]) > 0
         ]
+
+        # Don't waste too much time with subtrees which are not expected to have any complexity
+        subtree_weights = [subtree[0].weight for subtree in nonleaf_subtrees]
+
+        # If every subtree has a parent with no weight, don't proceed
+        if np.sum(subtree_weights) < 1e-10:
+            return False, elbos
+
+        subtree_weights = np.array(subtree_weights) / np.sum(subtree_weights)
+
         # Pick a subtree
         parent_subtree = nonleaf_subtrees[
             np.random.choice(
                 len(nonleaf_subtrees),
-                p=[1.0 / len(nonleaf_subtrees)] * len(nonleaf_subtrees),
+                p=subtree_weights,
             )
         ]
 
