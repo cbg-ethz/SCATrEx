@@ -227,6 +227,10 @@ class StructureSearch(object):
             root_node_init = self.tree.root["node"].root["node"]
             if joint_init:
                 root_node_init = None
+                self.tree.root["node"].root["node"].reset_variational_parameters(
+                    means=False
+                )
+
             self.tree.optimize_elbo(
                 root_node=root_node_init,
                 num_samples=num_samples,
