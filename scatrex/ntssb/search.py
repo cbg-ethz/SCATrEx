@@ -1759,11 +1759,12 @@ class StructureSearch(object):
             empty_root = False
             if len(nodes) > 1:
                 nodeA, nodeB = np.random.choice(nodes, replace=False, size=2)
-                if len(nodes[0].data) == 0:
-                    logger.debug("Swapping root")
-                    empty_root = True
-                    nodeA = nodes[0]
-                    nodeB = np.random.choice(nodes[1:])
+                # # Root can't be empty in the original TSSB
+                # if len(nodes[0].data) == 0:
+                #     logger.debug("Swapping root")
+                #     empty_root = True
+                #     nodeA = nodes[0]
+                #     nodeB = np.random.choice(nodes[1:])
 
                 logger.debug(f"Trying to swap {nodeA.label} with {nodeB.label}...")
                 self.tree.swap_nodes(nodeA, nodeB, update_pivots=update_pivots)
