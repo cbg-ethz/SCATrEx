@@ -241,7 +241,9 @@ class StructureSearch(object):
                 opt=opt,
                 opt_triplet=self.opt_triplet,
                 callback=callback,
+                **callback_kwargs,
             )
+
             self.tree.plot_tree(super_only=False)
             self.tree.update_ass_logits(variational=True)
             self.tree.assign_to_best()
@@ -509,7 +511,8 @@ class StructureSearch(object):
                     init=False,
                     debug=debug,
                     opt=opt,
-                    callback=None,
+                    opt_triplet=self.opt_triplet,
+                    callback=callback,
                     **callback_kwargs,
                 )
             elif move_id == "perturb_node":
@@ -538,7 +541,8 @@ class StructureSearch(object):
                     init=False,
                     debug=debug,
                     opt=opt,
-                    callback=None,
+                    opt_triplet=self.opt_triplet,
+                    callback=callback,
                     **callback_kwargs,
                 )
                 # init_root, init_elbo, success, elbos = self.perturb_node(local=local, num_samples=num_samples, n_iters=n_iters_elbo, thin=thin, step_size=step_size, tol=tol, debug=debug, mb_size=mb_size, max_nodes=max_nodes, opt=opt, callback=callback, **callback_kwargs)
@@ -603,7 +607,7 @@ class StructureSearch(object):
                     debug=debug,
                     opt_triplet=self.opt_triplet,
                     opt=opt,
-                    callback=None,
+                    callback=callback,
                     **callback_kwargs,
                 )
             elif move_id == "perturb_globals":
@@ -641,7 +645,7 @@ class StructureSearch(object):
                     debug=debug,
                     opt_triplet=self.opt_triplet,
                     opt=opt,
-                    callback=None,
+                    callback=callback,
                     **callback_kwargs,
                 )
             elif move_id == "full":
