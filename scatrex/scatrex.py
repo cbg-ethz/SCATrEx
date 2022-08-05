@@ -290,7 +290,7 @@ class SCATrEx(object):
         else:
             logger.info("Will continue search from where it left off.")
 
-        self.ntssb = self.search.run_search(**search_kwargs)
+        self.ntssb = self.search.run_search(seed=seed, **search_kwargs)
         self.ntssb.create_augmented_tree_dict()
 
         node_assignments = [

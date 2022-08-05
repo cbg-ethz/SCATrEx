@@ -141,13 +141,13 @@ class StructureSearch(object):
         search_callback=None,
         add_rule="accept",
         add_rule_thres=1.0,
-        random_seed=1,
+        seed=1,
         **callback_kwargs,
     ):
 
         logger.setLevel(verbosity)
 
-        np.random.seed(random_seed)
+        np.random.seed(seed)
 
         elbos = []
         gamma = 1.0
