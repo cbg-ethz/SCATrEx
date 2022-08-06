@@ -56,7 +56,7 @@ def test_scatrex():
     sca.set_observed_tree(sim_sca.observed_tree)
 
     # Run clonemap
-    elbos = sca.learn_clonemap(n_iters=2, filter_genes=True)
+    elbos = sca.learn_clonemap(n_iters=2, seed=seed, filter_genes=True)
     assert "node" in sca.adata.obs.columns
     assert "obs_node" in sca.adata.obs.columns
 
@@ -98,10 +98,9 @@ def test_scatrex():
         "every": 10,
         "threshold": 1e-3,
         "alpha": 0.0,
-        "random_seed": 1,
     }
 
-    sca.learn_tree(reset=True, search_kwargs=search_kwargs)
+    sca.learn_tree(reset=True, seed=seed, search_kwargs=search_kwargs)
 
     nodes = sca.ntssb.get_nodes()
     assert len(nodes) >= n_clones
