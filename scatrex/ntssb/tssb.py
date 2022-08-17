@@ -677,6 +677,43 @@ class TSSB(object):
             top_node = self.root
         descend(top_node)
 
+    def set_stick_params(self, top_node=None, prior=False, truncate=False):
+        def descend(root, depth=0):
+            data_down = 0
+            indices = list(range(len(root["children"])))
+            # indices.reverse()
+            indices = indices[::-1]
+            for i in indices:
+                child = root["children"][i]
+                child_data = descend(child, depth + 1)
+                post_alpha = 1.0 + child_data
+                post_beta = self.dp_gamma + data_down
+                child["node"].variational_parameters["locals"]["psi_log_mean"] = np.log(
+                    post_alpha
+                )
+                child["node"].variational_parameters["locals"]["psi_log_std"] = np.log(
+                    post_beta
+                )
+                data_down += child_data
+
+            data_here = root["node"].num_local_data()
+
+            # Resample the main break.
+            post_alpha = 1.0 + data_here
+            post_beta = (self.alpha_decay**depth) * self.dp_alpha + data_down
+            root["node"].variational_parameters["locals"]["nu_log_mean"] = np.log(
+                post_alpha
+            )
+            root["node"].variational_parameters["locals"]["nu_log_std"] = np.log(
+                post_beta
+            )
+
+            return data_here + data_down
+
+        if top_node is None:
+            top_node = self.root
+        descend(top_node)
+
     def _resample_stick_orders(self):
         """
         Resample the order of the psi-sticks.
