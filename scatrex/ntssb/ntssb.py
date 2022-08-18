@@ -861,13 +861,13 @@ class NTSSB(object):
         # print(f"get_ancestor_indices: {end-start}")
         return ancestor_indices
 
-    def get_previous_branches_indices(self, nodes):
+    def get_previous_branches_indices(self, nodes, within_tssb=True):
         # start = time.time()
         previous_branches_indices = []
         max_len = self.max_nodes
         for node in nodes:
             indices = []
-            if not node.is_observed:
+            if within_tssb and not node.is_observed:
                 children = np.array(list(node.parent().children()))
                 labs = [l.label for l in children]
                 children = children[np.argsort(labs)]
@@ -881,6 +881,22 @@ class NTSSB(object):
                         if n_ == prev_child:
                             indices.append(idx)
                             break
+            elif not within_tssb:
+                if node.parent() is not None:
+                    children = np.array(list(node.parent().children()))
+                    if len(children) > 0:
+                        labs = [l.label for l in children]
+                        children = children[np.argsort(labs)]
+                        for j, prev_child in enumerate(children):
+                            if prev_child.is_observed:
+                                continue
+                            if prev_child == node:
+                                break
+                            # Locate prev_child in nodes list
+                            for idx, n_ in enumerate(nodes):
+                                if n_ == prev_child:
+                                    indices.append(idx)
+                                    break
             previous_branches_indices.append(np.array(indices))
             # if len(indices) > max_len:
             #     max_len = len(indices)
