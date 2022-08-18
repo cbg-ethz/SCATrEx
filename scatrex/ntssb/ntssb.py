@@ -22,6 +22,7 @@ import jax.nn as jnn
 from ..util import *
 from ..callbacks import elbos_callback
 from .tssb import TSSB
+from ..models import cna
 
 import time
 
@@ -1063,246 +1064,6 @@ class NTSSB(object):
 
         return log_node_weight
 
-    def batch_elbo(
-        self,
-        rng,
-        obs_params,
-        parent_vector,
-        children_vector,
-        ancestor_nodes_indices,
-        tssb_indices,
-        previous_branches_indices,
-        tssb_weights,
-        dp_alphas,
-        dp_gammas,
-        node_mask,
-        data_mask_subset,
-        indices,
-        do_global,
-        global_only,
-        sticks_only,
-        params,
-        num_samples,
-    ):
-        # Average over a batch of random samples from the var approx.
-        rngs = random.split(rng, num_samples)
-        init = [0]
-        init.extend([None] * (15 + len(params)))
-        vectorized_elbo = vmap(
-            self.root["node"].root["node"].compute_elbo, in_axes=init
-        )
-        return jnp.mean(
-            vectorized_elbo(
-                rngs,
-                obs_params,
-                parent_vector,
-                children_vector,
-                ancestor_nodes_indices,
-                tssb_indices,
-                previous_branches_indices,
-                tssb_weights,
-                dp_alphas,
-                dp_gammas,
-                node_mask,
-                data_mask_subset,
-                indices,
-                do_global,
-                global_only,
-                sticks_only,
-                *params,
-            )
-        )
-
-    @partial(jit, static_argnums=(0, 16))
-    def objective(
-        self,
-        obs_params,
-        parent_vector,
-        children_vector,
-        ancestor_nodes_indices,
-        tssb_indices,
-        previous_branches_indices,
-        tssb_weights,
-        dp_alphas,
-        dp_gammas,
-        node_mask,
-        data_mask_subset,
-        indices,
-        do_global,
-        global_only,
-        sticks_only,
-        num_samples,
-        params,
-        t,
-    ):
-        logger.debug("Recompiling objective!")
-        rng = random.PRNGKey(t)
-        return -self.batch_elbo(
-            rng,
-            obs_params,
-            parent_vector,
-            children_vector,
-            ancestor_nodes_indices,
-            tssb_indices,
-            previous_branches_indices,
-            tssb_weights,
-            dp_alphas,
-            dp_gammas,
-            node_mask,
-            data_mask_subset,
-            indices,
-            do_global,
-            global_only,
-            sticks_only,
-            params,
-            num_samples,
-        )
-
-    @partial(jit, static_argnums=(0, 14))
-    def batch_objective(
-        self,
-        obs_params,
-        parent_vector,
-        children_vector,
-        ancestor_nodes_indices,
-        tssb_indices,
-        previous_branches_indices,
-        tssb_weights,
-        dp_alphas,
-        dp_gammas,
-        node_mask,
-        do_global,
-        global_only,
-        sticks_only,
-        num_samples,
-        params,
-        t,
-    ):
-        logger.debug("Recompiling batch objective!")
-        rng = random.PRNGKey(t)
-        # Average over a batch of random samples from the var approx.
-        rngs = random.split(rng, num_samples)
-        init = [0]
-        init.extend([None] * (15 + len(params)))
-        vectorized_elbo = vmap(
-            self.root["node"].root["node"]._compute_elbo, in_axes=init
-        )
-        elbos, lls, kls, node_kls = vectorized_elbo(
-            rngs,
-            obs_params,
-            parent_vector,
-            children_vector,
-            ancestor_nodes_indices,
-            tssb_indices,
-            previous_branches_indices,
-            tssb_weights,
-            dp_alphas,
-            dp_gammas,
-            node_mask,
-            jnp.ones((self.num_data,)),
-            jnp.arange(self.num_data),
-            do_global,
-            global_only,
-            sticks_only,
-            *params,
-        )
-        elbo = jnp.mean(elbos)
-        ll = jnp.mean(lls)
-        kl = jnp.mean(kls)
-        node_kl = node_kls
-        return elbo, ll, kl, node_kl
-
-    @partial(jit, static_argnums=(0, 16))
-    def do_grad(
-        self,
-        obs_params,
-        parent_vector,
-        children_vector,
-        ancestor_nodes_indices,
-        tssb_indices,
-        previous_branches_indices,
-        tssb_weights,
-        dp_alphas,
-        dp_gammas,
-        node_mask,
-        data_mask_subset,
-        indices,
-        do_global,
-        global_only,
-        sticks_only,
-        num_samples,
-        params,
-        i,
-    ):
-        return jax.value_and_grad(self.objective, argnums=16)(
-            obs_params,
-            parent_vector,
-            children_vector,
-            ancestor_nodes_indices,
-            tssb_indices,
-            previous_branches_indices,
-            tssb_weights,
-            dp_alphas,
-            dp_gammas,
-            node_mask,
-            data_mask_subset,
-            indices,
-            do_global,
-            global_only,
-            sticks_only,
-            num_samples,
-            params,
-            i,
-        )
-
-    def update(
-        self,
-        obs_params,
-        parent_vector,
-        children_vector,
-        ancestor_nodes_indices,
-        tssb_indices,
-        previous_branches_indices,
-        tssb_weights,
-        dp_alphas,
-        dp_gammas,
-        node_mask,
-        data_mask_subset,
-        indices,
-        do_global,
-        global_only,
-        sticks_only,
-        num_samples,
-        i,
-        opt_state,
-        opt_update,
-        get_params,
-    ):
-        # print("Recompiling update!")
-        params = get_params(opt_state)
-        value, gradient = self.do_grad(
-            obs_params,
-            parent_vector,
-            children_vector,
-            ancestor_nodes_indices,
-            tssb_indices,
-            previous_branches_indices,
-            tssb_weights,
-            dp_alphas,
-            dp_gammas,
-            node_mask,
-            data_mask_subset,
-            indices,
-            do_global,
-            global_only,
-            sticks_only,
-            num_samples,
-            params,
-            i,
-        )
-        opt_state = opt_update(i, gradient, opt_state)
-        return opt_state, gradient, params, value
-
     def optimize_elbo(
         self,
         root_node=None,
@@ -1535,11 +1296,43 @@ class NTSSB(object):
             callback = elbos_callback
             # print("Iteration {} lower bound {}".format(t, self.batch_objective(cnvs, parent_vector, children_vector, ancestor_nodes_indices, tssb_indices, previous_branches_indices, tssb_weights, dp_alphas, dp_gammas, params, t)))
 
+        data = jnp.array(self.data)
+        lib_sizes = jnp.array(self.root["node"].root["node"].lib_sizes)
+        cell_covariates = jnp.array(self.covariates)
+
+        unobserved_factors_kernel_rate = (
+            self.root["node"].root["node"].unobserved_factors_kernel_rate
+        )
+        unobserved_factors_kernel_concentration = (
+            self.root["node"].root["node"].unobserved_factors_kernel_concentration
+        )
+        unobserved_factors_root_kernel = (
+            self.root["node"].root["node"].unobserved_factors_root_kernel
+        )
+        global_noise_factors_precisions_shape = (
+            self.root["node"].root["node"].global_noise_factors_precisions_shape
+        )
+
         # print(all_nodes_mask)
         full_data_indices = jnp.array(np.arange(self.num_data))
         data_mask_subset = jnp.array(data_mask)
         sub_data_indices = np.where(data_mask)[0]
         current_elbo = self.elbo
+
+        # Get max width in node_mask
+        # Should not count below root?
+        max_width = 1
+        node_mask_idx_below_root = node_mask_idx[np.where(ancestor_nodes_indices[node_mask_idx,0] != 0)[
+            0
+        ]]
+        local_node_mask = jnp.array(node_mask)
+        if len(node_mask_idx_below_root) > 0:
+            # original previous_branches_indices only contains within tssb!
+            previous_branches_indices2 = self.get_previous_branches_indices(
+                nodes, within_tssb=False
+            )
+            masked_prevs = np.array(previous_branches_indices2[node_mask_idx_below_root]).reshape(len(node_mask_idx_below_root),-1)
+            max_width = np.max(np.sum(masked_prevs >= 0, axis=1)) + 1
 
         # end = time.time()
         # print(f"before run: {end-start}")
@@ -1597,7 +1390,14 @@ class NTSSB(object):
 
             # Without node mask
             # start = time.time()
-            ret = self.batch_objective(
+            ret = cna.opt_funcs.batch_objective(
+                data,
+                cell_covariates,
+                lib_sizes,
+                unobserved_factors_kernel_rate,
+                unobserved_factors_kernel_concentration,
+                unobserved_factors_root_kernel,
+                global_noise_factors_precisions_shape,
                 obs_params,
                 parent_vector,
                 children_vector,
@@ -1657,7 +1457,14 @@ class NTSSB(object):
             # print(f"last part: {end-start}")
             return elbos
         else:
-            ret = self.batch_objective(
+            ret = cna.opt_funcs.batch_objective(
+                data,
+                cell_covariates,
+                lib_sizes,
+                unobserved_factors_kernel_rate,
+                unobserved_factors_kernel_concentration,
+                unobserved_factors_root_kernel,
+                global_noise_factors_precisions_shape,
                 obs_params,
                 parent_vector,
                 children_vector,
