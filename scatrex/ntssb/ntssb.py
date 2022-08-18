@@ -1148,6 +1148,8 @@ class NTSSB(object):
         parent_vector = jnp.array(
             np.concatenate([parent_vector, -2 * np.ones((rem,))])
         ).astype(int)
+        for tssb in self.get_subtrees():
+            tssb.set_stick_params()
         tssbs = [node.tssb.label for node in nodes]
         tssb_indices = self.get_tssb_indices(nodes, tssbs)
         # start3 = time.time()
@@ -1357,7 +1359,29 @@ class NTSSB(object):
                 # minibatch_idx = np.arange(self.num_data)
                 # data_mask_subset = data_mask
                 # start = time.time()
-                opt_state, g, params, elbo = self.update(
+                # Update params
+                # Iterate through nodes
+                # This is very slow: should reduce number of iterations?! Or
+                # randomly choose a node at each iteration?
+                # If I reduce the number of iterations I don't account for different complexities
+                # Only take gradient of one node at a time
+                # If I do it randomly I'm probably not using momentum, right?
+                # Only do it for big widths
+                if max_width > 2:
+                    node_idx = np.random.choice(node_mask_idx)
+                    local_node_mask = np.array(node_mask)
+                    off_idx = np.where(node_mask >= 0)[0]
+                    local_node_mask[off_idx] = 0
+                    local_node_mask[node_idx] = 1
+                    local_node_mask = jnp.array(local_node_mask)
+                opt_state, g, params, elbo = cna.opt_funcs.update(
+                    data,
+                    cell_covariates,
+                    lib_sizes,
+                    unobserved_factors_kernel_rate,
+                    unobserved_factors_kernel_concentration,
+                    unobserved_factors_root_kernel,
+                    global_noise_factors_precisions_shape,
                     obs_params,
                     parent_vector,
                     children_vector,
@@ -1367,11 +1391,12 @@ class NTSSB(object):
                     tssb_weights,
                     dp_alphas,
                     dp_gammas,
-                    node_mask,
+                    local_node_mask,
                     data_mask_subset,
                     minibatch_idx,
                     do_global,
                     global_only,
+                    jnp.array(0.0),
                     sticks_only,
                     num_samples,
                     t,
@@ -1410,8 +1435,10 @@ class NTSSB(object):
                 all_nodes_mask,
                 jnp.array(1.0),
                 jnp.array(0.0),
+                jnp.array(1.0),
                 jnp.array(0.0),
                 num_samples,
+                data.shape[0],
                 get_params(opt_state),
                 0,
             )
@@ -1477,8 +1504,10 @@ class NTSSB(object):
                 all_nodes_mask,
                 jnp.array(1.0),
                 jnp.array(0.0),
+                jnp.array(1.0),
                 jnp.array(0.0),
                 num_samples,
+                data.shape[0],
                 get_params(opt_state),
                 0,
             )
