@@ -130,6 +130,11 @@ class ObservedTree(Tree):
                 if np.all(self.tree_dict[node]["params"][all_affected_genes] >= min_cn):
                     break
 
+        self.create_adata()
+
+    def get_affected_genes(self):
+        return np.where(np.any(self.adata.X != 2, axis=0))[0]
+
     def set_neutral_nodes(self, thres=0.95, neutral_level=2):
         for node in self.tree_dict:
             self.tree_dict[node]["is_neutral"] = False

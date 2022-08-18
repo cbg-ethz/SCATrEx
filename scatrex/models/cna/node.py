@@ -34,7 +34,8 @@ class Node(AbstractNode):
         unobserved_factors_kernel=1.0,
         unobserved_factors_kernel_concentration=0.01,
         unobserved_factors_kernel_rate=1.0,
-        frac_dosage=1,
+        frac_dosage=1.0,
+        frac_overlap=0.25,
         baseline_shape=0.7,
         num_batches=0,
         **kwargs,
@@ -61,6 +62,7 @@ class Node(AbstractNode):
                 unobserved_factors_kernel_concentration=unobserved_factors_kernel_concentration,
                 unobserved_factors_kernel_rate=unobserved_factors_kernel_rate,
                 frac_dosage=frac_dosage,
+                frac_overlap=frac_overlap,
                 baseline_shape=baseline_shape,
                 num_batches=num_batches,
             )
@@ -321,6 +323,7 @@ class Node(AbstractNode):
         unobserved_factors_kernel_concentration=0.01,
         unobserved_factors_kernel_rate=1.0,
         frac_dosage=1.0,
+        frac_overlap=0.25,
         baseline_shape=0.1,
         num_batches=0,
     ):
@@ -338,6 +341,7 @@ class Node(AbstractNode):
                 unobserved_factors_kernel_concentration=unobserved_factors_kernel_concentration,
                 unobserved_factors_kernel_rate=unobserved_factors_kernel_rate,
                 frac_dosage=frac_dosage,
+                frac_overlap=frac_overlap,
                 baseline_shape=baseline_shape,
                 num_batches=num_batches,
             )
@@ -393,11 +397,25 @@ class Node(AbstractNode):
                 self.unobserved_factors_kernel_rate = unobserved_factors_kernel_rate
 
                 self.frac_dosage = frac_dosage
+                self.frac_overlap = frac_overlap
 
             self.inert_genes = np.random.choice(
                 self.n_genes,
                 size=int(self.n_genes * (1.0 - self.frac_dosage)),
                 replace=False,
+            )
+
+            cnv_genes = np.arange(
+                self.n_genes,
+            )
+            if self.tssb is not None:
+                cnv_genes = self.tssb.ntssb.input_tree.get_affected_genes()
+            self.unavailable_genes = np.sort(
+                np.random.choice(
+                    cnv_genes,
+                    size=int(len(cnv_genes) * (1 - self.frac_overlap)),
+                    replace=False,
+                )
             )
 
             # Root should not have unobserved factors
@@ -417,8 +435,13 @@ class Node(AbstractNode):
                 self.unobserved_factors_kernel = gamma_sample(
                     self.unobserved_factors_kernel_concentration_caller(),
                     np.exp(np.abs(parent.unobserved_factors)),
-                    size=self.n_genes,
                 )
+                unavailable_genes = self.unavailable_genes_caller()
+                if len(unavailable_genes) > 0:
+                    self.unobserved_factors_kernel[unavailable_genes] = (
+                        np.min(self.unobserved_factors_kernel) / 2.0
+                    )
+
                 # Make sure some genes are affected in unobserved nodes
                 if not self.is_observed:
                     top_genes = np.argsort(self.unobserved_factors_kernel)[::-1][:5]
@@ -646,6 +669,12 @@ class Node(AbstractNode):
             return self.node_hyperparams
         else:
             return self.parent().node_hyperparams_caller()
+
+    def unavailable_genes_caller(self):
+        if self.parent() is None:
+            return self.unavailable_genes
+        else:
+            return self.parent().unavailable_genes_caller()
 
     def global_noise_factors_precisions_shape_caller(self):
         if self.parent() is None:
