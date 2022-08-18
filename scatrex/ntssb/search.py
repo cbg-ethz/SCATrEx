@@ -1062,7 +1062,7 @@ class StructureSearch(object):
             # Choose initialization
             optimal_params = True
             if nodeB.parent() is None:
-                optimal_params = bool(np.random.choice(2, p=[0.6, 0.4]))
+                optimal_params = bool(np.random.choice(2, p=[0.4, 0.6]))
 
             local_node = None
             # If a pivot was chosen, choose merge root of subtree with it
