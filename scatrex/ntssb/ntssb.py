@@ -1770,6 +1770,8 @@ class NTSSB(object):
         else:
             new_parent_idx = np.where(nodes == new_parent)[0][0]
 
+        assert node.tssb == new_parent.tssb
+
         node_root = roots[node_idx]
         new_parent_root = roots[new_parent_idx]
         prev_parent_idx = np.where(np.array(nodes) == node.parent())[0][0]
