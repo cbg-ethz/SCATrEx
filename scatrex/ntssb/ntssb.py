@@ -1099,7 +1099,7 @@ class NTSSB(object):
         rem = self.max_nodes - n_nodes
 
         # Root node label
-        data_indices = list(range(self.num_data))
+        data_indices = np.array(list(range(self.num_data)))
         do_global = False
         if root_node is not None:
             root_label = root_node.label
@@ -1111,9 +1111,9 @@ class NTSSB(object):
                     descend(child)
 
             descend(root_node)
-            data_indices = list(data_indices)
+            data_indices = np.sort(list(data_indices))
             if len(data_indices) == 0 and root_node.parent() is not None:
-                data_indices = list(root_node.parent().data)
+                data_indices = np.sort(list(root_node.parent().data))
             # data_indices = list(root_node.data)
         else:
             do_global = True
@@ -1137,8 +1137,8 @@ class NTSSB(object):
                     > 1.0 / np.sqrt(len(nodes))
                 )[0]
             )
-            if len(data_indices) == 0:
-                data_indices = np.arange(self.num_data)
+        if len(data_indices) == 0:
+            data_indices = np.arange(self.num_data)
 
         data_mask = np.zeros((self.num_data,))
         data_mask[data_indices] = 1.0
