@@ -402,7 +402,10 @@ class StructureSearch(object):
                     callback=callback,
                     **callback_kwargs,
                 )
-            elif move_id == "add_reattach_pivot":
+            elif (
+                move_id == "add_reattach_pivot"
+                and self.tree.n_nodes < self.tree.max_nodes - 1
+            ):
                 success, elbos = self.add_reattach_pivot(
                     local=local,
                     num_samples=num_samples,
@@ -724,7 +727,11 @@ class StructureSearch(object):
                 self.tree.root = deepcopy(init_root)
                 self.tree.elbo = init_elbo
                 accepted = False
-            elif move_id == "add":
+            elif (
+                move_id == "add"
+                or move_id == "add_reattach_pivot"
+                or move_id == "extract_pivot"
+            ):
                 if (
                     add_rule == "accept" and score_type == "elbo"
                 ):  # only accept immediatly if using ELBO to score
