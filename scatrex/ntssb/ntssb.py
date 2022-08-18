@@ -1317,16 +1317,18 @@ class NTSSB(object):
         # Get max width in node_mask
         # Should not count below root?
         max_width = 1
-        node_mask_idx_below_root = node_mask_idx[np.where(ancestor_nodes_indices[node_mask_idx,0] != 0)[
-            0
-        ]]
+        node_mask_idx_below_root = node_mask_idx[
+            np.where(ancestor_nodes_indices[node_mask_idx, 0] != 0)[0]
+        ]
         local_node_mask = jnp.array(node_mask)
         if len(node_mask_idx_below_root) > 0:
             # original previous_branches_indices only contains within tssb!
             previous_branches_indices2 = self.get_previous_branches_indices(
                 nodes, within_tssb=False
             )
-            masked_prevs = np.array(previous_branches_indices2[node_mask_idx_below_root]).reshape(len(node_mask_idx_below_root),-1)
+            masked_prevs = np.array(
+                previous_branches_indices2[node_mask_idx_below_root]
+            ).reshape(len(node_mask_idx_below_root), -1)
             max_width = np.max(np.sum(masked_prevs >= 0, axis=1)) + 1
 
         # end = time.time()
