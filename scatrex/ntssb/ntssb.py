@@ -1184,27 +1184,20 @@ class NTSSB(object):
         dp_gammas = np.array([node.tssb.dp_gamma for node in nodes])
         tssb_weights = np.array([node.tssb.weight for node in nodes])
 
-        global_params = list(nodes[0].variational_parameters["globals"].values())
-        global_params = list(map(lambda arr: jnp.array(arr), global_params))
         global_names = list(nodes[0].variational_parameters["globals"].keys())
-
-        local_params = [
-            list(node.variational_parameters["locals"].values()) for node in nodes
+        global_params = [
+            jnp.array(nodes[0].variational_parameters["globals"][param])
+            for param in global_names
         ]
+
         local_names = list(nodes[0].variational_parameters["locals"].keys())
+        local_params = []
+        for node in nodes:
+            local_params.append(
+                [node.variational_parameters["locals"][param] for param in local_names]
+            )
 
         obs_params = np.array([node.observed_parameters for node in nodes])
-        # local_params_names = [list(local_param.keys()) for local_param in local_params]
-        # local_params = [list(local_param.values()) for local_param in local_params]
-        # params = global_params + local_params
-
-        # # Var params of probs of pivots
-        # init_pivot_ass_logits = jnp.array([node.pivot_ass_logits for node in nodes]).T # tssb
-        # init_pivot_ass_logits = init_pivot_ass_logits - jnp.mean(init_pivot_ass_logits, axis=1).reshape(-1,1)
-
-        # Pad all of the arrays up to a maximum number of nodes in order to avoid recompiling the ELBO with every structure update
-
-        # global_params =
 
         tssb_weights = jnp.array(np.concatenate([tssb_weights, 10 * np.ones((rem,))]))
         dp_gammas = jnp.array(np.concatenate([dp_gammas, 1 * np.ones((rem,))]))
