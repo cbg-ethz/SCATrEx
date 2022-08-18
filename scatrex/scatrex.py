@@ -96,7 +96,7 @@ class SCATrEx(object):
         model_args=None,
         n_genes=50,
         n_extra_per_observed=1,
-        seed=None,
+        seed=42,
         copy=False,
     ):
         np.random.seed(seed)
