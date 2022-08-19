@@ -1910,7 +1910,7 @@ class StructureSearch(object):
                         # root_node = self.tree.root['node'].root['node']
                 new_n_iters = n_iters
                 if root_node.parent() is None:
-                    new_n_iters = n_iters * 10
+                    new_n_iters = n_iters
                 if not local:
                     root_node = None
                 self.tree.plot_tree()
