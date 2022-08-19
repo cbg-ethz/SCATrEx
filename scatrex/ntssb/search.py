@@ -1300,8 +1300,8 @@ class StructureSearch(object):
                 root_node = subtree.root["node"]
                 # if root_node.parent() is not None:
                 #     root_node = root_node.parent() # more robust
-                if removed_pivot:
-                    root_node = init_pivot_node_parent
+                # if removed_pivot:
+                #     root_node = init_pivot_node_parent
             elbos = self.tree.optimize_elbo(
                 root_node=root_node,
                 num_samples=num_samples,
