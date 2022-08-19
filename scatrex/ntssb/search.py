@@ -18,7 +18,7 @@ def search_callback(inf):
 
 MOVE_WEIGHTS = {
     "add": 1,
-    "merge": 4.0,
+    "merge": 5.0,
     "prune_reattach": 1.0,
     "pivot_reattach": 1.0,
     "swap": 1.0,
@@ -727,11 +727,7 @@ class StructureSearch(object):
                 self.tree.root = deepcopy(init_root)
                 self.tree.elbo = init_elbo
                 accepted = False
-            elif (
-                move_id == "add"
-                or move_id == "add_reattach_pivot"
-                or move_id == "extract_pivot"
-            ):
+            elif move_id == "add" or move_id == "add_reattach_pivot":
                 if (
                     add_rule == "accept" and score_type == "elbo"
                 ):  # only accept immediatly if using ELBO to score
