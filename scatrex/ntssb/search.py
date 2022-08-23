@@ -142,6 +142,7 @@ class StructureSearch(object):
         add_rule="accept",
         add_rule_thres=1.0,
         seed=1,
+        rescore_best=True,
         **callback_kwargs,
     ):
 
@@ -790,7 +791,10 @@ class StructureSearch(object):
 
             gamma = np.max([gamma, 1e-5])
             score = self.tree.elbo if score_type == "elbo" else self.tree.ll
-            self.traces["tree"].append(self.tree.plot_tree(counts=True))
+            if rescore_best:
+                self.traces["tree"].append(deepcopy(self.tree))
+            else:
+                self.traces["tree"].append(self.tree.plot_tree(counts=True))
             self.traces["elbo"].append(self.tree.elbo)
             self.traces["score"].append(score)
             self.traces["move"].append(move_id)
@@ -811,6 +815,46 @@ class StructureSearch(object):
 
             if T == 0:
                 break
+
+        if rescore_best:
+            logger.debug("Re-scoring top 10% trees")
+            logger.debug(f"Current best one is tree {np.argmax(self.traces['elbo'])}")
+            # Get top 10 unique-scoring trees
+            elbos, indices = np.unique(self.traces["elbo"], return_index=True)
+            top_scoring = indices[np.where(elbos > np.quantile(elbos, q=0.90))[0]]
+            logger.debug(
+                f"Re-scoring top 10% trees: got {len(top_scoring)} trees to score"
+            )
+            # Re-score them
+            new_elbos = []
+            for tree_idx in top_scoring:
+                elbos = self.traces["tree"][tree_idx].optimize_elbo(
+                    local_node=None,
+                    root_node=None,
+                    num_samples=5,
+                    n_iters=10000,
+                    thin=thin,
+                    tol=tol,
+                    step_size=step_size,
+                    mb_size=mb_size,
+                    max_nodes=max_nodes,
+                    init=True,
+                    debug=False,
+                    opt=opt,
+                    opt_triplet=None,
+                    callback=callback,
+                    **callback_kwargs,
+                )
+                logger.debug(
+                    f"Tree {tree_idx}: {self.traces['elbo'][tree_idx]} -> {self.traces['tree'][tree_idx].elbo}"
+                )
+                new_elbos.append(self.traces["tree"][tree_idx].elbo)
+            # Get new best
+            new_best_idx = top_scoring[np.argmax(new_elbos)]
+            logger.debug(f"New best is tree {new_best_idx}")
+            new_best = self.traces["tree"][new_best_idx]
+            self.best_tree = deepcopy(new_best)
+            self.best_elbo = new_best.elbo
 
         self.tree.plot_tree(super_only=False)
         self.best_tree.plot_tree(super_only=False)
