@@ -142,7 +142,7 @@ class StructureSearch(object):
         add_rule="accept",
         add_rule_thres=1.0,
         seed=1,
-        rescore_best=True,
+        rescore_best=False,
         **callback_kwargs,
     ):
 
