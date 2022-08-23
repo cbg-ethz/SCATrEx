@@ -105,10 +105,13 @@ def test_scatrex():
     nodes = sca.ntssb.get_nodes()
     assert len(nodes) >= n_clones
 
-    assert np.var(nodes[0].variational_parameters["globals"]["log_baseline_mean"] > 0)
+    assert (
+        np.var(nodes[0].variational_parameters["globals"]["log_baseline_log_std"]) > 0
+    )
     for node in nodes[1:]:
-        assert np.var(
-            node.variational_parameters["locals"]["unobserved_factors_mean"] > 0
+        assert (
+            np.var(node.variational_parameters["locals"]["unobserved_factors_log_std"])
+            > 0
         )
 
     assert "scatrex_node" in sca.adata.obs.columns
