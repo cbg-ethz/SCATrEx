@@ -1128,8 +1128,16 @@ class TSSB(object):
             main = (
                 1.0
                 if len(root["children"]) < 1
-                else jnn.sigmoid(
+                else jnp.exp(
                     root["node"].variational_parameters["locals"]["nu_log_mean"]
+                )
+                / (
+                    jnp.exp(
+                        root["node"].variational_parameters["locals"]["nu_log_mean"]
+                    )
+                    + jnp.exp(
+                        root["node"].variational_parameters["locals"]["nu_log_std"]
+                    )
                 )
             )
             weight = [mass * main]
@@ -1140,10 +1148,22 @@ class TSSB(object):
                 [
                     1.0
                     if i == len(root["children"]) - 1
-                    else jnn.sigmoid(
+                    else jnp.exp(
                         root["children"][i]["node"].variational_parameters["locals"][
                             "psi_log_mean"
                         ]
+                    )
+                    / (
+                        jnp.exp(
+                            root["children"][i]["node"].variational_parameters[
+                                "locals"
+                            ]["psi_log_mean"]
+                        )
+                        + jnp.exp(
+                            root["children"][i]["node"].variational_parameters[
+                                "locals"
+                            ]["psi_log_std"]
+                        )
                     )
                     for i in range(len(root["children"]))
                 ],
@@ -1165,10 +1185,22 @@ class TSSB(object):
                             mass
                             * (
                                 1.0
-                                - jnn.sigmoid(
+                                - jnp.exp(
                                     root["node"].variational_parameters["locals"][
                                         "nu_log_mean"
                                     ]
+                                )
+                                / (
+                                    jnp.exp(
+                                        root["node"].variational_parameters["locals"][
+                                            "nu_log_mean"
+                                        ]
+                                    )
+                                    + jnp.exp(
+                                        root["node"].variational_parameters["locals"][
+                                            "nu_log_std"
+                                        ]
+                                    )
                                 )
                             )
                             * weights[i],
@@ -1180,10 +1212,22 @@ class TSSB(object):
                             mass
                             * (
                                 1.0
-                                - jnn.sigmoid(
+                                - jnp.exp(
                                     root["node"].variational_parameters["locals"][
                                         "nu_log_mean"
                                     ]
+                                )
+                                / (
+                                    jnp.exp(
+                                        root["node"].variational_parameters["locals"][
+                                            "nu_log_mean"
+                                        ]
+                                    )
+                                    + jnp.exp(
+                                        root["node"].variational_parameters["locals"][
+                                            "nu_log_std"
+                                        ]
+                                    )
                                 )
                             )
                             * weights[i],
@@ -1194,10 +1238,22 @@ class TSSB(object):
                         mass
                         * (
                             1.0
-                            - jnn.sigmoid(
+                            - jnp.exp(
                                 root["node"].variational_parameters["locals"][
                                     "nu_log_mean"
                                 ]
+                            )
+                            / (
+                                jnp.exp(
+                                    root["node"].variational_parameters["locals"][
+                                        "nu_log_mean"
+                                    ]
+                                )
+                                + jnp.exp(
+                                    root["node"].variational_parameters["locals"][
+                                        "nu_log_std"
+                                    ]
+                                )
                             )
                         )
                         * weights[i],
