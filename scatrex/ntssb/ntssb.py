@@ -1148,8 +1148,7 @@ class NTSSB(object):
         parent_vector = jnp.array(
             np.concatenate([parent_vector, -2 * np.ones((rem,))])
         ).astype(int)
-        for tssb in self.get_subtrees():
-            tssb.set_stick_params()
+
         tssbs = [node.tssb.label for node in nodes]
         tssb_indices = self.get_tssb_indices(nodes, tssbs)
         # start3 = time.time()
@@ -1331,6 +1330,10 @@ class NTSSB(object):
             ).reshape(len(node_mask_idx_below_root), -1)
             max_width = np.max(np.sum(masked_prevs >= 0, axis=1)) + 1
 
+        # Get max depth within TSSB
+        masked_ancs = np.array(ancestor_nodes_indices)[node_mask_idx]
+        max_depth = np.max(np.sum(masked_ancs >= 0, axis=1)) + 1
+
         # end = time.time()
         # print(f"before run: {end-start}")
         if run:
@@ -1362,7 +1365,8 @@ class NTSSB(object):
                 # Only take gradient of one node at a time
                 # If I do it randomly I'm probably not using momentum, right?
                 # Only do it for big widths
-                if max_width > 2:
+                do_sticks = jnp.array(1.0)
+                if max_width > 2 or (max_depth > 2 and np.sum(node_mask) > 2):
                     node_idx = np.random.choice(node_mask_idx)
                     local_node_mask = np.array(node_mask)
                     off_idx = np.where(node_mask >= 0)[0]
@@ -1391,7 +1395,7 @@ class NTSSB(object):
                     minibatch_idx,
                     do_global,
                     global_only,
-                    jnp.array(0.0),
+                    do_sticks,
                     sticks_only,
                     num_samples,
                     t,
