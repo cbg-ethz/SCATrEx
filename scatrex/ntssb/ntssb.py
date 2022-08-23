@@ -1570,7 +1570,7 @@ class NTSSB(object):
                 node_lls = node.loglh(
                     np.array(indices), variational=variational, axis=1
                 )
-                node_lls = node_lls + np.log(weights[i] + 1e-6) if prior else node_lls
+                node_lls = node_lls + np.log(weights[i] + 1e-300) if prior else node_lls
                 node.data_ass_logits[np.array(indices)] = node_lls
         # print(f"update_ass_logits: {time.time()-start}")
 
