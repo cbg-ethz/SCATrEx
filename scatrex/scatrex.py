@@ -131,7 +131,7 @@ class SCATrEx(object):
 
         return self.ntssb if copy else None
 
-    def simulate_data(self, n_cells=100, seed=None, copy=False):
+    def simulate_data(self, n_cells=100, seed=42, copy=False):
         np.random.seed(seed)
         self.ntssb.put_data_in_nodes(n_cells)
         self.ntssb.root["node"].root["node"].generate_data_params()
@@ -182,10 +182,9 @@ class SCATrEx(object):
         filter_genes=False,
         max_genes=1000,
         batch_key="batch",
-        search_kwargs=dict(),
-        seed=42,
+        **search_kwargs,
     ):
-        np.random.seed(seed)
+        np.random.seed(42)
         if not self.observed_tree and observed_tree is None:
             raise ValueError(
                 "No observed tree available. Please pass an observed tree object."
@@ -290,7 +289,7 @@ class SCATrEx(object):
         else:
             logger.info("Will continue search from where it left off.")
 
-        self.ntssb = self.search.run_search(seed=seed, **search_kwargs)
+        self.ntssb = self.search.run_search(**search_kwargs)
         self.ntssb.create_augmented_tree_dict()
 
         node_assignments = [

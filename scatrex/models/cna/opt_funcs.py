@@ -1,14 +1,948 @@
 import jax
-from jax.api import jit, grad, vmap
+from jax import jit, grad, vmap
 from jax import random
-from jax.experimental import optimizers
+from jax.example_libraries import optimizers
 import jax.numpy as jnp
 import jax.nn as jnn
 
 from scatrex.util import *
 from scatrex.callbacks import elbos_callback
 
+from jax.scipy.special import digamma, betaln, gammaln
+
 from functools import partial
+
+def loggaussian_ent(mean, std):
+    return jnp.log(std) + mean + 0.5 + 0.5*jnp.log(2*jnp.pi)
+
+def diag_loggaussian_ent(mean, log_std, axis=None):
+    return jnp.sum(vmap(loggaussian_ent)(mean, jnp.exp(log_std)), axis=axis)
+
+
+def complete_elbo(self, rng, mc_samples=3):
+    rngs = random.split(rng, mc_samples)
+
+    # Get data
+    data = self.data
+    lib_sizes = self.root["node"].root["node"].lib_sizes
+    n_cells, n_genes = self.data.shape
+
+    # Get global variational parameters
+    log_baseline_mean = self.root["node"].root["node"].variational_parameters["globals"]["log_baseline_mean"]
+    log_baseline_log_std = self.root["node"].root["node"].variational_parameters["globals"]["log_baseline_log_std"]
+    cell_noise_mean = self.root["node"].root["node"].variational_parameters["globals"]["cell_noise_mean"]
+    cell_noise_log_std = self.root["node"].root["node"].variational_parameters["globals"]["cell_noise_log_std"]
+    noise_factors_mean = self.root["node"].root["node"].variational_parameters["globals"]["noise_factors_mean"]
+    noise_factors_log_std = self.root["node"].root["node"].variational_parameters["globals"]["noise_factors_log_std"]
+
+    # Sample global
+    baseline_samples = sample_baseline(rngs, log_baseline_mean, log_baseline_log_std)
+    cell_noise_samples = sample_cell_noise_factors(rngs, cell_noise_mean, cell_noise_log_std)
+    noise_factor_samples = sample_noise_factors(rngs, noise_factors_mean, noise_factors_log_std)
+
+    def sub_descend(root, depth=0):
+        elbo = 0
+        subtree_weight = 0
+
+        if root["node"].parent() is None:
+            parent_unobserved_samples = jnp.zeros((mc_samples, n_genes))
+            unobserved_samples = jnp.zeros((mc_samples, n_genes))
+            unobserved_kernel_samples = jnp.zeros((mc_samples, n_genes))
+        else:
+            # Sample parent
+            parent_unobserved_means = root["node"].parent().variational_parameters["locals"]["unobserved_factors_mean"]
+            parent_unobserved_log_stds = root["node"].parent().variational_parameters["locals"]["unobserved_factors_log_std"]
+            parent_unobserved_samples = sample_unobserved(rngs, parent_unobserved_means, parent_unobserved_log_stds)
+
+            # Sample node
+            unobserved_means = root["node"].variational_parameters["locals"]["unobserved_factors_mean"]
+            unobserved_log_stds = root["node"].variational_parameters["locals"]["unobserved_factors_log_std"]
+            unobserved_samples = sample_unobserved(rngs, unobserved_means, unobserved_log_stds)
+            unobserved_factors_kernel_log_mean = root["node"].variational_parameters["locals"]["unobserved_factors_kernel_log_mean"]
+            unobserved_factors_kernel_log_std = root["node"].variational_parameters["locals"]["unobserved_factors_kernel_log_std"]
+            unobserved_kernel_samples = sample_unobserved_kernel(rngs, unobserved_factors_kernel_log_mean, unobserved_factors_kernel_log_std)
+
+        psi_not_prev_sum = 0
+        for i, child in enumerate(root["children"]):
+            nu_alpha = child["node"].variational_parameters["locals"]["nu_log_mean"]
+            nu_beta = child["node"].variational_parameters["locals"]["nu_log_std"]
+            psi_alpha = child["node"].variational_parameters["locals"]["psi_log_mean"]
+            psi_beta = child["node"].variational_parameters["locals"]["psi_log_std"]
+
+            # Compute local exact KL divergence term
+            child["node"].stick_kl = beta_kl(nu_alpha, nu_beta, 1, (root["node"].tssb.alpha_decay**depth)*root["node"].tssb.dp_alpha) + beta_kl(psi_alpha, psi_beta, 1, root["node"].tssb.dp_gamma)
+
+            # Compute expected local NTSSB weight term
+            E_log_phi = E_q_log_beta(psi_alpha, psi_beta) + psi_not_prev_sum
+            E_log_nu = E_q_log_beta(nu_alpha, nu_beta)
+            E_log_1_nu = E_q_log_1_beta(nu_alpha, nu_beta)
+
+            child["node"].weight_until_here = child["node"].data_weights + root["node"].weight_until_here
+            child["node"].expected_weights = child["node"].data_weights*E_log_nu + root["node"].weight_until_here*E_log_1_nu + child["node"].weight_until_here*E_log_phi
+
+            if i > 0:
+                psi_not_prev_sum += E_q_log_1_beta(psi_alpha, psi_beta)
+
+            # Go down in the tree
+            elbo, subtree_weight = sub_descend(child, depth=depth+1)
+
+
+        # Compute local approximate expected log likelihood term
+        root["node"].ell = ell(root["node"].data_weights, baseline_samples, cell_noise_samples, noise_factor_samples, unobserved_samples, root["node"].cnvs, lib_sizes, data)
+
+        if root["node"].parent() is None:
+            root["node"].param_kl = 0.
+        else:
+            # Compute local approximate KL divergence term
+            root["node"].param_kl = local_paramkl(parent_unobserved_samples, unobserved_samples, unobserved_kernel_samples,
+                                                unobserved_means,
+                                                unobserved_log_stds,
+                                                unobserved_factors_kernel_log_mean,
+                                                unobserved_factors_kernel_log_std,
+                                                jnp.array([0.1, 1.]), jnp.array(0.))
+
+        # If this node is the root of its subtree, compute expected weights here
+        if depth == 0:
+            nu_alpha = child["node"].variational_parameters["locals"]["nu_log_mean"]
+            nu_beta = child["node"].variational_parameters["locals"]["nu_log_std"]
+            psi_alpha = child["node"].variational_parameters["locals"]["psi_log_mean"]
+            psi_beta = child["node"].variational_parameters["locals"]["psi_log_std"]
+
+            E_log_nu = E_q_log_beta(nu_alpha, nu_beta)
+            root["node"].expected_weights = root["node"].data_weights*E_log_nu
+
+            # Compute local exact KL divergence term
+            root["node"].stick_kl = beta_kl(nu_alpha, nu_beta, 1, (root["node"].tssb.alpha_decay**depth)*root["node"].tssb.dp_alpha) + beta_kl(psi_alpha, psi_beta, 1, root["node"].tssb.dp_gamma)
+
+
+        # Compute local ELBO quantities
+        root["node"].local_elbo = root["node"].ell + root["node"].expected_weights - root["node"].data_weights*np.log(root["node"].data_weights)
+        root["node"].local_elbo = root["node"].local_elbo - root["node"].param_kl - root["node"].stick_kl
+
+        # Remove root contribution
+        elbo = elbo + root["node"].local_elbo
+
+        # Track total weight in the subtree
+        subtree_weight += root["node"].data_weights
+
+        return elbo, subtree_weight
+
+    def descend(super_root, elbo=0):
+        subtree_elbo, subtree_weights = sub_descend(super_root["node"].root)
+        elbo += np.sum(subtree_elbo + subtree_weights * super_root["node"].weight)
+        for super_child in super_root["children"]:
+            elbo += descend(super_child)
+        return elbo
+
+    elbo = descend(self.root)
+
+    # Compute global KL
+    global_kl = jnp.sum(baseline_kl(log_baseline_mean, log_baseline_log_std))
+    global_kl += jnp.sum(noise_factors_kl(noise_factors_mean, noise_factors_log_std))
+    global_kl += jnp.sum(cell_noise_kl(cell_noise_mean, cell_noise_log_std))
+
+    # Add to ELBO
+    elbo = elbo - global_kl - self.root["node"].root["node"].local_elbo
+
+    return elbo
+
+@jax.jit
+def beta_kl(a1, b1, a2, b2):
+    def logbeta_func(a,b):
+        return gammaln(a) + gammaln(b) - gammaln(a+b)
+
+    kl = logbeta_func(a1,b1) - logbeta_func(a2,b2)
+    kl += (a1-a2)*digamma(a1)
+    kl += (b1-b2)*digamma(b1)
+    kl += (a2-a1 + b2-b1)*digamma(a1+b1)
+    return kl
+
+@jax.jit
+def E_q_log_beta(
+    alpha,
+    beta,
+):
+    return digamma(alpha) - digamma(alpha + beta)
+
+@jax.jit
+def E_q_log_1_beta(
+    alpha,
+    beta,
+):
+    return digamma(beta) - digamma(alpha + beta)
+
+# This computes E_q[p(z_n=\epsilon | \nu, \psi)]
+@jax.jit
+def compute_expected_weight(
+    nu_alpha,
+    nu_beta,
+    psi_alpha,
+    psi_beta,
+    prev_nu_sticks_sum,
+    prev_psi_sticks_sum,
+):
+    nu_digamma_sum = digamma(nu_alpha + nu_beta)
+    E_log_nu = digamma(nu_alpha) - nu_digamma_sum
+    nu_sticks_sum = digamma(nu_beta) - nu_digamma_sum + prev_nu_sticks_sum
+    psi_sticks_sum = local_psi_sticks_sum(psi_alpha, psi_beta) + prev_psi_sticks_sum
+    weight = E_log_nu + nu_sticks_sum + psi_sticks_sum
+    return weight, nu_sticks_sum, psi_sticks_sum
+
+@jax.jit
+def sample_baseline(
+    rngs,
+    log_baseline_mean,
+    log_baseline_log_std,
+):
+    def _sample(rng, log_baseline_mean, log_baseline_log_std):
+        return jnp.append(1, jnp.exp(diag_gaussian_sample(rng, log_baseline_mean, log_baseline_log_std)))
+    vectorized_sample = vmap(_sample, in_axes=[0, None, None])
+    return vectorized_sample(rngs, log_baseline_mean, log_baseline_log_std)
+
+@jax.jit
+def sample_cell_noise_factors(
+    rngs,
+    cell_noise_mean,
+    cell_noise_log_std,
+):
+    def _sample(rng, cell_noise_mean, cell_noise_log_std):
+        return diag_gaussian_sample(rng, cell_noise_mean, cell_noise_log_std)
+    vectorized_sample = vmap(_sample, in_axes=[0, None, None])
+    return vectorized_sample(rngs, cell_noise_mean, cell_noise_log_std)
+
+@jax.jit
+def sample_noise_factors(
+    rngs,
+    noise_factors_mean,
+    noise_factors_log_std,
+):
+    def _sample(rng, noise_factors_mean, noise_factors_log_std):
+        return diag_gaussian_sample(rng, noise_factors_mean, noise_factors_log_std)
+    vectorized_sample = vmap(_sample, in_axes=[0, None, None])
+    return vectorized_sample(rngs, noise_factors_mean, noise_factors_log_std)
+
+@jax.jit
+def sample_unobserved(
+    rngs,
+    unobserved_means,
+    unobserved_log_stds,
+):
+    def _sample(rng, unobserved_means, unobserved_log_stds):
+        return diag_gaussian_sample(rng, unobserved_means, unobserved_log_stds)
+    vectorized_sample = vmap(_sample, in_axes=[0, None, None])
+    return vectorized_sample(rngs, unobserved_means, unobserved_log_stds)
+
+@jax.jit
+def sample_unobserved_kernel(
+    rngs,
+    log_unobserved_factors_kernel_means,
+    log_unobserved_factors_kernel_log_stds,
+):
+    def _sample(rng, log_unobserved_factors_kernel_means, log_unobserved_factors_kernel_log_stds):
+        return jnp.exp(diag_gaussian_sample(rng, log_unobserved_factors_kernel_means, log_unobserved_factors_kernel_log_stds))
+    vectorized_sample = vmap(_sample, in_axes=[0, None, None])
+    return vectorized_sample(rngs, log_unobserved_factors_kernel_means, log_unobserved_factors_kernel_log_stds)
+
+@jax.jit
+def baseline_kl(
+    log_baseline_mean,
+    log_baseline_log_std,
+):
+    std = jnp.exp(log_baseline_log_std)
+    return -log_baseline_log_std + .5 * (std**2 + log_baseline_mean**2 - 1.)
+
+
+@jax.jit
+def cell_noise_kl(
+    cell_noise_mean,
+    cell_noise_log_std,
+):
+    std = jnp.exp(cell_noise_log_std)
+    return -cell_noise_log_std + .5 * (std**2 + cell_noise_mean**2 - 1.)
+
+
+@jax.jit
+def noise_factors_kl(
+    noise_factors_mean,
+    noise_factors_log_std,
+):
+    std = jnp.exp(noise_factors_log_std)
+    return -noise_factors_log_std + .5 * (std**2 + noise_factors_mean**2 - 1.)
+
+@jax.jit
+def ell(
+    data_node_weights, # lambda_{nk} with only the node attachments
+    baseline_samples,
+    cell_noise_samples,
+    noise_factor_samples,
+    unobserved_samples, # N vector corresponding to node attachments
+    cnv, # N vector corresponding to node attachments
+    lib_sizes,
+    data,
+    mask,
+):
+    def _ell(data_node_weights, baseline_sample, cell_noise_sample, noise_factor_sample, unobserved_sample):
+        noise_sample = cell_noise_sample.dot(noise_factor_sample)
+        node_mean = (
+            baseline_sample * cnv/2 * jnp.exp(unobserved_sample + noise_sample)
+        )
+        sum = jnp.sum(node_mean, axis=1).reshape(-1, 1)
+        node_mean = node_mean / sum
+        node_mean = node_mean * lib_sizes
+        pll = vmap(jax.scipy.stats.poisson.logpmf)(data, node_mean)
+        ell = jnp.sum(pll, axis=1)  # N-vector
+        ell *= data_node_weights
+        ell *= mask
+        return ell
+    vectorized = vmap(_ell, in_axes=[None, 0,0,0,0])
+    return jnp.mean(vectorized(data_node_weights, baseline_samples, cell_noise_samples, noise_factor_samples, unobserved_samples), axis=0)
+
+
+@jax.jit
+def ll(
+    baseline_samples,
+    cell_noise_samples,
+    noise_factor_samples,
+    unobserved_samples,
+    cnv,
+    lib_sizes,
+    data,
+):
+    def _ll(baseline_sample, cell_noise_sample, noise_factor_sample, unobserved_sample):
+        noise_sample = cell_noise_sample.dot(noise_factor_sample)
+        node_mean = (
+            baseline_sample * cnv/2 * jnp.exp(unobserved_sample + noise_sample)
+        )
+        sum = jnp.sum(node_mean, axis=1).reshape(-1, 1)
+        node_mean = node_mean / sum
+        node_mean = node_mean * lib_sizes
+        pll = vmap(jax.scipy.stats.poisson.logpmf)(data, node_mean)
+        ll = jnp.sum(pll, axis=1)  # N-vector
+        return ll
+    vectorized = vmap(_ll, in_axes=[0,0,0,0])
+    return jnp.mean(vectorized(baseline_samples, cell_noise_samples, noise_factor_samples, unobserved_samples), axis=0)
+
+
+
+@jax.jit
+def local_paramkl(
+    parent_unobserved_samples,
+    child_unobserved_samples,
+    child_unobserved_kernel_samples,
+    child_unobserved_means,
+    child_unobserved_log_stds,
+    child_log_unobserved_factors_kernel_means,
+    child_log_unobserved_factors_kernel_log_stds,
+    hyperparams, # [concentration, rate]
+    child_in_root_subtree, # to make the prior prefer amplifications
+):
+    def _local_paramkl(
+        parent_unobserved_sample,
+        child_unobserved_sample,
+        child_unobserved_kernel_sample,
+        child_unobserved_means,
+        child_unobserved_log_stds,
+        child_log_unobserved_factors_kernel_means,
+        child_log_unobserved_factors_kernel_log_stds,
+        hyperparams,
+        ):
+        kl = 0.0
+        # Kernel
+        pl = diag_gamma_logpdf(
+            child_unobserved_kernel_sample,
+            jnp.log(hyperparams[0] * jnp.ones((child_unobserved_kernel_sample.shape[0],))),
+            (hyperparams[1]*jnp.abs(parent_unobserved_sample)),
+        )
+        ent = -diag_loggaussian_logpdf(
+            child_unobserved_kernel_sample,
+            child_log_unobserved_factors_kernel_means,
+            child_log_unobserved_factors_kernel_log_stds,
+        )
+#         ent = diag_loggaussian_ent(child_log_unobserved_factors_kernel_means, child_log_unobserved_factors_kernel_log_stds)
+        kl += pl + ent
+
+        # Cell state
+        pl = diag_gaussian_logpdf(
+            child_unobserved_sample,
+            parent_unobserved_sample,
+            jnp.log(0.001 + child_unobserved_kernel_sample),
+        )
+        ent = -diag_gaussian_logpdf(
+            child_unobserved_sample, child_unobserved_means, child_unobserved_log_stds
+        )
+        kl += pl + ent
+
+        return kl
+    vectorized = vmap(_local_paramkl, in_axes=[0,0,0,None,None,None,None,None])
+    return jnp.mean(vectorized(parent_unobserved_samples, child_unobserved_samples,
+            child_unobserved_kernel_samples, child_unobserved_means, child_unobserved_log_stds,
+            child_log_unobserved_factors_kernel_means, child_log_unobserved_factors_kernel_log_stds, hyperparams))
+
+@jax.jit
+def update_local_parameters(
+    rngs,
+    child_unobserved_means,
+    child_unobserved_log_stds,
+    child_log_unobserved_factors_kernel_means,
+    child_log_unobserved_factors_kernel_log_stds,
+    data_node_weights,
+    parent_unobserved_samples,
+    baseline_samples,
+    cell_noise_samples,
+    noise_factor_samples,
+    hyperparams, # [concentration, rate]
+    child_in_root_subtree, # to make the prior prefer amplifications
+    cnv,
+    lib_sizes,
+    data,
+    mask,
+    states,
+    i,
+    mb_scaling=1,
+    lr=0.01
+    ):
+
+    def local_loss(
+        params,
+        parent_unobserved_samples,
+        baseline_samples,
+        cell_noise_samples,
+        noise_factor_samples,
+        hyperparams,
+        child_in_root_subtree
+        ):
+        child_unobserved_means = params[0]
+        child_unobserved_log_stds = params[1]
+        child_log_unobserved_factors_kernel_means = params[2]
+        child_log_unobserved_factors_kernel_log_stds = params[3]
+
+        child_unobserved_kernel_samples = sample_unobserved_kernel(rngs, child_log_unobserved_factors_kernel_means, child_log_unobserved_factors_kernel_log_stds)
+        child_unobserved_samples = sample_unobserved(rngs, child_unobserved_means, child_unobserved_log_stds)
+
+        child_unobserved_kernel_samples = jnp.clip(child_unobserved_kernel_samples, a_min=1e-8, a_max=5)
+
+        loss = 0.
+
+        loss = jnp.sum(ell(data_node_weights,
+            baseline_samples,
+            cell_noise_samples,
+            noise_factor_samples,
+            child_unobserved_samples,
+            cnv,
+            lib_sizes,
+            data,
+            mask,))
+        kl = local_paramkl(parent_unobserved_samples,
+            child_unobserved_samples,
+            child_unobserved_kernel_samples,
+            child_unobserved_means,
+            child_unobserved_log_stds,
+            child_log_unobserved_factors_kernel_means,
+            child_log_unobserved_factors_kernel_log_stds,
+            hyperparams, # [concentration, rate]
+            child_in_root_subtree,)
+        # Scale by minibatch
+        loss = loss + kl*mb_scaling
+        return loss
+
+    child_unobserved_log_stds = jnp.clip(child_unobserved_log_stds, a_min=jnp.log(1e-8))
+    child_log_unobserved_factors_kernel_means = jnp.clip(child_log_unobserved_factors_kernel_means, a_min=jnp.log(1e-8), a_max=0.)
+    child_log_unobserved_factors_kernel_log_stds = jnp.clip(child_log_unobserved_factors_kernel_log_stds, a_min=jnp.log(1e-8), a_max=0.)
+
+    params = jnp.array([child_unobserved_means, child_unobserved_log_stds,
+                    child_log_unobserved_factors_kernel_means, child_log_unobserved_factors_kernel_log_stds])
+    loss, grads = jax.value_and_grad(local_loss)(params, parent_unobserved_samples,
+                                                baseline_samples,
+                                                cell_noise_samples,
+                                                noise_factor_samples,
+                                                hyperparams,
+                                                child_in_root_subtree)
+
+    state1, state2, state3, state4 = states
+
+
+
+    m3, v3 = state3
+    b1=0.9
+    b2=0.999
+    eps=1e-8
+    m3 = (1 - b1) * grads[2] + b1 * m3  # First  moment estimate.
+    v3 = (1 - b2) * jnp.square(grads[2]) + b2 * v3  # Second moment estimate.
+    state3 = (m3, v3)
+    mhat = m3 / (1 - jnp.asarray(b1, m3.dtype) ** (i + 1))  # Bias correction.
+    vhat = v3 / (1 - jnp.asarray(b2, m3.dtype) ** (i + 1))
+    child_log_unobserved_factors_kernel_means = child_log_unobserved_factors_kernel_means + lr * mhat / (jnp.sqrt(vhat) + eps)
+
+
+    m4, v4 = state4
+    b1=0.9
+    b2=0.999
+    eps=1e-8
+    m4 = (1 - b1) * grads[3] + b1 * m4  # First  moment estimate.
+    v4 = (1 - b2) * jnp.square(grads[3]) + b2 * v4  # Second moment estimate.
+    state4 = (m4, 4)
+    mhat = m4 / (1 - jnp.asarray(b1, m4.dtype) ** (i + 1))  # Bias correction.
+    vhat = v4 / (1 - jnp.asarray(b2, m4.dtype) ** (i + 1))
+    child_log_unobserved_factors_kernel_log_stds = child_log_unobserved_factors_kernel_log_stds + lr * mhat / (jnp.sqrt(vhat) + eps)
+
+    m1, v1 = state1
+    b1=0.9
+    b2=0.999
+    eps=1e-8
+    m1 = (1 - b1) * grads[0] + b1 * m1  # First  moment estimate.
+    v1 = (1 - b2) * jnp.square(grads[0]) + b2 * v1  # Second moment estimate.
+    state1 = (m1, v1)
+    mhat = m1 / (1 - jnp.asarray(b1, m1.dtype) ** (i + 1))  # Bias correction.
+    vhat = v1 / (1 - jnp.asarray(b2, m1.dtype) ** (i + 1))
+    child_unobserved_means = child_unobserved_means + lr * mhat / (jnp.sqrt(vhat) + eps)
+
+    m2, v2 = state2
+    m2 = (1 - b1) * grads[1] + b1 * m2  # First  moment estimate.
+    v2 = (1 - b2) * jnp.square(grads[1]) + b2 * v2  # Second moment estimate.
+    state2 = (m2, v2)
+    mhat = m2 / (1 - jnp.asarray(b1, m2.dtype) ** (i + 1))  # Bias correction.
+    vhat = v2 / (1 - jnp.asarray(b2, m2.dtype) ** (i + 1))
+    child_unobserved_log_stds = child_unobserved_log_stds + lr * mhat / (jnp.sqrt(vhat) + eps)
+
+
+
+    states = (state1, state2, state3, state4)
+
+
+    return loss, states, child_unobserved_means, child_unobserved_log_stds, child_log_unobserved_factors_kernel_means, child_log_unobserved_factors_kernel_log_stds
+
+@jax.jit
+def baseline_node_grad(
+        rngs,
+        log_baseline_mean,
+        log_baseline_log_std,
+        data_node_weights,
+        child_unobserved_samples,
+        cell_noise_samples,
+        noise_factor_samples,
+        cnv,
+        lib_sizes,
+        data,
+        mask,):
+    def local_loss(
+        params,
+        child_unobserved_samples,
+        cell_noise_samples,
+        noise_factor_samples,
+        ):
+        log_baseline_mean, log_baseline_log_std = params[0], params[1]
+        baseline_samples = sample_baseline(rngs, log_baseline_mean, log_baseline_log_std)
+
+        loss = jnp.sum(ell(data_node_weights,
+            baseline_samples,
+            cell_noise_samples,
+            noise_factor_samples,
+            child_unobserved_samples,
+            cnv,
+            lib_sizes,
+            data,
+            mask,))
+        return loss
+
+    params = jnp.array([log_baseline_mean, log_baseline_log_std])
+    grads = jax.grad(local_loss)(params, child_unobserved_samples, cell_noise_samples, noise_factor_samples,)
+    return grads
+
+@jax.jit
+def baseline_kl_grad(mean, log_std):
+    def _kl(mean, log_std):
+        return jnp.sum(baseline_kl(mean, log_std))
+    return jnp.array(jax.grad(_kl, argnums=(0,1))(mean, log_std))
+
+@jax.jit
+def baseline_step(log_baseline_mean, log_baseline_log_std, grads, states, i, lr=0.01):
+    state1, state2 = states
+
+    m1, v1 = state1
+    b1=0.9
+    b2=0.999
+    eps=1e-8
+    m1 = (1 - b1) * grads[0] + b1 * m1  # First  moment estimate.
+    v1 = (1 - b2) * jnp.square(grads[0]) + b2 * v1  # Second moment estimate.
+    state1 = (m1, v1)
+    mhat = m1 / (1 - jnp.asarray(b1, m1.dtype) ** (i + 1))  # Bias correction.
+    vhat = v1 / (1 - jnp.asarray(b2, m1.dtype) ** (i + 1))
+    log_baseline_mean = log_baseline_mean + lr * mhat / (jnp.sqrt(vhat) + eps)
+
+    m2, v2 = state2
+    m2 = (1 - b1) * grads[1] + b1 * m2  # First  moment estimate.
+    v2 = (1 - b2) * jnp.square(grads[1]) + b2 * v2  # Second moment estimate.
+    state2 = (m2, v2)
+    mhat = m2 / (1 - jnp.asarray(b1, m2.dtype) ** (i + 1))  # Bias correction.
+    vhat = v2 / (1 - jnp.asarray(b2, m2.dtype) ** (i + 1))
+    log_baseline_log_std = log_baseline_log_std + lr * mhat / (jnp.sqrt(vhat) + eps)
+
+    state = (state1, state2)
+
+    return state, log_baseline_mean, log_baseline_log_std
+
+@jax.jit
+def noise_node_grad(
+        rngs,
+        noise_factors_mean,
+        noise_factors_log_std,
+        data_node_weights,
+        child_unobserved_samples,
+        cell_noise_samples,
+        baseline_samples,
+        cnv,
+        lib_sizes,
+        data,
+        mask,):
+    def local_loss(
+        params,
+        child_unobserved_samples,
+        cell_noise_samples,
+        baseline_samples,
+        ):
+        noise_factors_mean, noise_factors_log_std = params[0], params[1]
+        noise_factor_samples = sample_noise_factors(rngs, noise_factors_mean, noise_factors_log_std)
+
+        loss = jnp.sum(ell(data_node_weights,
+            baseline_samples,
+            cell_noise_samples,
+            noise_factor_samples,
+            child_unobserved_samples,
+            cnv,
+            lib_sizes,
+            data,
+            mask,))
+        return loss
+
+    params = jnp.array([noise_factors_mean, noise_factors_log_std])
+    grads = jnp.array(jax.grad(local_loss)(params, child_unobserved_samples, cell_noise_samples, baseline_samples,))
+    return grads
+
+@jax.jit
+def noise_kl_grad(mean, log_std):
+    def _kl(mean, log_std):
+        return jnp.sum(noise_factors_kl(mean, log_std))
+    return jnp.array(jax.grad(_kl, argnums=(0,1))(mean, log_std))
+
+@jax.jit
+def noise_step(noise_factors_mean, noise_factors_log_std, grads, states, i, lr=0.01):
+    state1, state2 = states
+
+    m1, v1 = state1
+    b1=0.9
+    b2=0.999
+    eps=1e-8
+    m1 = (1 - b1) * grads[0] + b1 * m1  # First  moment estimate.
+    v1 = (1 - b2) * jnp.square(grads[0]) + b2 * v1  # Second moment estimate.
+    state1 = (m1, v1)
+    mhat = m1 / (1 - jnp.asarray(b1, m1.dtype) ** (i + 1))  # Bias correction.
+    vhat = v1 / (1 - jnp.asarray(b2, m1.dtype) ** (i + 1))
+    noise_factors_mean = noise_factors_mean + lr * mhat / (jnp.sqrt(vhat) + eps)
+
+    m2, v2 = state2
+    m2 = (1 - b1) * grads[1] + b1 * m2  # First  moment estimate.
+    v2 = (1 - b2) * jnp.square(grads[1]) + b2 * v2  # Second moment estimate.
+    state2 = (m2, v2)
+    mhat = m2 / (1 - jnp.asarray(b1, m2.dtype) ** (i + 1))  # Bias correction.
+    vhat = v2 / (1 - jnp.asarray(b2, m2.dtype) ** (i + 1))
+    noise_factors_log_std = noise_factors_log_std + lr * mhat / (jnp.sqrt(vhat) + eps)
+
+    state = (state1, state2)
+
+    return state, noise_factors_mean, noise_factors_log_std
+
+
+@jax.jit
+def cellnoise_node_grad(
+        rngs,
+        cell_noise_mean,
+        cell_noise_log_std,
+        data_node_weights,
+        child_unobserved_samples,
+        noise_factor_samples,
+        baseline_samples,
+        cnv,
+        lib_sizes,
+        data,
+        mask,):
+    def local_loss(
+        params,
+        child_unobserved_samples,
+        noise_factor_samples,
+        baseline_samples,
+        ):
+        cell_noise_mean, cell_noise_log_std = params[0], params[1]
+        cell_noise_samples = sample_noise_factors(rngs, cell_noise_mean, cell_noise_log_std)
+
+        loss = jnp.sum(ell(data_node_weights,
+            baseline_samples,
+            cell_noise_samples,
+            noise_factor_samples,
+            child_unobserved_samples,
+            cnv,
+            lib_sizes,
+            data,
+            mask,))
+        return loss
+
+    params = jnp.array([cell_noise_mean, cell_noise_log_std])
+    grads = jnp.array(jax.grad(local_loss)(params, child_unobserved_samples, noise_factor_samples, baseline_samples,))
+    return grads
+
+@jax.jit
+def cellnoise_kl_grad(mean, log_std):
+    def _kl(mean, log_std):
+        return jnp.sum(cell_noise_kl(mean, log_std))
+    return jnp.array(jax.grad(_kl, argnums=(0,1))(mean, log_std))
+
+@jax.jit
+def cellnoise_step(cell_noise_mean, cell_noise_log_std, grads, states, i, lr=0.01):
+    state1, state2 = states
+
+    m1, v1 = state1
+    b1=0.9
+    b2=0.999
+    eps=1e-8
+    m1 = (1 - b1) * grads[0] + b1 * m1  # First  moment estimate.
+    v1 = (1 - b2) * jnp.square(grads[0]) + b2 * v1  # Second moment estimate.
+    state1 = (m1, v1)
+    mhat = m1 / (1 - jnp.asarray(b1, m1.dtype) ** (i + 1))  # Bias correction.
+    vhat = v1 / (1 - jnp.asarray(b2, m1.dtype) ** (i + 1))
+    cell_noise_mean = cell_noise_mean + lr * mhat / (jnp.sqrt(vhat) + eps)
+
+    m2, v2 = state2
+    m2 = (1 - b1) * grads[1] + b1 * m2  # First  moment estimate.
+    v2 = (1 - b2) * jnp.square(grads[1]) + b2 * v2  # Second moment estimate.
+    state2 = (m2, v2)
+    mhat = m2 / (1 - jnp.asarray(b1, m2.dtype) ** (i + 1))  # Bias correction.
+    vhat = v2 / (1 - jnp.asarray(b2, m2.dtype) ** (i + 1))
+    cell_noise_log_std = cell_noise_log_std + lr * mhat / (jnp.sqrt(vhat) + eps)
+
+    state = (state1, state2)
+
+    return state, cell_noise_mean, cell_noise_log_std
+
+
+#
+# @jax.jit
+# def update_global_parameters(
+#     hyperparams, # [concentration, rate]
+#     child_in_root_subtree, # to make the prior prefer amplifications
+#     cnv,
+#     lib_sizes,
+#     data,
+#     parent_unobserved_sample,
+#     child_unobserved_sample,
+#     child_unobserved_kernel_sample,
+#     ):
+#     def local_loss(local_params):
+#         return ell(local_params) + baseline_kl(baseline)
+#         return loss
+#
+#
+#     return child_unobserved_means, child_unobserved_log_stds, child_log_unobserved_factors_kernel_means, child_log_unobserved_factors_kernel_log_stds
+
+#
+# def tree_traversal_compute_elbo(rng, mc_samples=3):
+#     """
+#     This function traverses the tree starting at the root and computes the
+#     complete ELBO
+#     """
+#     rngs = random.split(rng, mc_samples)
+#
+#     # Get data
+#     data = self.data
+#     lib_sizes = self.root["node"].root["node"].lib_sizes
+#     n_cells, n_genes = self.data.shape
+#
+#     # Get global variational parameters
+#     log_baseline_mean = self.root["node"].root["node"].variational_parameters["globals"]["log_baseline_mean"]
+#     log_baseline_log_std = self.root["node"].root["node"].variational_parameters["globals"]["log_baseline_log_std"]
+#     cell_noise_mean = self.root["node"].root["node"].variational_parameters["globals"]["cell_noise_mean"]
+#     cell_noise_log_std = self.root["node"].root["node"].variational_parameters["globals"]["cell_noise_log_std"]
+#     noise_factors_mean = self.root["node"].root["node"].variational_parameters["globals"]["noise_factors_mean"]
+#     noise_factors_log_std = self.root["node"].root["node"].variational_parameters["globals"]["noise_factors_log_std"]
+#
+#     # Sample global
+#     baseline_samples = sample_baseline(rngs, log_baseline_mean, log_baseline_log_std)
+#     cell_noise_factors_samples = sample_cell_noise_factors(rngs, cell_noise_mean, cell_noise_log_std)
+#     noise_factors_samples = sample_noise_factors(rng, noise_factors_mean, noise_factors_log_std)
+#     noise_samples = cell_noise_factors_samples.dot(noise_factors_samples)
+#
+#     # Traverse tree
+#     def descend(root):
+#         total_subtree_weight = 0
+#         indices = list(range(len(root["children"])))
+#         # indices = indices[::-1]
+#
+#         parent_unobserved_means = root["node"].variational_parameters["locals"]["unobserved_factors_mean"]
+#         parent_unobserved_log_stds = root["node"].variational_parameters["locals"]["unobserved_factors_log_std"]
+#         # Sample parent
+#         parent_unobserved_samples = sample_unobserved(rngs, parent_unobserved_means, parent_unobserved_log_stds)
+#         psi_not_prev_sum = 0
+#         for i in indices:
+#             child = root["children"][i]
+#             cnv = child.cnvs * jnp.ones((n_cells,n_genes))
+#             data_node_weights = child.data_weights
+#
+#             # Sample node
+#             unobserved_samples = sample_unobserved(rngs, unobserved_means, unobserved_log_stds)
+#             unobserved_kernel_samples = sample_unobserved_kernel(rngs, unobserved_factors_kernel_log_means, unobserved_factors_kernel_log_stds)
+#
+#             # Compute node ll
+#             unobserved_samples = unobserved_samples * jnp.ones((mc_samples, n_cells, n_genes)) # broadcast
+#             unobserved_kernel_samples = unobserved_kernel_samples * jnp.ones((mc_samples, n_cells, n_genes)) # broadcast
+#             ll = ell(data_node_weights, baseline_samples, noise_samples, unobserved_samples, cnv, lib_sizes, data)
+#             child.ell = ll
+#             child.param_kl = local_paramkl(unobserved_samples, unobserved_kernel_samples, parent_unobserved_samples)
+#
+#             E_log_phi = E_q_log_beta(psi_alpha, psi_beta) + psi_not_prev_sum
+#             E_log_nu = E_q_log_beta(nu_alpha, nu_beta)
+#             E_log_1_nu = E_q_log_1_beta(nu_alpha, nu_beta)
+#
+#             child.weight_until_here = child.data_weights + root.weight_until_here
+#             child.expected_weights = child.data_weights*E_log_nu + root.weight_until_here*E_log_1_nu + child.weight_until_here*E_log_phi
+#             total_weight += child.data_weights
+#
+#             if i > 0:
+#                 psi_not_prev_sum += E_q_log_1_beta(psi_alpha, psi_beta)
+#
+#         node.stick_kl = beta_kl(root["node"].variational_parameters["locals"]["nu_log_mean"], 1, root["node"].variational_parameters["locals"]["nu_log_mean"], root.tssb.dp_alpha)
+#         node.stick_kl += beta_kl(root["node"].variational_parameters["locals"]["psi_log_mean"], 1, root["node"].variational_parameters["locals"]["psi_log_mean"], root.tssb.dp_gamma)
+#
+#         expected_weight, nu_sticks_sum, psi_sticks_sum = compute_expected_weight(nu_alpha, nu_beta, psi_alpha, psi_beta, prev_nu_sticks_sum, prev_psi_sticks_sum)
+#         node.ew = expected_weight
+#
+#         return total_weight, lls, expected_weight, nodes
+#
+#     _, lls, expected_w, nodes = descend(self.root)
+#
+#     # Normalize data_node_weights and compute local ELBO contributions
+#     data_weights = []
+#     for node in nodes:
+#         data_weights.append(node.data_weights)
+#     data_weights = np.array(data_weights).reshape(-1,mb_size)/np.sum(data_weights)
+#     elbo = 0
+#     for i, node in nodes:
+#         node.data_weights = data_weights[data_indices,i]
+#         # Compute ELBO using normalized data_weights
+#         node_data_elbo_contributions = node.data_weights*node.ell + node.ew - node.data_weights*np.log(node.data_weights))
+#         node_kl = node.stick_kl + node.param_kl
+#         elbo += node_data_elbo_contributions - node_kl
+#
+#     return elbo
+#
+#
+# def tree_traversal_update(root, rng, update_global=True, n_inner_steps=10, mc_samples=3):
+#     """
+#     This function traverses the tree starting at `root` and updates the
+#     variational parameters and ELBO contributions while doing it
+#     """
+#     rngs = random.split(rng, mc_samples)
+#
+#     # Get data
+#     data = self.data
+#     lib_sizes = self.root["node"].root["node"].lib_sizes
+#     n_cells, n_genes = self.data.shape
+#
+#     # Get global variational parameters
+#     log_baseline_mean = self.root["node"].root["node"].variational_parameters["globals"]["log_baseline_mean"]
+#     log_baseline_log_std = self.root["node"].root["node"].variational_parameters["globals"]["log_baseline_log_std"]
+#     cell_noise_mean = self.root["node"].root["node"].variational_parameters["globals"]["cell_noise_mean"]
+#     cell_noise_log_std = self.root["node"].root["node"].variational_parameters["globals"]["cell_noise_log_std"]
+#     noise_factors_mean = self.root["node"].root["node"].variational_parameters["globals"]["noise_factors_mean"]
+#     noise_factors_log_std = self.root["node"].root["node"].variational_parameters["globals"]["noise_factors_log_std"]
+#
+#     # Sample global
+#     baseline_samples = sample_baseline(rngs, log_baseline_mean, log_baseline_log_std)
+#     cell_noise_factors_samples = sample_cell_noise_factors(rngs, cell_noise_mean, cell_noise_log_std)
+#     noise_factors_samples = sample_noise_factors(rng, noise_factors_mean, noise_factors_log_std)
+#     noise_samples = cell_noise_factors_samples.dot(noise_factors_samples)
+#
+#     # Traverse tree and update variational parameters
+#     def descend(root, depth=0):
+#         weight_down = 0
+#         indices = list(range(len(root["children"])))
+#         indices = indices[::-1]
+#
+#         parent_unobserved_means = root["node"].variational_parameters["locals"]["unobserved_factors_mean"]
+#         parent_unobserved_log_stds = root["node"].variational_parameters["locals"]["unobserved_factors_log_std"]
+#         for i in indices:
+#             child = root["children"][i]
+#             cnv = child.cnvs * jnp.ones((n_cells,n_genes))
+#             data_node_weights = child.data_weights
+#
+#             # Sample parent
+#             parent_unobserved_samples = sample_unobserved(rngs, parent_unobserved_means, parent_unobserved_log_stds)
+#
+#             # Update local parameters
+#             unobserved_means = root["node"].variational_parameters["locals"]["unobserved_factors_mean"]
+#             unobserved_log_stds = root["node"].variational_parameters["locals"]["unobserved_factors_log_std"]
+#             unobserved_factors_kernel_log_mean = root["node"].variational_parameters["locals"]["unobserved_factors_kernel_log_mean"]
+#             unobserved_factors_kernel_log_std = root["node"].variational_parameters["locals"]["unobserved_factors_kernel_log_std"]
+#             update_local_parameters(baseline_samples, noise_samples, parent_unobserved_samples, steps=n_inner_steps)
+#
+#             # Sample updated node
+#             unobserved_samples = sample_unobserved(rngs, unobserved_means, unobserved_log_stds)
+#             unobserved_kernel_samples = sample_unobserved_kernel(rngs, unobserved_factors_kernel_log_means, unobserved_factors_kernel_log_stds)
+#
+#             # Compute node ll
+#             unobserved_samples = unobserved_samples * jnp.ones((mc_samples, n_cells, n_genes)) # broadcast
+#             unobserved_kernel_samples = unobserved_kernel_samples * jnp.ones((mc_samples, n_cells, n_genes)) # broadcast
+#             ll = ell(data_node_weights, baseline_samples, noise_samples, unobserved_samples, cnv, lib_sizes, data)
+#             child.ell[data_indices] = ll
+#             child.param_kl = local_paramkl(unobserved_samples, unobserved_kernel_samples, parent_unobserved_samples)
+#
+#             child_weight, _, _, _ = descend(child, depth + 1)
+#             post_alpha = 1.0 + child_weight
+#             post_beta = self.dp_gamma + weight_down
+#             child["node"].variational_parameters["locals"]["psi_log_mean"] = np.log(post_alpha)
+#             child["node"].variational_parameters["locals"]["psi_log_std"] = np.log(post_beta)
+#             weight_down += child_weight
+#
+#             prev_psi_sticks_sum += local_psi_sticks_sum(psi_alpha, psi_beta)
+#
+#         weight_here = np.sum(root["node"].data_weights)
+#         total_weight = weight_here + weight_down
+#         post_alpha = 1.0 + weight_here
+#         post_beta = (self.alpha_decay**depth) * self.dp_alpha + weight_down
+#         root["node"].variational_parameters["locals"]["nu_log_mean"] = np.log(post_alpha)
+#         root["node"].variational_parameters["locals"]["nu_log_std"] = np.log(post_beta)
+#
+#         node.stick_kl = beta_kl(root["node"].variational_parameters["locals"]["nu_log_mean"], root["node"].variational_parameters["locals"]["nu_log_mean"])
+#         node.stick_kl += beta_kl(root["node"].variational_parameters["locals"]["psi_log_mean"], root["node"].variational_parameters["locals"]["psi_log_mean"])
+#
+#         expected_weight, nu_sticks_sum, psi_sticks_sum = compute_expected_weight(nu_alpha, nu_beta, psi_alpha, psi_beta, prev_nu_sticks_sum, prev_psi_sticks_sum)
+#         node.ew = expected_weight
+#         node.data_weights[data_indices] = np.exp(node.ell + node.ew)
+#
+#         return total_weight, lls, expected_weight, nodes
+#
+#     _, lls, expected_w, nodes = descend(root)
+#
+#     # Update global parameters
+#     if root.parent() is None and update_global:
+#         # Use samples from tree traversal to update global parameters
+#         update_global_parameters(steps=n_inner_steps)
+#
+#     # Compute global KL
+#     global_kl = baseline_kl(log_baseline_mean, log_baseline_log_std)
+#
+#     # Use lls from tree traversal to update data_node_weights
+#     data_weights = []
+#     for node in nodes:
+#         data_weights.append(node.data_weights)
+#     data_weights = np.array(data_weights).reshape(-1,mb_size)/np.sum(data_weights)
+#     for i, node in nodes:
+#         node.data_weights[data_indices] = data_weights[data_indices,i]
+#         # Compute ELBO using normalized data_weights
+#         node_data_elbo_contributions = node.data_weights*(node.ell + node.ew - np.log(node.data_weights))
+#         node_elbo_contributions = node.stick_kl + node.param_kl
+#
+#     # Compute total elbo: use decomposibility!
+#     elbo =
+#
+#     return elbo
 
 
 def compute_elbo(
@@ -698,16 +1632,16 @@ def _compute_elbo(
             total = _log_phi + _log_1_nu
             return (idx != -1) * total
 
-        log_phi = jnp.log(psi_stick) + jnp.sum(
-            vmap(prev_branches_psi)(previous_branches_indices[i])
-        )
-        log_node_weight = (
-            jnp.log(nu_stick)
-            + log_phi
-            + jnp.sum(vmap(ancestors_nu)(ancestor_nodes_indices[i]))
-        )
-        log_node_weight = log_node_weight + jnp.log(tssb_weights[i])
-        ll = ll + log_node_weight  # N-vector
+        # log_phi = jnp.log(psi_stick) + jnp.sum(
+        #     vmap(prev_branches_psi)(previous_branches_indices[i])
+        # )
+        # log_node_weight = (
+        #     jnp.log(nu_stick)
+        #     + log_phi
+        #     + jnp.sum(vmap(ancestors_nu)(ancestor_nodes_indices[i]))
+        # )
+        # log_node_weight = log_node_weight + jnp.log(tssb_weights[i])
+        # ll = ll + log_node_weight  # N-vector
 
         return ll
 
@@ -715,8 +1649,8 @@ def _compute_elbo(
 
     def get_node_ll(i):
         return jnp.where(
-            node_mask[i] == 1,
-            compute_node_ll(jnp.where(node_mask[i] == 1, i, 0)),
+            node_mask[i] >= 0,
+            compute_node_ll(jnp.where(node_mask[i] >= 0, i, 0)),
             small_ll,
         )
 

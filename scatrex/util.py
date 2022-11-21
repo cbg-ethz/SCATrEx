@@ -5,12 +5,12 @@ import scipy.stats
 from functools import partial
 import numpy as np
 
-from jax.api import vmap
+from jax import vmap
 from jax import random
 import jax.numpy as jnp
 import jax.nn as jnn
 from jax.scipy.stats import norm, gamma, laplace, beta, dirichlet, poisson
-from jax.scipy.special import digamma, betaln
+from jax.scipy.special import digamma, betaln, gammaln
 
 from pybiomart import Server
 import pandas as pd
@@ -347,13 +347,13 @@ def bernoulli_sample(prob, size=None):
 def gamma_sample(shape, rate, size=None):
     s = numpy.random.gamma(shape, 1 / rate, size=size)
     return s
-
-
-def gammaln(x):
-    # small  = numpy.nonzero(x < numpy.finfo(numpy.float64).eps)
-    result = scipy.special.gammaln(x)
-    # result[small] = -numpy.log(x[small])
-    return result
+#
+#
+# def gammaln(x):
+#     # small  = numpy.nonzero(x < numpy.finfo(numpy.float64).eps)
+#     result = scipy.special.gammaln(x)
+#     # result[small] = -numpy.log(x[small])
+#     return result
 
 
 def gammapdfln(x, a, b):

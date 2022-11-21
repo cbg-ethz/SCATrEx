@@ -17,11 +17,24 @@ class AbstractNode(object):
         self.params = dict()
         self.variational_parameters = dict(globals=dict(), locals=dict())
 
+
+        self.data_weights = 0.
+        self.weight_until_here = 0.
+        self.psi_stick_kl = 0.
+        self.ancestors_and_this_E_log_1_nu = 0.
+        self.ancestors_and_this_E_log_phi = 0.
+        self.psi_not_prev_sum = 0.
+        self.ll = 0.
+
         if parent is not None:
             parent.add_child(self)
             self._parent = parent
             n_siblings = len(list(parent.children()))
             self.label = parent.label + "-" + str(n_siblings - 1)
+
+            # Init with parent
+            self.data_weights = np.array(parent.data_weights)
+            self.ll = np.array(parent.ll)
         else:
             self._parent = None
 
@@ -109,6 +122,19 @@ class AbstractNode(object):
 
     def get_data(self):
         return self.tssb.ntssb.data[list(self.data), :]
+
+    def get_tssb_root(self):
+        tssb = self.tssb
+
+        def descend(root):
+            if root["node"] == self:
+                return root
+            for child in root["children"]:
+                out = descend(child)
+                if out:
+                    return out
+
+        return descend(tssb.root)
 
     def logprob(self, x):
         return 0

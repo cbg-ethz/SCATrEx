@@ -2,11 +2,13 @@ from numpy import *
 import numpy as np
 from numpy.random import *
 
+from functools import partial
+
 import jax
 import jax.numpy as jnp
-from jax.api import jit, grad, vmap
+from jax import jit, grad, vmap
 from jax import random, ops
-from jax.experimental import optimizers
+from jax.example_libraries import optimizers
 from jax.scipy.stats import norm
 from jax.scipy.stats import gamma
 from jax.scipy.stats import poisson
@@ -138,7 +140,7 @@ class Node(AbstractNode):
             if variances:
                 self.variational_parameters["globals"][
                     "log_baseline_log_std"
-                ] = np.array(np.zeros((self.n_genes - 1,)))
+                ] = np.array(-2*np.ones((self.n_genes - 1,)))
 
             # Overdispersion
             # self.log_od_mean = np.zeros(1)
@@ -192,6 +194,16 @@ class Node(AbstractNode):
         self.data_ass_logits = np.array([])
         if self.tssb.ntssb.num_data is not None:
             self.data_ass_logits = np.zeros((self.tssb.ntssb.num_data))
+            try:
+                if self.parent().ll.shape[0] == self.tssb.ntssb.num_data:
+                    self.ll = np.array(self.parent().ll)
+                    self.data_weights = np.array(self.parent().data_weights)
+            except:
+                self.ll = -1e10 * np.ones((self.tssb.ntssb.num_data,))
+                self.data_weights = np.zeros((self.tssb.ntssb.num_data,))
+            if self.is_observed:
+                self.tssb.data_weights = np.zeros((self.tssb.ntssb.num_data,))
+                self.tssb.unnormalized_data_weights = np.zeros((self.tssb.ntssb.num_data,))
 
         # Sticks
         if means:
@@ -250,7 +262,7 @@ class Node(AbstractNode):
                 )
                 self.variational_parameters["locals"][
                     "unobserved_factors_kernel_log_mean"
-                ] = (np.log(kernel_means) - (np.exp(-2) ** 2) / 2)
+                ] = (np.log(kernel_means) - (np.exp(-4) ** 2) / 2)
             except AttributeError:
                 self.variational_parameters["locals"][
                     "unobserved_factors_kernel_log_mean"
@@ -262,7 +274,7 @@ class Node(AbstractNode):
         if variances:
             self.variational_parameters["locals"][
                 "unobserved_factors_kernel_log_std"
-            ] = -2.0 * np.ones((self.n_genes,))
+            ] = -4.0 * np.ones((self.n_genes,))
         self.set_mean(
             self.get_mean(
                 baseline=np.append(1, np.exp(self.log_baseline_caller())),
@@ -638,7 +650,7 @@ class Node(AbstractNode):
             batch_effects=batch_effects,
         )
         lib_sizes = self.lib_sizes_caller()[n]
-        return jax.partial(jit, static_argnums=2)(poisson_lpmf)(
+        return partial(jit, static_argnums=2)(poisson_lpmf)(
             jnp.array(self.tssb.ntssb.data[n]), lib_sizes * node_mean, axis=axis
         )
 

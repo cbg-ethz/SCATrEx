@@ -74,6 +74,20 @@ class TSSB(object):
 
         self.ntssb = ntssb
 
+        self.data_weights = 0.
+        self.unnormalized_data_weights = 0.
+        self.elbo = -1e6
+        self.ell = -1e6
+        self.ew = -1e6
+        self.kl = -1e6
+        self._data = set()
+
+    def add_data(self, l):
+        self._data.update(l)
+
+    def remove_data(self):
+        self._data.clear()
+
     def num_data(self):
         def descend(root, n=0):
             for child in root["children"]:
@@ -1061,6 +1075,15 @@ class TSSB(object):
             return (weight, node)
 
         return descend(self.root, 1.0)
+
+    def get_node_roots(self):
+        def descend(root):
+            sr = [root]
+            for child in root["children"]:
+                cr = descend(child)
+                sr.extend(cr)
+            return sr
+        return descend(self.root)
 
     def get_mixture(
         self, reset_names=False, get_roots=False, get_depths=False, truncate=False

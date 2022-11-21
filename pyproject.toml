@@ -14,8 +14,8 @@ numpy = "^1.21.2"
 networkx = "^2.6.2"
 pygraphviz = "^1.7"
 tqdm = "^4.57.0"
-jax = "0.2.20"
-jaxlib = "0.1.71"
+jax = "^0.3.20"
+jaxlib = "^0.3.20"
 scipy = "^1.7.3"
 scikit-learn = "^0.23.2"
 graphviz = "^0.14.1"
@@ -28,3 +28,9 @@ anndata = "^0.7.5"
 bump2version = "^1.0.1"
 black = "^22.3.0"
 pytest = "^6.2.4"
+
+# [tool.poetry.extra-dependencies]
+# pysankey2 =
+# scicone =
+# jupyter =
+# phenograph =
