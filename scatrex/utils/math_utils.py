@@ -5,6 +5,7 @@ import scipy.stats
 from functools import partial
 import numpy as np
 
+import jax
 from jax import vmap
 from jax import random
 import jax.numpy as jnp
@@ -12,8 +13,6 @@ import jax.nn as jnn
 from jax.scipy.stats import norm, gamma, laplace, beta, dirichlet, poisson
 from jax.scipy.special import digamma, betaln, gammaln
 
-from pybiomart import Server
-import pandas as pd
 
 
 def relative_difference(current, prev, eps=1e-6):
@@ -25,7 +24,7 @@ def absolute_difference(current, prev):
 
 
 def diag_gamma_sample(rng, log_alpha, log_beta):
-    return jnp.exp(-log_beta) * random.gamma(rng, jnp.exp(log_alpha))
+    return jnp.clip(jnp.exp(-log_beta) * random.gamma(rng, jnp.exp(log_alpha)), a_min=1e-10, a_max=1e30)
 
 
 def diag_gamma_logpdf(x, log_alpha, log_beta):
@@ -384,9 +383,9 @@ def betapdfln(x, a, b):
     )
 
 
-def boundbeta(a, b):
+def boundbeta(a, b, rng):
     return (1.0 - numpy.finfo(numpy.float64).eps) * (
-        numpy.random.beta(a, b) - 0.5
+        rng.beta(a, b) - 0.5
     ) + 0.5
     # return numpy.random.beta(a,b)
 
@@ -411,109 +410,70 @@ def logsumexp(X, axis=None):
     return numpy.log(numpy.sum(numpy.exp(X - maxes), axis=axis)) + maxes
 
 
-def convert_tidy_to_matrix(tidy_df, rows="single_cell_id", columns="copy_number"):
-    # Takes a tidy dataframe specifying the CNVs of cells along genomic bins
-    # and converts it to a cell by bin matrix
-    cell_df = tidy_df.loc[tidy_df[rows] == tidy_df[rows][0]]
-    bins_df = cell_df.drop(columns=[columns, rows], inplace=False)
-    tidy_df["bin_id"] = np.tile(bins_df.index, tidy_df[rows].unique().size)
-    matrix = tidy_df[[columns, rows, "bin_id"]].pivot_table(
-        values=columns, index=rows, columns="bin_id"
-    )
+# JAX-optimized functions
 
-    return matrix, bins_df
+@jax.jit
+def logbeta_func(a,b):
+    return gammaln(a) + gammaln(b) - gammaln(a+b)
 
+@jax.jit
+def beta_kl(a1, b1, a2, b2):
+    """
+    logp(a1,b1) - logp(a2,b2)
+    """
+    kl = logbeta_func(a1,b1) - logbeta_func(a2,b2)
+    kl += (a1-a2)*digamma(a1)
+    kl += (b1-b2)*digamma(b1)
+    kl += (a2-a1 + b2-b1)*digamma(a1+b1)
+    return kl
 
-def annotate_bins(bins_df):
-    # Takes a dataframe of genomic regions and returns an ordered list of full genes in each region
-    server = Server("www.ensembl.org", use_cache=False)
-    dataset = server.marts["ENSEMBL_MART_ENSEMBL"].datasets["hsapiens_gene_ensembl"]
-    gene_coordinates = dataset.query(
-        attributes=[
-            "chromosome_name",
-            "start_position",
-            "end_position",
-            "external_gene_name",
-        ],
-        filters={
-            "chromosome_name": [
-                1,
-                2,
-                3,
-                4,
-                5,
-                6,
-                7,
-                8,
-                9,
-                10,
-                11,
-                12,
-                13,
-                14,
-                15,
-                16,
-                17,
-                18,
-                19,
-                20,
-                21,
-                22,
-                "X",
-                "Y",
-            ]
-        },
-        use_attr_names=True,
-    )
-    # Drop duplicate genes
-    gene_coordinates.drop_duplicates(subset="external_gene_name", ignore_index=True)
+@jax.jit
+def E_log_beta(
+    alpha,
+    beta,
+):
+    return digamma(alpha) - digamma(alpha + beta)
 
-    annotated_bins = bins_df.copy()
-    annotated_bins["genes"] = [list() for _ in range(annotated_bins.shape[0])]
+@jax.jit
+def E_log_1_beta(
+    alpha,
+    beta,
+):
+    return digamma(beta) - digamma(alpha + beta)
 
-    bin_size = bins_df["end"][0] - bins_df["start"][0]
-    for index, row in gene_coordinates.iterrows():
-        gene = row["external_gene_name"]
-        if pd.isna(gene):
-            continue
-        start_bin_in_chr = int(row["start_position"] / bin_size)
-        stop_bin_in_chr = int(row["end_position"] / bin_size)
-        chromosome = str(row["chromosome_name"])
-        chr_start = np.where(bins_df["chr"] == chromosome)[0][0]
-        start_bin = start_bin_in_chr + chr_start
-        stop_bin = stop_bin_in_chr + chr_start
-
-        if stop_bin < annotated_bins.shape[0]:
-            if np.all(annotated_bins.iloc[start_bin:stop_bin].chr == chromosome):
-                for bin in range(start_bin, stop_bin + 1):
-                    annotated_bins.loc[bin, "genes"].append(gene)
-
-    return annotated_bins
+@jax.jit
+def E_q_log_beta(
+    alpha1,
+    beta1,
+    alpha2,
+    beta2,
+):
+    """
+    Expected value of log p(y) with x~Beta(alpha1,beta1) wrt to q(y) with y~Beta(alpha2,beta2)
+    """
+    return (alpha1-1)*E_log_beta(alpha2,beta2) + (beta1-1)*E_log_1_beta(alpha2,beta2) - betaln(alpha1,beta1)
 
 
-def annotate_matrix(matrix, annotated_bins):
-    # Takes a dataframe of cells by bins and a dataframe with gene lists for each bin
-    # and returns a dataframe of cells by genes
-    df_list = []
-    chrs = []
-    for bin, row in annotated_bins.iterrows():
-        genes = row["genes"]
-        chr = row["chr"]
-        if len(genes) > 0:
-            df_list.append(
-                pd.concat([matrix[bin]] * len(genes), axis=1, ignore_index=True).rename(
-                    columns=dict(zip(range(len(genes)), genes))
-                )
-            )
-            chrs.append([chr] * df_list[-1].shape[1])
-    chrs = np.concatenate(chrs)
-    df = pd.concat(df_list, axis=1)
-    chrs = chrs[np.where(~df.columns.duplicated())[0]]
-    df = df.loc[:, ~df.columns.duplicated()]
-    return df, chrs
+# This computes E_q[p(z_n=\epsilon | \nu, \psi)]
+@jax.jit
+def compute_expected_weight(
+    nu_alpha,
+    nu_beta,
+    psi_alpha,
+    psi_beta,
+    prev_nu_sticks_sum,
+    prev_psi_sticks_sum,
+):
+    nu_digamma_sum = digamma(nu_alpha + nu_beta)
+    E_log_nu = digamma(nu_alpha) - nu_digamma_sum
+    nu_sticks_sum = digamma(nu_beta) - nu_digamma_sum + prev_nu_sticks_sum
+    psi_sticks_sum = local_psi_sticks_sum(psi_alpha, psi_beta) + prev_psi_sticks_sum
+    weight = E_log_nu + nu_sticks_sum + psi_sticks_sum
+    return weight, nu_sticks_sum, psi_sticks_sum
 
 
-def convert_phylogeny_to_clonal_tree(threshold):
-    # Converts a phylogenetic tree to a clonal tree by choosing the main clades
-    # according to some threshold
-    raise NotImplementedError
+@jax.jit
+def assignment_entropies(probs):
+    return -jax.lax.select(probs != 0, 
+                            probs * jnp.log(probs), 
+                            probs)

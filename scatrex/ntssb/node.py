@@ -1,22 +1,33 @@
 import numpy as np
 from numpy.random import *
+import jax.numpy as jnp
 
+from abc import ABC, abstractmethod
 
-class AbstractNode(object):
+class AbstractNode(ABC):
     def __init__(
-        self, is_observed, observed_parameters, parent=None, tssb=None, label=""
+        self, observed_parameters, parent=None, tssb=None, label="", seed=42,
     ):
         self.data = set([])
         self._children = set([])
         self.tssb = tssb
-        self.is_observed = is_observed
-        self.observed_parameters = observed_parameters
         self.label = label
         self.event_str = ""
+        self.seed = seed
 
         self.params = dict()
+        self.observed_parameters = observed_parameters
         self.variational_parameters = dict(globals=dict(), locals=dict())
-
+        self.variational_parameters = {'delta_1': 1., 'delta_2': 1., # nu stick
+                                       'sigma_1': 1., 'sigma_2': 1., # psi stick
+                                       'q_z': [], # prob of assigning each cell to this node
+                                       'kernel' : dict(), # model-specific
+                                       'q_rho': [], # prob of assigning the root node of each child TSSB to this node
+                                       'E_log_phi': 0., # auxiliary quantity
+                                       'sum_E_log_1_nu': 0., # auxiliary quantity
+                                       }
+        self.samples = None
+        self.pivot_prior_prob = 1. # prior prob of assigning the root node of each child TSSB to this node
 
         self.data_weights = 0.
         self.weight_until_here = 0.
@@ -38,6 +49,34 @@ class AbstractNode(object):
         else:
             self._parent = None
 
+    @abstractmethod
+    def compute_loglikelihood(self):
+        return
+
+    @abstractmethod
+    def combine_params(self):
+        return
+
+    @abstractmethod
+    def sample_kernel(self):
+        return
+    
+    @abstractmethod
+    def compute_kernel_prior(self):
+        return
+    
+    @abstractmethod
+    def compute_root_kernel_prior(self):
+        return
+
+    @abstractmethod
+    def compute_kernel_entropy(self):
+        return
+    
+    @abstractmethod
+    def remove_noise(self):
+        return
+
     def set_parent(self, parent, reset=False):
         if self._parent is not None and self._parent._children is not None:
             self._parent._children.remove(self)
@@ -45,19 +84,10 @@ class AbstractNode(object):
             parent.add_child(self)
         self._parent = parent
 
-        if not self.is_observed:
-            # Make sure we use the right observed parameters
-            self.observed_parameters = parent.observed_parameters
-            self.inherit_parameters()
-
-        self.unobserved_factors = parent.unobserved_factors + self.unobserved_factors
         self.set_mean()
 
         if reset:
             self.reset_variational_parameters()
-
-    def inherit_parameters(self):
-        pass
 
     def reset_parameters(self):
         pass
@@ -69,10 +99,16 @@ class AbstractNode(object):
         self._parent = None
         self._children = None
 
-    def spawn(self, is_observed, observed_parameters):
+    def spawn(self, observed_parameters, seed=42):
         return self.__class__(
-            is_observed, observed_parameters, parent=self, tssb=self.tssb
+            observed_parameters, parent=self, tssb=self.tssb, seed=seed,
         )
+
+    def get_observed_parameters(self):
+        return self.observed_parameters
+    
+    def get_params(self):
+        return self.params
 
     def has_data(self):
         if len(self.data):
@@ -158,7 +194,7 @@ class AbstractNode(object):
             return self.parent().global_param(key)
 
     def get_ancestors(self, all=True):
-        if self._parent is None or (not all and self.is_observed):
+        if self._parent is None or (not all and self.tssb != self._parent.tssb):
             return [self]
         else:
             ancestors = self._parent.get_ancestors(all=all)
@@ -179,11 +215,20 @@ class AbstractNode(object):
     def parameter_log_prior(self):
         return 0
 
-    def tssb_caller(self):
-        if self.parent() is None:
-            return self.tssb
-        else:
-            return self.parent().tssb_caller()
-
     def set_event_string(self):
         pass
+
+    def get_top_obs(self, q=70, idx=None):
+        """
+        Get data which is very well explained by this node's parameter
+        """
+        if idx is None:
+            idx = jnp.arange(self.tssb.ntssb.num_data)
+        if len(idx) == 0:
+            return np.array([])
+        lls = self.compute_loglikelihood(idx)
+        top_obs = idx[np.where(lls > np.percentile(lls, q=q))[0]]
+        return top_obs
+    
+    def reset_variational_state(self, **kwargs):
+        return

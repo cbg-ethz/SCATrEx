@@ -1,4 +1,4 @@
 from .node import AbstractNode
 from .ntssb import NTSSB
-from .tree import Tree
+from .observed_tree import ObservedTree
 from .search import StructureSearch

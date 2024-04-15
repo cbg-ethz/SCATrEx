@@ -3,7 +3,101 @@ Embed a tree in a scatter plot of the data.
 """
 import matplotlib
 import matplotlib.pyplot as plt
+import networkx as nx
 import numpy as np
+from ..utils.tree_utils import tree_to_dict
+
+
+def plot_full_tree(tree, ax=None, figsize=(6,6), **kwargs):
+    if ax is None:
+        plt.figure(figsize=figsize)
+        ax = plt.gca()
+    def descend(root, graph, pos={}):
+        pos_out = plot_tree(root['node'], G=graph, ax=ax, alpha=1., draw=False, **kwargs) # Draw subtree
+        pos.update(pos_out)
+        for child in root['children']:
+            descend(child, graph, pos)
+
+        def sub_descend(sub_root, graph):
+            parent = sub_root['label']
+            for i, super_child in enumerate(root['children']):
+                child = super_child['label']
+                graph.add_edge(parent, child, alpha=sub_root['pivot_probs'][i], ls='--')
+                nx.draw_networkx_edges(graph, pos, edgelist=[(parent, child)], edge_color=sub_root['color'], alpha=sub_root['pivot_probs'][i], style='--')
+            for child in sub_root['children']:
+                sub_descend(child, graph)
+
+        if len(root['children']) > 0:
+            sub_descend(root['node'], graph) # Draw pivot edges
+
+    G = nx.DiGraph()
+    descend(tree, G)
+
+    ax.margins(0.20) # Set margins for the axes so that nodes aren't clipped
+    ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+
+
+def plot_tree(tree, G = None, param_key='param', data=None, labels=True, alpha=0.5, font_size=12, node_size=1500, edge_width=1., arrows=True, draw=True, ax=None):
+    tree_dict = tree_to_dict(tree, param_key=param_key)
+
+    # Get all positions
+    pos = {}
+    pos[tree['label']] = tree[param_key]
+    for node in tree_dict:
+        if tree_dict[node]['parent'] != '-1':
+            pos[node] = tree_dict[node]['param']
+
+    # Draw graph
+    node_options = {'alpha': alpha,
+                     'node_size': node_size,}
+    edge_options = {'alpha': alpha,
+                    'width': edge_width,
+                    'node_size':node_size,
+                    'arrows': arrows}
+    label_options = {'alpha': alpha,
+                     'font_size': font_size,}
+
+    if ax is None:
+        fig = plt.figure(figsize=(6,6))
+
+    if G is None:
+        G = nx.DiGraph()
+    for node in tree_dict:
+        nx.draw_networkx_nodes(G, pos, nodelist=[node], node_color=tree_dict[node]['color'],
+                                **node_options)
+        if tree_dict[node]['parent'] != '-1':
+            parent = tree_dict[node]['parent']
+            G.add_edge(parent, node)
+            nx.draw_networkx_edges(G, pos, edgelist=[(parent, node)], edge_color=tree_dict[parent]['color'],**edge_options)
+    if labels:
+        labs = dict(zip(list(tree_dict.keys()), list(tree_dict.keys())))
+        nx.draw_networkx_labels(G, pos, labs, **label_options)
+
+    ax = plt.gca()
+    ax.margins(0.20) # Set margins for the axes so that nodes aren't clipped
+    ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    if draw:
+        plt.show()
+    else:
+        return pos
+
+def plot_nested_tree(tree, top=True, param_key='param', out_alpha=0.4, in_alpha=1., large_node_size=5000, small_node_size=500, draw=True, ax=None, **kwargs):
+    tree_dict = tree_to_dict(tree, param_key=param_key)
+
+    if top:
+        # Plot main tree with transparency, large nodes and without labels
+        ax = plot_tree(tree, param_key=param_key, labels=False, node_size=large_node_size, alpha=out_alpha, draw=False, **kwargs)
+
+    for subtree in tree_dict: # Do this in a tree traversal so that we add the pivots
+        # Plot each subtree
+        plot_tree(tree_dict[subtree]['node'], param_key='mean', labels=False, node_size=small_node_size, alpha=in_alpha, ax=ax, draw=False, **kwargs)
+
+    if draw:
+        plt.show()
 
 
 def plot_tree_proj(

@@ -1,7 +1,11 @@
-from .models import *
+from .models import CNATree, TrajectoryTree
 from .ntssb import NTSSB
 from .ntssb import StructureSearch
 from .plotting import scatterplot, constants
+from .utils import tree_utils
+
+import jax
+import jax.numpy as jnp
 
 import numpy as np
 from sklearn.decomposition import PCA
@@ -25,13 +29,13 @@ logger = logging.getLogger(__name__)
 class SCATrEx(object):
     def __init__(
         self,
-        model=cna,
+        model=CNATree,
         model_args=dict(),
         verbosity=logging.INFO,
         temppath="./temppath",
+        seed=42,
     ):
-
-        self.model = cna
+        self.model = model
         self.model_args = model_args
         self.observed_tree = None
         self.ntssb = None
@@ -42,6 +46,7 @@ class SCATrEx(object):
         self.temppath = temppath
         if not os.path.exists(temppath):
             os.makedirs(temppath, exist_ok=True)
+        self.seed = seed
 
         logger.setLevel(verbosity)
 
@@ -93,14 +98,11 @@ class SCATrEx(object):
         observed_tree=None,
         observed_tree_args=dict(),
         observed_tree_params=dict(),
-        model_args=None,
         n_genes=50,
         n_extra_per_observed=1,
-        seed=42,
         copy=False,
+        **cmap_kwargs,
     ):
-        np.random.seed(seed)
-
         self.observed_tree = observed_tree
 
         if not self.observed_tree:
@@ -111,7 +113,7 @@ class SCATrEx(object):
                 for arg in observed_tree_args:
                     logger.info(f"{arg}: {observed_tree_args[arg]}")
 
-            self.observed_tree = self.model.ObservedTree(**observed_tree_args)
+            self.observed_tree = self.model(**observed_tree_args)
             self.observed_tree.generate_tree()
             self.observed_tree.add_node_params(n_genes=n_genes, **observed_tree_params)
 
@@ -123,58 +125,281 @@ class SCATrEx(object):
                 logger.info(f"{arg}: {self.model_args[arg]}")
 
         self.ntssb = NTSSB(
-            self.observed_tree, self.model.Node, node_hyperparams=self.model_args
+            self.observed_tree, node_hyperparams=self.model_args, seed=self.seed
         )
         self.ntssb.create_new_tree(n_extra_per_observed=n_extra_per_observed)
+
+        self.ntssb.set_ntssb_colors(**cmap_kwargs)
 
         logger.info("Tree is stored in `self.observed_tree` and `self.ntssb`")
 
         return self.ntssb if copy else None
 
-    def simulate_data(self, n_cells=100, seed=42, copy=False):
-        np.random.seed(seed)
-        self.ntssb.put_data_in_nodes(n_cells)
-        self.ntssb.root["node"].root["node"].generate_data_params()
+    def simulate_data(self, n_cells=100, copy=False):
+        node_assignments, obs_node_assignments = self.ntssb.sample_assignments(n_cells)
+        data = np.array(self.ntssb.simulate_data())
+        noiseless_data = self.ntssb.root['node'].root['node'].remove_noise(data)
 
-        # Sample observations
-        observations = []
-        assignments = []
-        assignments_labels = []
-        assignments_obs_labels = []
-        for obs in range(len(self.ntssb.assignments)):
-            sample = self.ntssb.assignments[obs].sample_observation(obs).reshape(1, -1)
-            observations.append(sample)
-            assignments.append(self.ntssb.assignments[obs])
-            assignments_labels.append(self.ntssb.assignments[obs].label)
-            assignments_obs_labels.append(self.ntssb.assignments[obs].tssb.label)
-        assignments = np.array(assignments)
-        assignments_labels = np.array(assignments_labels)
-        assignments_obs_labels = np.array(assignments_obs_labels)
-        observations = np.concatenate(observations)
-
-        self.ntssb.data = observations
-        self.ntssb.num_data = observations.shape[0]
-
-        if self.ntssb.root["node"].root["node"].num_batches > 1:
-            self.ntssb.covariates = self.ntssb.root["node"].root["node"].cell_covariates
-
-        logger.info("Labeled data are stored in `self.adata`")
-
-        self.adata = AnnData(observations)
-        self.adata.obs["node"] = assignments_labels
-        self.adata.obs["obs_node"] = assignments_obs_labels
-        if self.ntssb.root["node"].root["node"].num_batches > 1:
-            self.adata.obs["batch"] = np.argmax(self.ntssb.covariates, axis=1)
-
+        self.adata = AnnData(data)
+        self.adata.layers['corrected'] = noiseless_data
+        self.adata.obs["obs_node"] = obs_node_assignments
         self.adata.uns["obs_node_colors"] = [
             self.observed_tree.tree_dict[node]["color"]
             for node in self.observed_tree.tree_dict
         ]
+        tree = self.ntssb.get_param_dict()
+        tree_dict = tree_utils.tree_to_dict(tree)
+        node_colors = []
+        for node in tree_dict:
+            d = tree_utils.tree_to_dict(tree_dict[node]['node'])
+            for n in d:
+                if d[n]['size'] > 0:
+                    node_colors.append(d[n]['color'])
+        self.adata.obs["node"] = node_assignments
+        self.adata.uns["node_colors"] = node_colors[:] # to remove the root    
         self.adata.raw = self.adata
 
-        return (observations, assignments_labels) if copy else None
+        logger.info("Labeled data are stored in `self.adata`")
 
-    def learn_tree(
+        return self.adata if copy else None
+
+    def learn_scales(self, n_epochs=100, mc_samples=10, step_size=0.01):
+        logger.info("Learning cell and gene scales")
+        n_cells = self.ntssb.data.shape[0]
+        n_genes = self.ntssb.data.shape[1]
+        gs = np.sqrt(np.median(self.ntssb.data))
+
+        root = self.ntssb.root['node'].root['node']
+        gene_scales_alpha_init = 10. * jnp.ones((n_genes,)) #* jnp.exp(np.random.normal(size=self.n_genes))
+        gene_scales_beta_init = 10. * jnp.ones((n_genes,))  * jnp.exp(gs + 0. * np.random.normal(size=n_genes))
+        root.variational_parameters['global']['gene_scales']['log_alpha'] = jnp.log(gene_scales_alpha_init)
+        root.variational_parameters['global']['gene_scales']['log_beta'] = jnp.log(gene_scales_beta_init)
+
+        cell_scales_alpha_init = 10. * jnp.ones((n_cells,1)) #* jnp.exp(np.random.normal(size=[500,1]))
+        cell_scales_beta_init = 10. * jnp.ones((n_cells,1))  * jnp.exp(gs + 0. * np.random.normal(size=[n_cells,1]))
+        root.variational_parameters['local']['cell_scales']['log_alpha'] = jnp.log(cell_scales_alpha_init)
+        root.variational_parameters['local']['cell_scales']['log_beta'] = jnp.log(cell_scales_beta_init)
+
+        # Initialize MC samples
+        self.ntssb.sample_variational_distributions(n_samples=mc_samples)
+        self.ntssb.update_sufficient_statistics()
+
+        # Update cell, gene scales, assignments
+        self.ntssb.learn_globals(n_epochs=n_epochs, step_size=step_size,mc_samples=mc_samples,
+                                    update_ass=True, update_locals=True, update_roots=False, 
+                                    locals_names=['cell_scales'],
+                                    globals_names=['gene_scales'])
+
+        # Add noise factors to learn better scales
+        # root.variational_parameters['global']['factor_weights']['mean'] = jnp.array(0.01 * np.random.normal(size=(2, n_genes)))
+        # root.variational_parameters['local']['obs_weights']['mean'] = jnp.array(0.01 * np.random.normal(size=(500, 2)))
+        self.ntssb.sample_variational_distributions(n_samples=mc_samples)
+        self.ntssb.learn_globals(n_epochs=n_epochs, step_size=step_size, mc_samples=mc_samples,
+                                    update_ass=True, update_locals=True, update_roots=False)
+
+    def learn_roots_and_noise(self, n_iters=10, n_epochs=100, n_merges=10, n_swaps=10, memoized=True, mc_samples=10, step_size=0.01, seed=42):
+        logger.info("Learning roots and noise")
+        # Remove noise and learn roots
+        self.ntssb.set_node_hyperparams(n_factors=0)
+        self.ntssb.root['node'].root['node'].reset_variational_noise_factors()
+        self.ntssb.sample_variational_distributions(n_samples=mc_samples)
+        self.ntssb.update_sufficient_statistics()
+        self.ntssb.learn_roots(n_epochs, memoized=memoized, mc_samples=mc_samples, step_size=step_size, return_trace=False)
+
+        # Update assignments
+        self.ntssb.update_local_params(jax.random.PRNGKey(seed), update_ass=True, update_globals=False)
+
+        # Learn a tree with root updates on noiseless data (over-cluster)
+        searcher = StructureSearch(self.ntssb)
+        searcher.tree.set_tssb_params(dp_alpha=1., dp_gamma=1.,)
+        searcher.tree.sample_variational_distributions(n_samples=10)
+        searcher.tree.update_sufficient_statistics()
+        searcher.tree.compute_elbo(memoized=memoized)
+        searcher.proposed_tree = deepcopy(searcher.tree) 
+        searcher.run_search(n_iters=n_iters, n_epochs=n_epochs, mc_samples=mc_samples, step_size=step_size,
+                                memoized=memoized, seed=seed, update_roots=True)
+
+        self.ntssb = deepcopy(searcher.tree)
+        self.ntssb.set_node_hyperparams(n_factors=self.model_args['n_factors'])
+        self.ntssb.root['node'].root['node'].reset_variational_noise_factors()
+        self.ntssb.sample_variational_distributions(n_samples=mc_samples)
+        self.ntssb.update_sufficient_statistics()
+        self.ntssb.compute_elbo(memoized=memoized)
+        # Cleanup parameters: learn noise and update all parameters (including roots) except scales, no memoization needed
+        self.ntssb.learn_model(n_epochs=n_epochs, update_ass=True, update_globals=True,
+                                    locals_names=['obs_weights'],
+                                    globals_names=['factor_weights', 'factor_precisions'],
+                                    update_roots=True, step_size=step_size, mc_samples=mc_samples,
+                                    memoized=False)
+
+        self.ntssb.update_sufficient_statistics()
+        self.ntssb.compute_elbo(memoized=memoized)
+
+        # Propose merges to account for new noise
+        searcher = StructureSearch(self.ntssb)
+        searcher.tree.sample_variational_distributions(n_samples=mc_samples)
+        searcher.tree.update_sufficient_statistics()
+        searcher.tree.compute_elbo(memoized=memoized)
+        searcher.proposed_tree = deepcopy(searcher.tree) 
+        key = jax.random.PRNGKey(seed)
+        for i in range(10):
+            key, subkey = jax.random.split(key)
+            searcher.merge(subkey, moves_per_tssb=1, memoized=memoized)
+
+        searcher.tree.update_sufficient_statistics()
+        searcher.tree.compute_elbo(memoized=memoized)
+        searcher.proposed_tree = deepcopy(searcher.tree) 
+        # Propose root merges with opt after these merges
+        for i in range(n_merges):
+            key, subkey = jax.random.split(key)
+            searcher.merge_root(subkey, memoized=memoized, n_epochs=n_epochs, mc_samples=mc_samples, step_size=step_size) 
+
+        searcher.tree.update_sufficient_statistics()
+        searcher.tree.compute_elbo(memoized=memoized)
+        searcher.proposed_tree = deepcopy(searcher.tree) 
+        # Propose root swaps after these merges
+        for i in range(n_swaps):
+            key, subkey = jax.random.split(key)
+            searcher.swap(subkey, memoized=memoized, n_epochs=n_epochs, mc_samples=mc_samples, step_size=step_size, 
+                            update_ass=False) # fixed assignments
+
+        # Re-learn noise and parameters except scales
+        self.ntssb = deepcopy(searcher.tree)
+        self.ntssb.sample_variational_distributions(n_samples=mc_samples)
+        self.ntssb.update_sufficient_statistics()
+        self.ntssb.compute_elbo(memoized=memoized)
+        self.ntssb.learn_model(n_epochs=n_epochs, update_ass=True, update_globals=True,
+                            locals_names=['obs_weights'],
+                            globals_names=['factor_weights', 'factor_precisions'],
+                            update_roots=True, step_size=step_size, mc_samples=mc_samples,
+                            memoized=False) # If I do this with memoization the noise ends up explaining too much and messing up the scales! Best not to mix
+
+    def learn_tree(self, n_iters=10, n_epochs=100, memoized=True, mc_samples=10, step_size=0.01, dp_alpha=.1, dp_gamma=.1, prune=True, seed=42):
+        logger.info("Learning augmented tree")
+        # Re-learn tree (optionally from scratch) with fixed noise and roots
+        if prune:
+            self.ntssb.prune_subtrees()
+        searcher = StructureSearch(self.ntssb)
+        searcher.tree.set_tssb_params(dp_alpha=dp_alpha, dp_gamma=dp_gamma)
+        searcher.tree.sample_variational_distributions(n_samples=mc_samples)
+        searcher.tree.update_sufficient_statistics()
+        searcher.tree.compute_elbo(memoized=memoized)
+        searcher.proposed_tree = deepcopy(searcher.tree) 
+        searcher.run_search(n_iters=n_iters, n_epochs=n_epochs, mc_samples=mc_samples, step_size=step_size, 
+                                memoized=memoized, seed=seed,
+                                update_roots=False)
+        self.ntssb = deepcopy(searcher.tree)        
+
+    def update_anndata(self, adata):
+        """
+        Use learned NTSSB to add annotations to input AnnData object. 
+        Cells and genes must be in same order as the data in NTSSB!
+        """
+        node_assignments = []
+        for i in range(adata.shape[0]):
+            node_assignments.append(self.ntssb.assignments[i].label)
+
+        obs_node_assignments = []
+        for i in range(adata.shape[0]):
+            obs_node_assignments.append(self.ntssb.assignments[i].tssb.label)
+        
+        adata.obs["scatrex_node"] = node_assignments
+        adata.obs["scatrex_obs_node"] = obs_node_assignments
+
+        adata.uns["scatrex_node_colors"] = [
+            self.observed_tree.tree_dict[node.split("-")[0]]["color"]
+            for node in np.unique(adata.obs["scatrex_node"])
+        ]
+        adata.uns["scatrex_obs_node_colors"] = [
+            self.observed_tree.tree_dict[node]["color"]
+            for node in np.unique(adata.obs["scatrex_obs_node"])
+        ]
+
+        labels = list(self.observed_tree.tree_dict.keys())
+        sizes = [
+            np.count_nonzero(adata.obs["scatrex_obs_node"] == label)
+            for label in labels
+        ]
+        adata.uns["scatrex_estimated_frequencies"] = dict(zip(labels, sizes))
+
+        adata.layers["scatrex_noise"] = (
+            self.ntssb.root["node"]
+            .root["node"]
+            .variational_parameters["local"]["obs_weights"]['mean']
+            .dot(
+                self.ntssb.root["node"]
+                .root["node"]
+                .variational_parameters["global"]["factor_weights"]['mean']
+            )
+        )
+
+        genes_pos = np.arange(adata.var_names.size)
+
+        xi_mat = np.zeros(adata.shape)
+        om_mat = np.zeros(adata.shape)
+        cnv_mat = np.zeros(adata.shape)
+        mean_mat = np.zeros(adata.shape)
+        nodes = np.array(self.ntssb.get_nodes())
+        nodes_labels = np.array([node.label for node in nodes])
+        for node_id in np.unique(adata.obs["scatrex_node"]):
+            cells = np.where(adata.obs["scatrex_node"] == node_id)[0]
+            node = nodes[np.where(node_id == nodes_labels)[0][0]]
+            pos = np.meshgrid(cells, genes_pos)
+            xi_mat[tuple(pos)] = (
+                np.array(
+                    node.params[0]
+                ).reshape(-1, 1)
+                * np.ones((len(cells), len(genes_pos))).T
+            )
+            om_mat[tuple(pos)] = (
+                np.array(
+                    node.params[1]
+                ).reshape(-1, 1)
+                * np.ones((len(cells), len(genes_pos))).T
+            )
+            cnv_mat[tuple(pos)] = (
+                np.array(node.cnvs).reshape(-1, 1)
+                * np.ones((len(cells), len(genes_pos))).T
+            )            
+            mean_mat[tuple(pos)] = (
+                np.array(node.get_mean()).reshape(-1, 1)
+                * np.ones((len(cells), len(genes_pos))).T
+            )
+        adata.layers["scatrex_cell_states"] = xi_mat
+        adata.layers["scatrex_cell_state_events"] = om_mat
+        adata.layers["scatrex_cnvs"] = cnv_mat
+        adata.layers["scatrex_mean"] = mean_mat
+
+    def learn(self, adata, observed_tree=None, counts_layer='counts', allow_subtrees=True, allow_root_subtrees=False, root_cells=None, 
+              batch_size=None, seed=42,
+              n_epochs=100, mc_samples=10, step_size=0.01, n_iters=10, n_merges=10, n_swaps=10, memoized=True, dp_alpha=.1, dp_gamma=.1):
+        """
+        Complete NTSSB learning procedure. 
+        """
+        if observed_tree is not None:
+            self.set_observed_tree(observed_tree)
+        
+        # Setup NTSSB
+        self.ntssb = NTSSB(self.observed_tree, 
+                           node_hyperparams=self.model_args, 
+                           seed=seed,)
+        self.ntssb.add_data(np.array(adata.layers[counts_layer]))
+        self.ntssb.make_batches(batch_size, seed)
+        self.ntssb.reset_variational_parameters()
+
+        # Learn 
+        self.learn_scales(n_epochs=n_epochs, mc_samples=mc_samples, step_size=step_size)
+        self.learn_roots_and_noise(n_iters=n_iters, n_epochs=n_epochs, n_merges=n_merges, n_swaps=n_swaps, memoized=memoized, mc_samples=mc_samples, step_size=step_size, seed=seed)
+        self.learn_tree(n_iters=n_iters, n_epochs=n_epochs, memoized=memoized, mc_samples=mc_samples, step_size=step_size, dp_alpha=dp_alpha, dp_gamma=dp_gamma, prune=True, seed=seed)
+        
+        # Create outputs for analysis
+        self.ntssb.set_learned_parameters()
+        self.ntssb.assign_samples()
+        self.ntssb.create_augmented_tree_dict()
+        self.ntssb.initialize_gene_node_colormaps()
+        self.update_anndata(adata)
+
+    def _learn_tree(
         self,
         observed_tree=None,
         reset=True,
@@ -363,7 +588,9 @@ class SCATrEx(object):
                 np.array(
                     np.exp(
                         node.variational_parameters["locals"][
-                            "unobserved_factors_kernel_log_mean"
+                            "unobserved_factors_kernel_log_shape"
+                        ] - node.variational_parameters["locals"][
+                            "unobserved_factors_kernel_log_rate"
                         ]
                     )
                 ).reshape(-1, 1)
@@ -783,7 +1010,7 @@ class SCATrEx(object):
         return
 
     def set_node_event_strings(self, **kwargs):
-        self.ntssb.set_node_event_strings(var_names=sim_sca.adata.var_names, **kwargs)
+        self.ntssb.set_node_event_strings(var_names=self.adata.var_names, **kwargs)
 
     def plot_tree(
         self,
@@ -870,6 +1097,63 @@ class SCATrEx(object):
             os.remove(os.path.join(self.temppath, "temptree"))
 
         return g
+
+    def plot_data(self, level=0, draw=True, layer=None, color=None, remove_noise=False, **kwargs):
+        # Plot data projection using node colors
+        data = self.adata.X
+        if layer is not None:
+            data = self.adata.layers[layer]
+
+        if remove_noise:
+            # Remove noise according to noise model
+            data = self.ntssb.root['node'].root['node'].remove_noise(data)
+
+        def super_descend(super_root, go_down=True):
+            if go_down:
+                descend(super_root['node'].root)
+            else:
+                # Plot data
+                attached_cells = np.array(list(super_root['node']._data))
+                if len(attached_cells > 0):
+                    color = super_root['color']
+                    if color is not None:
+                        cell_color = color
+                    plt.scatter(data[attached_cells,0], data[attached_cells,1], 
+                                color=cell_color, label=super_root['label'], **kwargs)
+                    
+            for super_child in super_root['children']:
+                super_descend(super_child, go_down=go_down)
+
+        def descend(root):
+            # Plot data
+            attached_cells = np.array(list(root['node'].data))
+            if len(attached_cells > 0):
+                cell_color = root['color']
+                if color is not None:
+                    cell_color = color
+                plt.scatter(data[attached_cells,0], data[attached_cells,1], 
+                            color=cell_color, label=root['label'], **kwargs)
+            for child in root['children']:
+                descend(child)
+
+        if level == 0: # Unobs
+            super_descend(self.ntssb.root, go_down=True)
+        elif level == 1: # Obs
+            super_descend(self.ntssb.root, go_down=False)
+
+        if draw:
+            plt.show()
+
+    def plot_tree_projection(self, level=None, ax=None, title="", **kwargs):
+
+        tree = self.ntssb.get_param_dict()
+        if level is None: # Both levels
+            ax = scatterplot.plot_nested_tree(tree, param_key='obs_param', top=True, ax=ax, **kwargs)
+        elif level == 1: # Only obs
+            ax = scatterplot.plot_tree(tree, param_key='obs_param', ax=ax, **kwargs)            
+        elif level == 0: # Only unobs
+            ax = scatterplot.plot_nested_tree(tree, top=False, ax=ax, **kwargs)
+        return ax
 
     def plot_tree_proj(
         self,
@@ -981,6 +1265,8 @@ class SCATrEx(object):
         if gene_names is not None:
             # Transform gene names into gene indices
             genes = np.array([self.adata.var_names.get_loc(g) for g in gene_names])
+        else:
+            genes = np.arange(len(self.adata.var_names))
 
         if self.search is not None:
             if len(self.search.traces["elbo"]) > 0:
@@ -1038,18 +1324,92 @@ class SCATrEx(object):
                         ls=ls,
                     )
                 else:
-                    plt.plot(
-                        unobs[genes].ravel() - step * i,
+                    plt.bar(
+                        np.arange(len(genes)),
+                        unobs[genes].ravel(),# - step * i,
+                        bottom=- step * i,
                         label=node.label,
                         color=node.tssb.color,
                         lw=lw,
                         alpha=alpha,
                         ls=ls,
                     )
+                    plt.plot(np.zeros((len(genes),)) - step * i, ls='--', color='gray', alpha=alpha)
                     if gene_names is not None and show_names:
                         plt.xticks(np.arange(len(gene_names)), labels=gene_names)
                     else:
                         plt.xticks([])
+                tickpos.append(-step * i)
+                ticklabs.append(rf"{node.label.replace('-', '')}")
+        plt.yticks(tickpos, labels=ticklabs, fontsize=fontsize)
+        plt.title(title, fontsize=fontsize)
+        if save is not None:
+            plt.savefig(save, bbox_inches="tight")
+        if ax is None:
+            plt.show()
+
+    def plot_estimated_unobserved_kernels(
+        self,
+        node_names=None,
+        gene=None,
+        gene_names=None,
+        ax=None,
+        figsize=(4, 4),
+        lw=4,
+        alpha=0.7,
+        title="",
+        fontsize=18,
+        step=4,
+        x_max=1,
+        show_names=False,
+        save=None,
+    ):
+        nodes, _ = self.ntssb.get_node_mixture()
+
+        if node_names is not None:
+            nodes = [node for node in nodes if node.label in node_names]
+
+        genes = None
+        if gene_names is not None:
+            # Transform gene names into gene indices
+            genes = np.array([self.adata.var_names.get_loc(g) for g in gene_names])
+        else:
+            genes = np.arange(len(self.adata.var_names))
+
+        if self.search is not None:
+            if len(self.search.traces["elbo"]) > 0:
+                estimated = True
+
+        if ax is None:
+            plt.figure(figsize=figsize)
+        else:
+            plt.gca(ax)
+        ticklabs = []
+        tickpos = []
+        for i, node in enumerate(nodes):
+            if node.parent() is not None:
+                ls = "-"
+                shape = np.exp(node.variational_parameters["locals"]["unobserved_factors_kernel_log_shape"])
+                rate = np.exp(node.variational_parameters["locals"]["unobserved_factors_kernel_log_rate"])
+                unobs = shape/rate
+                std = np.sqrt(
+                    shape/rate**2
+                )
+                plt.bar(
+                    np.arange(len(genes)),
+                    unobs[genes].ravel(),
+                    bottom= - step * i,
+                    label=node.label,
+                    color=node.tssb.color,
+                    lw=lw,
+                    alpha=alpha,
+                    ls=ls,
+                )
+                plt.plot(np.zeros((len(genes),)) - step * i, ls='--', color='gray', alpha=alpha)
+                if gene_names is not None and show_names:
+                    plt.xticks(np.arange(len(gene_names)), labels=gene_names)
+                else:
+                    plt.xticks([])
                 tickpos.append(-step * i)
                 ticklabs.append(rf"{node.label.replace('-', '')}")
         plt.yticks(tickpos, labels=ticklabs, fontsize=fontsize)
