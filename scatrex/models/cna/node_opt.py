@@ -141,14 +141,13 @@ mc_sample_gene_scales_val_and_grad = jax.jit(jax.vmap(sample_gene_scales_val_and
 def gene_scales_logp(sample, log_alpha, log_beta): # single sample
     return tfd.Gamma(jnp.exp(log_alpha), jnp.exp(log_beta)).log_prob(sample) # sum across obs and dimensions
 univ_gene_scales_logp_val_and_grad = jax.jit(jax.value_and_grad(gene_scales_logp, argnums=0)) # Take grad wrt to sample (G,)
-gene_scales_logp_val_and_grad = jax.jit(jax.vmap(univ_gene_scales_logp_val_and_grad, in_axes=(0,None,None))) # Take grad wrt to sample (G,)
+gene_scales_logp_val_and_grad = jax.jit(jax.vmap(univ_gene_scales_logp_val_and_grad, in_axes=(0,None,0))) # Take grad wrt to sample (G,)
 mc_gene_scales_logp_val_and_grad = jax.jit(jax.vmap(gene_scales_logp_val_and_grad, in_axes=(0,None,None))) # Multiple sample value_and_grad: SxG
 
 @jax.jit
 def gene_scales_logq(log_alpha, log_beta):
     return tfd.Gamma(jnp.exp(log_alpha), jnp.exp(log_beta)).entropy()
 gene_scales_logq_val_and_grad = jax.jit(jax.vmap(jax.value_and_grad(gene_scales_logq, argnums=(0,1)), in_axes=(0,0))) # Take grad wrt to parameters
-
 
 # Factor variances
 @jax.jit
