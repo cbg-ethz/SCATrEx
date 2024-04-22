@@ -6,15 +6,23 @@ import tensorflow_probability.substrates.jax.distributions as tfd
 def sample_direction(key, log_alpha, log_beta): # univariate: one sample
     print("haahahdirection")
     return jnp.maximum(jnp.exp(tfd.ExpGamma(jnp.exp(log_alpha), log_rate=log_beta).sample(seed=key)), 1e-6)
-sample_direction_val_and_grad = jax.jit(jax.vmap(jax.value_and_grad(sample_direction, argnums=(1,2)), in_axes=(None, 0, 0))) # per-dimension val and grad
-mc_sample_direction_val_and_grad = jax.jit(jax.vmap(sample_direction_val_and_grad, in_axes=(0,None,None))) # Multiple sample value_and_grad
+sample_direction_val_and_grad = jax.jit(jax.vmap(jax.value_and_grad(sample_direction, argnums=(1,2)), in_axes=(0, 0, 0))) # per-dimension val and grad
+@jax.jit
+def _mc_sample_direction_val_and_grad(key, mus, logs):
+    keys = jax.random.split(key, mus.size)
+    return sample_direction_val_and_grad(jnp.array(keys), mus, logs)
+mc_sample_direction_val_and_grad = jax.jit(jax.vmap(_mc_sample_direction_val_and_grad, in_axes=(0,None,None)))
 
 @jax.jit
 def sample_state(key, mu, log_std): # univariate: one sample
     print("haahahstate")
     return tfd.Normal(mu, jnp.exp(log_std)).sample(seed=key)
-sample_state_val_and_grad = jax.jit(jax.vmap(jax.value_and_grad(sample_state, argnums=(1,2)), in_axes=(None, 0, 0))) # per-dimension val and grad
-mc_sample_state_val_and_grad = jax.jit(jax.vmap(sample_state_val_and_grad, in_axes=(0,None,None))) # Multiple sample value_and_grad
+sample_state_val_and_grad = jax.jit(jax.vmap(jax.value_and_grad(sample_state, argnums=(1,2)), in_axes=(0, 0, 0))) # per-dimension val and grad
+@jax.jit
+def _mc_sample_state_val_and_grad(key, mus, logs):
+    keys = jax.random.split(key, mus.size)
+    return sample_state_val_and_grad(jnp.array(keys), mus, logs)
+mc_sample_state_val_and_grad = jax.jit(jax.vmap(_mc_sample_state_val_and_grad, in_axes=(0,None,None)))
 
 @jax.jit
 def direction_logp(this_direction, parent_state, direction_shape, inheritance_strength): # single sample
@@ -25,7 +33,7 @@ mc_direction_logp_val_and_grad = jax.jit(jax.vmap(direction_logp_val_and_grad, i
 
 univ_direction_logp_val_and_grad_wrt_parent = jax.jit(jax.value_and_grad(direction_logp, argnums=1)) # Take grad wrt to parent
 direction_logp_val_and_grad_wrt_parent = jax.jit(jax.vmap(univ_direction_logp_val_and_grad_wrt_parent, in_axes=(0,0,None,None))) # Multiple sample value_and_grad
-mc_direction_logp_val_and_grad_wrt_parent = jax.jit(jax.vmap(direction_logp_val_and_grad, in_axes=(0,0,None,None))) # Multiple sample value_and_grad
+mc_direction_logp_val_and_grad_wrt_parent = jax.jit(jax.vmap(direction_logp_val_and_grad_wrt_parent, in_axes=(0,0,None,None))) # Multiple sample value_and_grad
 
 @jax.jit
 def direction_logq(log_alpha, log_beta):

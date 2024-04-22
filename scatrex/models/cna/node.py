@@ -12,8 +12,8 @@ from .node_opt import _mc_obs_ll
 from ...utils.math_utils import *
 from ...ntssb.node import *
 
-MIN_ALPHA = jnp.log(0.1)
-MAX_BETA = jnp.log(1./0.1)
+MIN_ALPHA = jnp.log(0.01)
+MAX_BETA = jnp.log(1./0.001)
 
 def update_params(params, params_gradient, step_size):
     new_params = []
@@ -28,13 +28,14 @@ class CNANode(AbstractNode):
         cell_scale_mean=1e2,
         cell_scale_shape=1.,
         gene_scale_mean=1e2,
-        gene_scale_shape=1.,
+        gene_scale_shape=10.,
         direction_shape=.1,
         inheritance_strength=1.,
         n_factors=2,
         obs_weight_variance=1.,
         factor_precision_shape=2.,
         min_cnv = 1e-6,
+        max_cnv=6.,
         **kwargs,
     ):
         """
@@ -45,6 +46,7 @@ class CNANode(AbstractNode):
         # The observed parameters are the CNVs of all genes
         self.cnvs = np.array(self.observed_parameters)
         self.cnvs[np.where(self.cnvs == 0)[0]] = min_cnv # To avoid zero in Poisson likelihood
+        self.cnvs[np.where(self.cnvs > max_cnv)[0]] = max_cnv # Dosage
         self.observed_parameters = np.array(self.cnvs)
         self.cnvs = jnp.array(self.cnvs)
 
@@ -126,7 +128,7 @@ class CNANode(AbstractNode):
         cell_scale_mean=1e2,
         cell_scale_shape=1.,
         gene_scale_mean=1e2,
-        gene_scale_shape=1.,
+        gene_scale_shape=10.,
         direction_shape=.1,
         inheritance_strength=1.,
         n_factors=2,
@@ -180,9 +182,9 @@ class CNANode(AbstractNode):
             self.depth = parent.depth + 1
             rng = np.random.default_rng(seed=self.seed)
             sampled_direction = rng.gamma(self.node_hyperparams['direction_shape'], 
-                jnp.exp(-self.node_hyperparams['inheritance_strength']*jnp.abs(parent.params[0])))
-            sampled_state = jnp.maximum(rng.normal(parent.params[0], sampled_direction), -1)
-            sampled_state = jnp.minimum(sampled_state, 1)
+                1./self.node_hyperparams['inheritance_strength'] * 10.**(-jnp.abs(parent.params[0])))
+            sampled_state = jnp.maximum(rng.normal(parent.params[0], sampled_direction), -2)
+            sampled_state = jnp.minimum(sampled_state, 2)
             self.params = [sampled_state, sampled_direction]
         
         self.set_mean()
@@ -214,12 +216,13 @@ class CNANode(AbstractNode):
             self.lib_ratio = np.ones((self.tssb.ntssb.data.shape[0], 1))
             self.lib_ratio *= np.mean(lib_sizes) / np.var(lib_sizes)
             gene_sizes = np.sum(self.tssb.ntssb.data, axis=0)
+            self.gene_means = np.mean(self.tssb.ntssb.data, axis=0)
             self.gene_ratio = np.mean(gene_sizes) / np.var(gene_sizes)
 
             cell_scales_alpha_init = self.node_hyperparams['cell_scale_shape'] * jnp.ones((num_data,1))
             cell_scales_beta_init = self.node_hyperparams['cell_scale_shape'] * jnp.ones((num_data,1))
             gene_scales_alpha_init = self.node_hyperparams['gene_scale_shape'] * jnp.ones((self.n_genes,))
-            gene_scales_beta_init = self.node_hyperparams['gene_scale_shape'] * jnp.ones((self.n_genes,))
+            gene_scales_beta_init = self.node_hyperparams['gene_scale_shape'] * jnp.ones((self.n_genes,)) * 1./self.gene_means
 
             rng = np.random.default_rng(self.seed)
             # root stores global parameters
@@ -302,7 +305,7 @@ class CNANode(AbstractNode):
             init_concentration = 10.
             self.variational_parameters["kernel"] = {
                 'direction': {'log_alpha': jnp.log(init_concentration*jnp.ones((self.n_genes,))), 'log_beta': jnp.log(init_concentration/self.node_hyperparams['direction_shape'] * jnp.ones((self.n_genes,)))},
-                'state': {'mean': jnp.array(sampled_state), 'log_std': jnp.array(rng.normal(-2., 0.1, size=self.n_genes))}
+                'state': {'mean': jnp.array(sampled_state), 'log_std': jnp.array(rng.normal(-2., 0.01, size=self.n_genes))}
             }
             self.params = [self.variational_parameters["kernel"]["state"]["mean"], 
                         jnp.exp(self.variational_parameters["kernel"]["direction"]["log_alpha"]-self.variational_parameters["kernel"]["direction"]["log_beta"])]
@@ -378,7 +381,7 @@ class CNANode(AbstractNode):
         idx = idx[np.where(self.variational_parameters['ll'][idx] >= thres)[0]]
         self.reset_variational_state(idx=idx, **kwargs)
 
-    def reset_variational_state(self, log_std=-2, idx=None, weights=None):
+    def reset_variational_state(self, log_std=0., idx=None, weights=None):
         if self.parent() is None and self.tssb.parent() is None:
             return
         else:
@@ -390,8 +393,8 @@ class CNANode(AbstractNode):
             gene_scales_mean = jnp.mean(self.get_gene_scales_sample(),axis=0)
             noise_factors = jnp.mean(self.get_noise_sample(idx),axis=0)
             cnvs_contrib = self.cnvs/2
-            init_state = jnp.log(jnp.sum(self.tssb.ntssb.data[idx]/(cell_scales_mean*gene_scales_mean*cnvs_contrib*jnp.exp(noise_factors)) * weights[:,None],axis=0)/jnp.sum(weights[:,None]))
-            self.variational_parameters['kernel']['state']['mean'] = init_state
+            init_state = jnp.log(1+jnp.sum(self.tssb.ntssb.data[idx]/(cell_scales_mean*gene_scales_mean*cnvs_contrib*jnp.exp(noise_factors)) * weights[:,None],axis=0)/jnp.sum(weights[:,None]))
+            self.variational_parameters['kernel']['state']['mean'] = jnp.clip(init_state, -1, 1) # avoid explosion
             self.variational_parameters['kernel']['state']['log_std'] = log_std * jnp.ones((self.n_genes,))
         
     def merge_suff_stats(self, suff_stats):
@@ -476,7 +479,7 @@ class CNANode(AbstractNode):
         cell_scales = self.cell_scales_caller()[n]
         gene_scales = self.gene_scales_caller()
         rng = np.random.default_rng(seed=self.seed+n)
-        s = rng.poisson(cell_scales*gene_scales*cnvs/2*jnp.exp(state + noise_factors))
+        s = rng.poisson(cell_scales*gene_scales*cnvs/2*2**(state)*jnp.exp(noise_factors))
         return s
 
     def sample_observations(self):
@@ -487,7 +490,7 @@ class CNANode(AbstractNode):
         cell_scales = self.cell_scales_caller()[np.array(list(self.data))]
         gene_scales = self.gene_scales_caller()
         rng = np.random.default_rng(seed=self.seed)
-        s = rng.poisson(cell_scales*gene_scales*cnvs/2*jnp.exp(state + noise_factors), size=[n_obs, self.n_genes])
+        s = rng.poisson(cell_scales*gene_scales*cnvs/2*2**(state)*jnp.exp(noise_factors), size=[n_obs, self.n_genes])
         return s
 
     # ========= Functions to access root's parameters. =========
@@ -637,7 +640,7 @@ class CNANode(AbstractNode):
     def compute_global_priors(self):
         factor_weights_contrib = jnp.sum(jnp.mean(mc_factor_weights_logp_val_and_grad(self.factor_weights_sample, 0., self.factor_precisions_sample)[0], axis=0))
         log_alpha = jnp.log(self.node_hyperparams['gene_scale_shape'])
-        log_beta = jnp.log(self.node_hyperparams['gene_scale_shape'] * self.gene_ratio)
+        log_beta = jnp.log(self.node_hyperparams['gene_scale_shape'] * 1./self.gene_means)
         gene_scales_contrib = jnp.sum(jnp.mean(mc_gene_scales_logp_val_and_grad(self.gene_scales_sample, log_alpha, log_beta)[0], axis=0))
         log_alpha = jnp.log(self.node_hyperparams['factor_precision_shape'])
         log_beta = jnp.log(1.)
@@ -797,7 +800,7 @@ class CNANode(AbstractNode):
     def compute_globals_prior_grad(self, sample):
         factor_weights_grad = mc_factor_weights_logp_val_and_grad(sample[0], 0., sample[2])[1]
         log_alpha = jnp.log(self.node_hyperparams['gene_scale_shape'])
-        log_beta = jnp.log(self.node_hyperparams['gene_scale_shape'] * self.gene_ratio)
+        log_beta = jnp.log(self.node_hyperparams['gene_scale_shape'] * 1./self.gene_means)
         gene_scales_grad = mc_gene_scales_logp_val_and_grad(sample[1], log_alpha, log_beta)[1]
         log_alpha = jnp.log(self.node_hyperparams['factor_precision_shape'])
         log_beta = jnp.log(1.)

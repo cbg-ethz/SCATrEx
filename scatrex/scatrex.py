@@ -141,7 +141,7 @@ class SCATrEx(object):
         noiseless_data = self.ntssb.root['node'].root['node'].remove_noise(data)
 
         self.adata = AnnData(data)
-        self.adata.layers['corrected'] = noiseless_data
+        self.adata.layers['corrected'] = np.array(noiseless_data)
         self.adata.obs["obs_node"] = obs_node_assignments
         self.adata.uns["obs_node_colors"] = [
             self.observed_tree.tree_dict[node]["color"]
@@ -167,16 +167,16 @@ class SCATrEx(object):
         logger.info("Learning cell and gene scales")
         n_cells = self.ntssb.data.shape[0]
         n_genes = self.ntssb.data.shape[1]
-        gs = np.sqrt(np.median(self.ntssb.data))
+        gs = np.sqrt(np.mean(self.ntssb.data))
 
         root = self.ntssb.root['node'].root['node']
         gene_scales_alpha_init = 10. * jnp.ones((n_genes,)) #* jnp.exp(np.random.normal(size=self.n_genes))
-        gene_scales_beta_init = 10. * jnp.ones((n_genes,))  * jnp.exp(gs + 0. * np.random.normal(size=n_genes))
+        gene_scales_beta_init = 10. * jnp.ones((n_genes,))  * 1./gs * jnp.exp( 0. * np.random.normal(size=n_genes))
         root.variational_parameters['global']['gene_scales']['log_alpha'] = jnp.log(gene_scales_alpha_init)
         root.variational_parameters['global']['gene_scales']['log_beta'] = jnp.log(gene_scales_beta_init)
 
         cell_scales_alpha_init = 10. * jnp.ones((n_cells,1)) #* jnp.exp(np.random.normal(size=[500,1]))
-        cell_scales_beta_init = 10. * jnp.ones((n_cells,1))  * jnp.exp(gs + 0. * np.random.normal(size=[n_cells,1]))
+        cell_scales_beta_init = 10. * jnp.ones((n_cells,1))  * 1./gs * jnp.exp( 0. * np.random.normal(size=[n_cells,1]))
         root.variational_parameters['local']['cell_scales']['log_alpha'] = jnp.log(cell_scales_alpha_init)
         root.variational_parameters['local']['cell_scales']['log_beta'] = jnp.log(cell_scales_beta_init)
 
@@ -209,10 +209,11 @@ class SCATrEx(object):
         # Update assignments
         self.ntssb.update_local_params(jax.random.PRNGKey(seed), update_ass=True, update_globals=False)
 
-        # Learn a tree with root updates on noiseless data (over-cluster)
+        # Learn a tree with root updates on noiseless data (over-cluster) and more permissive prior on tree
         searcher = StructureSearch(self.ntssb)
         searcher.tree.set_tssb_params(dp_alpha=1., dp_gamma=1.,)
-        searcher.tree.sample_variational_distributions(n_samples=10)
+        searcher.tree.set_node_hyperparams(direction_shape=1.)
+        searcher.tree.sample_variational_distributions(n_samples=mc_samples)
         searcher.tree.update_sufficient_statistics()
         searcher.tree.compute_elbo(memoized=memoized)
         searcher.proposed_tree = deepcopy(searcher.tree) 
@@ -221,6 +222,8 @@ class SCATrEx(object):
 
         self.ntssb = deepcopy(searcher.tree)
         self.ntssb.set_node_hyperparams(n_factors=self.model_args['n_factors'])
+        self.ntssb.set_node_hyperparams(direction_shape=self.model_args['direction_shape'])
+        self.ntssb.set_tssb_params(dp_alpha=.1, dp_gamma=.1,)
         self.ntssb.root['node'].root['node'].reset_variational_noise_factors()
         self.ntssb.sample_variational_distributions(n_samples=mc_samples)
         self.ntssb.update_sufficient_statistics()
@@ -322,53 +325,54 @@ class SCATrEx(object):
         ]
         adata.uns["scatrex_estimated_frequencies"] = dict(zip(labels, sizes))
 
-        adata.layers["scatrex_noise"] = (
-            self.ntssb.root["node"]
-            .root["node"]
-            .variational_parameters["local"]["obs_weights"]['mean']
-            .dot(
+        if self.ntssb.root["node"].root['node'].n_genes == adata.shape[1]:
+            adata.layers["scatrex_noise"] = (
                 self.ntssb.root["node"]
                 .root["node"]
-                .variational_parameters["global"]["factor_weights"]['mean']
+                .variational_parameters["local"]["obs_weights"]['mean']
+                .dot(
+                    self.ntssb.root["node"]
+                    .root["node"]
+                    .variational_parameters["global"]["factor_weights"]['mean']
+                )
             )
-        )
 
-        genes_pos = np.arange(adata.var_names.size)
+            genes_pos = np.arange(adata.var_names.size)
 
-        xi_mat = np.zeros(adata.shape)
-        om_mat = np.zeros(adata.shape)
-        cnv_mat = np.zeros(adata.shape)
-        mean_mat = np.zeros(adata.shape)
-        nodes = np.array(self.ntssb.get_nodes())
-        nodes_labels = np.array([node.label for node in nodes])
-        for node_id in np.unique(adata.obs["scatrex_node"]):
-            cells = np.where(adata.obs["scatrex_node"] == node_id)[0]
-            node = nodes[np.where(node_id == nodes_labels)[0][0]]
-            pos = np.meshgrid(cells, genes_pos)
-            xi_mat[tuple(pos)] = (
-                np.array(
-                    node.params[0]
-                ).reshape(-1, 1)
-                * np.ones((len(cells), len(genes_pos))).T
-            )
-            om_mat[tuple(pos)] = (
-                np.array(
-                    node.params[1]
-                ).reshape(-1, 1)
-                * np.ones((len(cells), len(genes_pos))).T
-            )
-            cnv_mat[tuple(pos)] = (
-                np.array(node.cnvs).reshape(-1, 1)
-                * np.ones((len(cells), len(genes_pos))).T
-            )            
-            mean_mat[tuple(pos)] = (
-                np.array(node.get_mean()).reshape(-1, 1)
-                * np.ones((len(cells), len(genes_pos))).T
-            )
-        adata.layers["scatrex_cell_states"] = xi_mat
-        adata.layers["scatrex_cell_state_events"] = om_mat
-        adata.layers["scatrex_cnvs"] = cnv_mat
-        adata.layers["scatrex_mean"] = mean_mat
+            xi_mat = np.zeros(adata.shape)
+            om_mat = np.zeros(adata.shape)
+            cnv_mat = np.zeros(adata.shape)
+            mean_mat = np.zeros(adata.shape)
+            nodes = np.array(self.ntssb.get_nodes())
+            nodes_labels = np.array([node.label for node in nodes])
+            for node_id in np.unique(adata.obs["scatrex_node"]):
+                cells = np.where(adata.obs["scatrex_node"] == node_id)[0]
+                node = nodes[np.where(node_id == nodes_labels)[0][0]]
+                pos = np.meshgrid(cells, genes_pos)
+                xi_mat[tuple(pos)] = (
+                    np.array(
+                        node.params[0]
+                    ).reshape(-1, 1)
+                    * np.ones((len(cells), len(genes_pos))).T
+                )
+                om_mat[tuple(pos)] = (
+                    np.array(
+                        node.params[1]
+                    ).reshape(-1, 1)
+                    * np.ones((len(cells), len(genes_pos))).T
+                )
+                cnv_mat[tuple(pos)] = (
+                    np.array(node.cnvs).reshape(-1, 1)
+                    * np.ones((len(cells), len(genes_pos))).T
+                )            
+                mean_mat[tuple(pos)] = (
+                    np.array(node.get_mean()).reshape(-1, 1)
+                    * np.ones((len(cells), len(genes_pos))).T
+                )
+            adata.layers["scatrex_cell_states"] = xi_mat
+            adata.layers["scatrex_cell_state_events"] = om_mat
+            adata.layers["scatrex_cnvs"] = cnv_mat
+            adata.layers["scatrex_mean"] = mean_mat
 
     def learn(self, adata, observed_tree=None, counts_layer='counts', allow_subtrees=True, allow_root_subtrees=False, root_cells=None, 
               batch_size=None, seed=42,

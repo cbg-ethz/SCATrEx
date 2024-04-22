@@ -29,7 +29,7 @@ class StructureSearch(object):
         self.traces["elbos"] = []
         self.best_tree = deepcopy(self.tree)
 
-    def run_search(self, n_iters=10, n_epochs=10, mc_samples=10, step_size=0.01, moves_per_tssb=1, global_freq=0, memoized=True, update_roots=True, seed=42, swap_freq=0, update_outer_ass=True):
+    def run_search(self, n_iters=10, n_epochs=10, mc_samples=10, step_size=0.01, moves_per_tssb=1, pr_freq=0., global_freq=0, memoized=True, update_roots=True, seed=42, swap_freq=0, update_outer_ass=True):
         """
         Start with learning the parameters of the model for the non-augmented tree,
         which are just the assignments of cells to TSSBs, the outer stick parameters, 
@@ -51,21 +51,14 @@ class StructureSearch(object):
                     # Do birth-merge step in which other local params are updated
                     update_globals = True
 
-            # Birth: traverse the tree and spawn a bunch of nodes (quick and helps escape local optima)
-            self.birth(subkey, moves_per_tssb=moves_per_tssb)
+            if pr_freq != 0 and i % pr_freq == 0:
+                # Do prune-reattach move
+                # Prune and reattach: traverse the tree and propose pruning nodes and reattaching somewhere else inside their TSSB
+                self.prune_reattach(subkey, moves_per_tssb=moves_per_tssb)
 
-            # Update parameters in n_epochs passes through the data, interleaving node updates with local batch updates
-            self.tree.learn_params(n_epochs, update_roots=update_roots, mc_samples=mc_samples, 
-                                   step_size=step_size, memoized=memoized)
-            self.tree.compute_elbo(memoized=memoized)
-            self.proposed_tree = deepcopy(self.tree)
-            
-            # Merge: traverse the tree and propose merges and accept/reject based on their summary statistics (reliable)
-            self.merge(subkey, moves_per_tssb=moves_per_tssb, memoized=memoized, update_globals=update_globals,
-                    n_epochs=n_epochs, mc_samples=mc_samples, step_size=step_size)
-
-            # Prune and reattach: traverse the tree and propose pruning nodes and reattaching somewhere else inside their TSSB
-            # self.prune_reattach(subkey, moves_per_tssb=moves_per_tssb)
+            else:
+                # Birth: traverse the tree and spawn a bunch of nodes (quick and helps escape local optima)
+                self.birth_merge(subkey, n_epochs=n_epochs, memoized=memoized, mc_samples=mc_samples, step_size=step_size, moves_per_tssb=moves_per_tssb, update_roots=update_roots, update_globals=update_globals)
 
             # Swap roots: traverse the tree and propose swapping roots of TSSBs with their immediate children
             # self.swap_roots(subkey, moves_per_tssb=moves_per_tssb)
@@ -116,6 +109,20 @@ class StructureSearch(object):
                 self.tree = deepcopy(self.proposed_tree)
             else:
                 self.proposed_tree = deepcopy(self.tree)        
+
+    def birth_merge(self, key, moves_per_tssb=1, n_epochs=100, update_roots=False, mc_samples=10, step_size=0.01, memoized=True, update_globals=False):
+        # Birth: traverse the tree and spawn a bunch of nodes (quick and helps escape local optima)
+        self.birth(key, moves_per_tssb=moves_per_tssb)
+
+        # Update parameters in n_epochs passes through the data, interleaving node updates with local batch updates
+        self.tree.learn_params(n_epochs, update_roots=update_roots, mc_samples=mc_samples, 
+                                step_size=step_size, memoized=memoized)
+        self.tree.compute_elbo(memoized=memoized)
+        self.proposed_tree = deepcopy(self.tree)
+        
+        # Merge: traverse the tree and propose merges and accept/reject based on their summary statistics (reliable)
+        self.merge(key, moves_per_tssb=moves_per_tssb, memoized=memoized, update_globals=update_globals,
+                n_epochs=n_epochs, mc_samples=mc_samples, step_size=step_size)
 
     def birth(self, key, moves_per_tssb=1):
         """

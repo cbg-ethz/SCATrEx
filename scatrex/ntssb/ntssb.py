@@ -763,18 +763,24 @@ class NTSSB(object):
                 descend(child)
         descend(self.root)
 
-    def get_node_data_sizes(self, normalized=False, super_only=False):
-        nodes, _ = self.get_node_mixture()
+    def get_tree_data_sizes(self, normalized=False):
+        trees = self.get_nodes()
         sizes = []
 
-        if super_only:
-            nodes = [node for node in nodes if node.is_observed]
+        for tree in trees:
+            sizes.append(tree.num_data())
+
+        sizes = np.array(sizes)
+        if normalized:
+            sizes = sizes / np.sum(sizes)
+        return np.array(trees), sizes
+
+    def get_node_data_sizes(self, normalized=False):
+        nodes = self.get_nodes()
+        sizes = []
 
         for node in nodes:
-            if super_only:
-                sizes.append(node.tssb.num_data())
-            else:
-                sizes.append(len(node.data))
+            sizes.append(len(node.data))
 
         sizes = np.array(sizes)
         if normalized:
@@ -858,6 +864,15 @@ class NTSSB(object):
         
         def super_descend(root):
             nodes = descend(root['node'].root)
+            for child in root['children']:
+                nodes.extend(super_descend(child))
+            return nodes
+
+        return super_descend(self.root)
+
+    def get_trees(self):
+        def super_descend(root):
+            nodes = [root['node']]
             for child in root['children']:
                 nodes.extend(super_descend(child))
             return nodes
@@ -1124,7 +1139,8 @@ class NTSSB(object):
             eq_logq_c = jax.lax.select(root['node'].variational_parameters['q_c'][idx] != 0, 
                         root['node'].variational_parameters['q_c'][idx] * jnp.log(root['node'].variational_parameters['q_c'][idx]), 
                         root['node'].variational_parameters['q_c'][idx])
-            ass_contrib = eq_logp_c*root['node'].variational_parameters['q_c'][idx] - eq_logq_c + subtree_ass_contrib * root['node'].variational_parameters['q_c'][idx]
+            ass_contrib = eq_logp_c*root['node'].variational_parameters['q_c'][idx] - eq_logq_c + \
+                            subtree_ass_contrib * root['node'].variational_parameters['q_c'][idx]
 
             # Sticks
             E_log_nu = E_log_beta(root['node'].variational_parameters['delta_1'], root['node'].variational_parameters['delta_2'])
