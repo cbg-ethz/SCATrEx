@@ -486,7 +486,7 @@ class ObservedTree(ABC):
             self.tree_dict[new_key] = dict(
                 parent=parent_id,
                 children=[],
-                params=np.array(tree_dict[node][input_params_key]).ravel(),
+                param=np.array(tree_dict[node][input_params_key]).ravel(),
                 dp_alpha_subtree=self.dp_alpha_subtree,
                 alpha_decay_subtree=self.alpha_decay_subtree,
                 dp_gamma_subtree=self.dp_gamma_subtree,
