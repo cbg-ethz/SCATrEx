@@ -12,8 +12,8 @@ from .node_opt import _mc_obs_ll
 from ...utils.math_utils import *
 from ...ntssb.node import *
 
-MIN_ALPHA = jnp.log(0.01)
-MAX_BETA = jnp.log(1./0.001)
+MIN_ALPHA = jnp.log(1e-2)
+MAX_BETA = jnp.log(1e6)
 
 def update_params(params, params_gradient, step_size):
     new_params = []

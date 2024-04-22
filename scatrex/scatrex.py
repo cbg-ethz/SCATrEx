@@ -168,15 +168,15 @@ class SCATrEx(object):
         n_cells = self.ntssb.data.shape[0]
         n_genes = self.ntssb.data.shape[1]
         gs = np.sqrt(np.mean(self.ntssb.data))
-
         root = self.ntssb.root['node'].root['node']
+        
         gene_scales_alpha_init = 10. * jnp.ones((n_genes,)) #* jnp.exp(np.random.normal(size=self.n_genes))
-        gene_scales_beta_init = 10. * jnp.ones((n_genes,))  * 1./gs * jnp.exp( 0. * np.random.normal(size=n_genes))
+        gene_scales_beta_init = 10. * jnp.ones((n_genes,)) * 1./np.mean(self.ntssb.data, axis=0) #* jnp.exp(10. + 0. * np.random.normal(size=n_genes))
         root.variational_parameters['global']['gene_scales']['log_alpha'] = jnp.log(gene_scales_alpha_init)
         root.variational_parameters['global']['gene_scales']['log_beta'] = jnp.log(gene_scales_beta_init)
 
         cell_scales_alpha_init = 10. * jnp.ones((n_cells,1)) #* jnp.exp(np.random.normal(size=[500,1]))
-        cell_scales_beta_init = 10. * jnp.ones((n_cells,1))  * 1./gs * jnp.exp( 0. * np.random.normal(size=[n_cells,1]))
+        cell_scales_beta_init = 10. * jnp.ones((n_cells,1)) * 1. #* jnp.exp(0. + 0. * np.random.normal(size=[n_cells,1]))
         root.variational_parameters['local']['cell_scales']['log_alpha'] = jnp.log(cell_scales_alpha_init)
         root.variational_parameters['local']['cell_scales']['log_beta'] = jnp.log(cell_scales_beta_init)
 
