@@ -103,7 +103,7 @@ class StructureSearch(object):
             # print(f"Merged {source_label} to {target_label}")
             self.tree = deepcopy(self.proposed_tree)
         else:
-            self.proposed_tree.learn_params(n_epochs, update_globals=False, memoized=memoized, **learn_kwargs)
+            self.proposed_tree.learn_params(n_epochs, memoized=memoized, **learn_kwargs)
             self.proposed_tree.compute_elbo(memoized=memoized)
             if self.proposed_tree.elbo > self.tree.elbo:
                 self.tree = deepcopy(self.proposed_tree)
@@ -239,7 +239,7 @@ class StructureSearch(object):
                 if update_globals:
                     # print("Inference")
                     # print(self.tree.elbo)
-                    self.proposed_tree.learn_params(n_epochs, update_globals=True, memoized=memoized, **learn_kwargs)
+                    self.proposed_tree.learn_params(n_epochs, memoized=memoized, **learn_kwargs)
                     self.proposed_tree.compute_elbo(memoized=memoized)
                     # print(self.proposed_tree.elbo)
                     if self.proposed_tree.elbo > self.tree.elbo:
