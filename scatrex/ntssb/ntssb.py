@@ -258,6 +258,13 @@ class NTSSB(object):
                 descend(child)
         descend(self.root)
 
+    def reset_variational_kernels(self, **kwargs):
+        def descend(root):
+            root['node'].reset_variational_kernels(**kwargs)
+            for child in root['children']:
+                descend(child)
+        descend(self.root)
+
     def sample_variational_distributions(self, **kwargs):
         def descend(root):
             root['node'].sample_variational_distributions(**kwargs)

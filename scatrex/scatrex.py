@@ -181,6 +181,7 @@ class SCATrEx(object):
         root.variational_parameters['local']['cell_scales']['log_beta'] = jnp.log(cell_scales_beta_init)
 
         # Initialize MC samples
+        self.ntssb.reset_variational_kernels(log_std=-4)
         self.ntssb.sample_variational_distributions(n_samples=mc_samples)
         self.ntssb.update_sufficient_statistics()
 
@@ -204,6 +205,7 @@ class SCATrEx(object):
         direction_shape = self.ntssb.root['node'].root['node'].node_hyperparams['direction_shape']
         self.ntssb.set_node_hyperparams(n_factors=0)
         self.ntssb.root['node'].root['node'].reset_variational_noise_factors()
+        self.ntssb.reset_variational_kernels(log_std=0.)
         self.ntssb.sample_variational_distributions(n_samples=mc_samples)
         self.ntssb.update_sufficient_statistics()
         self.ntssb.learn_roots(n_epochs, memoized=memoized, mc_samples=mc_samples, step_size=step_size, return_trace=False)
@@ -377,7 +379,7 @@ class SCATrEx(object):
             adata.layers["scatrex_mean"] = mean_mat
 
     def learn(self, adata, observed_tree=None, counts_layer='counts', allow_subtrees=True, allow_root_subtrees=False, root_cells=None, 
-              batch_size=None, seed=42,
+              batch_size=None, seed=42, weights_concentration=1e6,
               n_epochs=100, mc_samples=10, step_size=0.01, n_iters=10, n_merges=10, n_swaps=10, memoized=True, dp_alpha=.1, dp_gamma=.1):
         """
         Complete NTSSB learning procedure. 
@@ -388,7 +390,8 @@ class SCATrEx(object):
         # Setup NTSSB
         self.ntssb = NTSSB(self.observed_tree, 
                            node_hyperparams=self.model_args, 
-                           seed=seed,)
+                           seed=seed,
+                           weights_concentration=weights_concentration)
         self.ntssb.add_data(np.array(adata.layers[counts_layer]))
         self.ntssb.make_batches(batch_size, seed)
         self.ntssb.reset_variational_parameters()

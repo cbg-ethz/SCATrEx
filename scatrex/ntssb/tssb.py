@@ -212,6 +212,13 @@ class TSSB(object):
                 descend(child)
         descend(self.root)
 
+    def reset_variational_kernels(self, **kwargs):
+        def descend(root):
+            root['node'].reset_variational_kernel(**kwargs)
+            for child in root['children']:
+                descend(child)
+        descend(self.root)
+
     def set_weights(self, node_weights_dict):
         def descend(root):
             root['weight'] = node_weights_dict[root['label']]
