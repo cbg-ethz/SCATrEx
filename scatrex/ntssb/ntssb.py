@@ -1270,10 +1270,10 @@ class NTSSB(object):
         for i in range(n_epochs):
             for batch_idx in range(self.num_batches):
                 key, subkey = jax.random.split(key)
+                if update_globals:
+                    states = self.update_global_params(subkey, idx=idx, batch_idx=batch_idx, adaptive=adaptive, states=states, i=it, param_names=globals_names, **kwargs)                
                 local_states = self.update_local_params(subkey, batch_idx=batch_idx, adaptive=adaptive, states=local_states, i=it, 
                                                         param_names=locals_names, update_globals=update_globals, **kwargs)
-                if update_globals:
-                    states = self.update_global_params(subkey, idx=idx, batch_idx=batch_idx, adaptive=adaptive, states=states, i=it, param_names=globals_names, **kwargs)
                 if memoized:
                     self.update_sufficient_statistics(batch_idx=batch_idx)    
                 self.update_node_params(subkey, i=it, adaptive=adaptive, memoized=memoized, **kwargs)

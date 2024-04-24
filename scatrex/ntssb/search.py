@@ -58,7 +58,8 @@ class StructureSearch(object):
 
             else:
                 # Birth: traverse the tree and spawn a bunch of nodes (quick and helps escape local optima)
-                self.birth_merge(subkey, n_epochs=n_epochs, memoized=memoized, mc_samples=mc_samples, step_size=step_size, moves_per_tssb=moves_per_tssb, update_roots=update_roots, update_globals=update_globals)
+                self.birth_merge(subkey, n_epochs=n_epochs, memoized=memoized, mc_samples=mc_samples, step_size=step_size, moves_per_tssb=moves_per_tssb, update_roots=update_roots, update_globals=update_globals,
+                                 update_outer_ass=update_outer_ass)
 
             # Swap roots: traverse the tree and propose swapping roots of TSSBs with their immediate children
             # self.swap_roots(subkey, moves_per_tssb=moves_per_tssb)
@@ -110,13 +111,14 @@ class StructureSearch(object):
             else:
                 self.proposed_tree = deepcopy(self.tree)        
 
-    def birth_merge(self, key, moves_per_tssb=1, n_epochs=100, update_roots=False, mc_samples=10, step_size=0.01, memoized=True, update_globals=False):
+    def birth_merge(self, key, moves_per_tssb=1, n_epochs=100, update_roots=False, mc_samples=10, step_size=0.01, memoized=True, update_globals=False,
+                    update_outer_ass=False):
         # Birth: traverse the tree and spawn a bunch of nodes (quick and helps escape local optima)
         self.birth(key, moves_per_tssb=moves_per_tssb)
 
         # Update parameters in n_epochs passes through the data, interleaving node updates with local batch updates
         self.tree.learn_params(n_epochs, update_roots=update_roots, mc_samples=mc_samples, 
-                                step_size=step_size, memoized=memoized)
+                                step_size=step_size, memoized=memoized, update_outer_ass=update_outer_ass)
         self.tree.compute_elbo(memoized=memoized)
         self.proposed_tree = deepcopy(self.tree)
         
