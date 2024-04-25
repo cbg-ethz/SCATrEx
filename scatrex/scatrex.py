@@ -198,7 +198,7 @@ class SCATrEx(object):
         self.ntssb.learn_globals(n_epochs=n_epochs, step_size=step_size, mc_samples=mc_samples,
                                     update_ass=True, update_locals=True, update_roots=False)
 
-    def learn_roots_and_noise(self, n_iters=10, n_epochs=100, n_merges=10, n_swaps=10, memoized=True, mc_samples=10, step_size=0.01, seed=42):
+    def learn_roots_and_noise(self, n_iters=10, n_epochs=100, n_merges=10, n_swaps=10, memoized=True, mc_samples=10, step_size=0.01, update_outer_ass=False, seed=42):
         logger.info("Learning roots and noise")
         # Remove noise and learn roots
         n_factors = self.ntssb.root['node'].root['node'].node_hyperparams['n_factors']
@@ -211,7 +211,7 @@ class SCATrEx(object):
         self.ntssb.learn_roots(n_epochs, memoized=False, mc_samples=mc_samples, step_size=step_size, return_trace=False)
 
         # Update assignments
-        self.ntssb.update_local_params(jax.random.PRNGKey(seed), update_ass=True, update_globals=False)
+        # self.ntssb.update_local_params(jax.random.PRNGKey(seed), update_ass=True, update_globals=False)
 
         # Learn a tree with root updates on noiseless data (over-cluster) and more permissive prior on tree
         searcher = StructureSearch(self.ntssb)
@@ -223,7 +223,7 @@ class SCATrEx(object):
             searcher.tree.update_sufficient_statistics(batch_idx=batch_idx)
         searcher.proposed_tree = deepcopy(searcher.tree) 
         searcher.run_search(n_iters=n_iters, n_epochs=n_epochs, mc_samples=mc_samples, step_size=step_size,
-                                memoized=memoized, seed=seed, update_roots=True)
+                                memoized=memoized, seed=seed, update_roots=True, update_outer_ass=update_outer_ass)
 
         self.ntssb = deepcopy(searcher.tree)
         self.ntssb.set_node_hyperparams(n_factors=n_factors)
@@ -238,7 +238,7 @@ class SCATrEx(object):
                                     locals_names=['obs_weights'],
                                     globals_names=['factor_weights', 'factor_precisions'],
                                     update_roots=True, step_size=step_size, mc_samples=mc_samples,
-                                    memoized=False)
+                                    memoized=False, update_outer_ass=update_outer_ass)
 
         # Propose merges to account for new noise
         searcher = StructureSearch(self.ntssb)
@@ -261,7 +261,7 @@ class SCATrEx(object):
         # Propose root merges with opt after these merges
         for i in range(n_merges):
             key, subkey = jax.random.split(key)
-            searcher.merge_root(subkey, memoized=memoized, n_epochs=n_epochs, mc_samples=mc_samples, step_size=step_size) 
+            searcher.merge_root(subkey, memoized=memoized, n_epochs=n_epochs, mc_samples=mc_samples, step_size=step_size, update_outer_ass=update_outer_ass) 
 
         searcher.tree.reset_sufficient_statistics()
         for batch_idx in range(len(searcher.tree.batch_indices)):
@@ -285,9 +285,9 @@ class SCATrEx(object):
                             locals_names=['obs_weights'],
                             globals_names=['factor_weights', 'factor_precisions'],
                             update_roots=True, step_size=step_size, mc_samples=mc_samples,
-                            memoized=False) 
+                            memoized=False, update_outer_ass=update_outer_ass) 
 
-    def learn_tree(self, n_iters=10, n_epochs=100, memoized=True, mc_samples=10, step_size=0.01, dp_alpha=.1, dp_gamma=.1, prune=True, seed=42):
+    def learn_tree(self, n_iters=10, n_epochs=100, memoized=True, mc_samples=10, step_size=0.01, dp_alpha=.1, dp_gamma=.1, prune=True, update_outer_ass=False, seed=42):
         logger.info("Learning augmented tree")
         # Re-learn tree (optionally from scratch) with fixed noise and roots
         if prune:
@@ -302,6 +302,7 @@ class SCATrEx(object):
         searcher.proposed_tree = deepcopy(searcher.tree) 
         searcher.run_search(n_iters=n_iters, n_epochs=n_epochs, mc_samples=mc_samples, step_size=step_size, 
                                 memoized=memoized, seed=seed,
+                                update_outer_ass=update_outer_ass,
                                 update_roots=False)
         self.ntssb = deepcopy(searcher.tree)        
 
@@ -387,7 +388,7 @@ class SCATrEx(object):
             adata.layers["scatrex_mean"] = mean_mat
 
     def learn(self, adata, observed_tree=None, counts_layer='counts', allow_subtrees=True, allow_root_subtrees=False, root_cells=None, 
-              batch_size=None, seed=42, weights_concentration=1e6,
+              batch_size=None, seed=42, weights_concentration=1e6, update_outer_ass=False,
               n_epochs=100, mc_samples=10, step_size=0.01, n_iters=10, n_merges=10, n_swaps=10, memoized=True, dp_alpha=.1, dp_gamma=.1):
         """
         Complete NTSSB learning procedure. 
@@ -406,8 +407,8 @@ class SCATrEx(object):
 
         # Learn 
         self.learn_scales(n_epochs=n_epochs, mc_samples=mc_samples, step_size=step_size)
-        self.learn_roots_and_noise(n_iters=n_iters, n_epochs=n_epochs, n_merges=n_merges, n_swaps=n_swaps, memoized=memoized, mc_samples=mc_samples, step_size=step_size, seed=seed)
-        self.learn_tree(n_iters=n_iters, n_epochs=n_epochs, memoized=memoized, mc_samples=mc_samples, step_size=step_size, dp_alpha=dp_alpha, dp_gamma=dp_gamma, prune=True, seed=seed)
+        self.learn_roots_and_noise(n_iters=n_iters, n_epochs=n_epochs, n_merges=n_merges, n_swaps=n_swaps, memoized=memoized, mc_samples=mc_samples, step_size=step_size, update_outer_ass=update_outer_ass, seed=seed)
+        self.learn_tree(n_iters=n_iters, n_epochs=n_epochs, memoized=memoized, mc_samples=mc_samples, step_size=step_size, dp_alpha=dp_alpha, dp_gamma=dp_gamma, prune=True, update_outer_ass=update_outer_ass, seed=seed)
         
         # Create outputs for analysis
         self.ntssb.set_learned_parameters()
