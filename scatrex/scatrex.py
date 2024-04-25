@@ -211,12 +211,13 @@ class SCATrEx(object):
         self.ntssb.learn_roots(n_epochs, memoized=False, mc_samples=mc_samples, step_size=step_size, return_trace=False)
 
         # Update assignments
-        # self.ntssb.update_local_params(jax.random.PRNGKey(seed), update_ass=True, update_globals=False)
+        if update_outer_ass:
+            self.ntssb.update_local_params(jax.random.PRNGKey(seed), update_ass=True, update_globals=False)
 
-        # Learn a tree with root updates on noiseless data (over-cluster) and more permissive prior on tree
+        # Learn a tree with root updates on noiseless data (over-cluster)
         searcher = StructureSearch(self.ntssb)
-        searcher.tree.set_tssb_params(dp_alpha=1., dp_gamma=1.,)
-        searcher.tree.set_node_hyperparams(direction_shape=1.)
+        searcher.tree.set_tssb_params(dp_alpha=.01, dp_gamma=.01,)
+        searcher.tree.set_node_hyperparams(direction_shape=.1)
         searcher.tree.sample_variational_distributions(n_samples=mc_samples)
         searcher.tree.reset_sufficient_statistics()
         for batch_idx in range(len(searcher.tree.batch_indices)):
