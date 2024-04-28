@@ -67,7 +67,7 @@ class NTSSB(object):
         max_depth=15,
         fixed_weights_pivot_sampling=True,
         use_weights=True,
-        weights_variance=1e-3,
+        weights_concentration=10.,
         min_weight=1e-6,
         verbosity=logging.INFO,
         node_hyperparams=dict(),
@@ -117,7 +117,7 @@ class NTSSB(object):
 
         logger.setLevel(verbosity)
 
-        self.reset_tree(use_weights=use_weights, weights_variance=weights_variance, min_weight=min_weight)
+        self.reset_tree(use_weights=use_weights, weights_concentration=weights_concentration, min_weight=min_weight)
 
         self.set_pivot_priors()
 
@@ -126,7 +126,7 @@ class NTSSB(object):
                                        }
 
     # ========= Functions to initialize tree. =========
-    def reset_tree(self, use_weights=False, weights_variance=1e-3, min_weight=1e-6):
+    def reset_tree(self, use_weights=False, weights_concentration=10., min_weight=1e-6):
         if use_weights and "weight" not in self.input_tree_dict["A"].keys():
             raise KeyError("No weights were specified in the input tree.")
 
@@ -157,8 +157,8 @@ class NTSSB(object):
                         stick = stick / sum
                     else:
                         stick = 1.0
-                    psi_prior["alpha_psi"] = stick * weights_variance
-                    psi_prior["beta_psi"] = (1-stick) * weights_variance
+                    psi_prior["alpha_psi"] = stick * (weights_concentration - 2) + 1 
+                    psi_prior["beta_psi"] = (1-stick) * (weights_concentration -2) + 1
                 psi_priors.append(psi_prior)
                 sticks.append(stick)
             if len(sticks) == 0:
@@ -209,8 +209,8 @@ class NTSSB(object):
                 main = 1.0  # stop at leaf node
             
             if use_weights:
-                alpha_nu = main * weights_variance 
-                beta_nu = (1-main) * weights_variance
+                alpha_nu = main * (weights_concentration - 2) + 1 
+                beta_nu = (1-main) * (weights_concentration - 2) + 1 
 
             root_dict =  {
                     "node": tssb,
