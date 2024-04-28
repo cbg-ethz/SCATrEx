@@ -1540,45 +1540,8 @@ class SCATrEx(object):
             enrichments.append(enr)
         self.enrichments = dict(zip([node for node in gene_rankings], enrichments))
 
-    def compute_pivot_likelihoods(self, clone="B", normalized=True):
-        """
-        For the given clone, compute the tree ELBO for each possible pivot and
-        return a dictionary of pivots and their ELBOs.
-        """
-        if clone == "A":
-            raise ValueError(
-                "The root clone was selected, which by definition \
-            does not have parent nodes. Please select a non-root clone."
-            )
-
-        tssbs = ntssb.get_subtrees()
-        labels = [tssb.label for tssb in tssbs]
-        tssb = subtrees[np.where(np.array(labels) == clone)[0]]
-
-        parent_tssb = tssb.root["node"].parent().tssb
-        possible_pivots = parent_tssb.get_nodes()
-
-        pivot_likelihoods = dict()
-        for pivot in possible_pivots:
-            if len(possible_pivots) == 1:
-                possible_pivots[pivot] = self.ntssb.elbo
-                logger.warning(f"Clone {clone} has only one possible parent node.")
-                break
-            ntssb = deepcopy(self.ntssb)
-            ntssb.pivot_reattach_to(clone, pivot.label)
-            ntssb.optimize_elbo()
-            pivot_likelihoods[pivot.label] = ntssb.elbo
-
-        if normalize:
-            labels = list(pivot_likelihoods.get_keys())
-            vals = list(pivot_likelihoods.get_values())
-            vals = np.array(vals) / np.sum(vals)
-            pivot_likelihoods = dict(zip(labels, vals.tolist()))
-
-        return pivot_likelihoods
-
-    def get_cnv_exp(self, max_level=4, method="scatrex"):
-        cnv_levels = np.unique(self.observed_tree.adata.X)
+    def get_cnv_exp(self, cnv_levels=[1,2,3,4], max_level=4, method="scatrex"):
+        cnv_levels = np.unique(cnv_levels)
         exp_levels = []
         for cnv in cnv_levels:
             gene_avg = []
@@ -2053,8 +2016,8 @@ class SCATrEx(object):
             dna_props = dna_props[s]
 
         if rna:
-            rna_nodes, rna_props = self.ntssb.get_node_data_sizes(
-                normalized=True, super_only=True
+            rna_nodes, rna_props = self.ntssb.get_tree_data_sizes(
+                normalized=True,
             )
             nodes_labels = [node.label for node in rna_nodes]
             s = np.argsort(np.array(nodes_labels))

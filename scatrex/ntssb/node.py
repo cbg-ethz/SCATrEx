@@ -3,6 +3,8 @@ from numpy.random import *
 import jax.numpy as jnp
 
 from abc import ABC, abstractmethod
+from functools import reduce
+
 
 class AbstractNode(ABC):
     def __init__(
