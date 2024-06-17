@@ -680,7 +680,7 @@ class CNANode(AbstractNode):
         obs_weights_contrib = jnp.sum(jnp.mean(mc_obs_weights_logp_val_and_grad(self.obs_weights_sample[:,batch_indices], 0., log_std)[0], axis=0))
         log_alpha = jnp.log(self.node_hyperparams['cell_scale_shape'])
         log_beta = jnp.log(self.node_hyperparams['cell_scale_shape'] * self.lib_ratio)
-        cell_scales_contrib = jnp.sum(jnp.mean(mc_cell_scales_logp_val_and_grad(self.cell_scales_sample[batch_indices], log_alpha, log_beta)[0], axis=0))
+        cell_scales_contrib = jnp.sum(jnp.mean(mc_cell_scales_logp_val_and_grad(self.cell_scales_sample[:,batch_indices], log_alpha, log_beta)[0], axis=0))
         return obs_weights_contrib + cell_scales_contrib
 
     def compute_global_entropies(self):
