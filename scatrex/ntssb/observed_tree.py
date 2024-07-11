@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from graphviz import Digraph
 
 from .node import AbstractNode
-from ..plotting import constants
+from ..plotting import constants, tree_colors
 from ..utils.tree_utils import tree_to_dict, dict_to_tree, subsample_tree, condense_tree
 
 
@@ -149,11 +149,13 @@ class ObservedTree(ABC):
         if root_node in self.tree_dict:
             self.tree_dict[root_node]["color"] = "lightgray"
             idx += 1
+        n_nodes = len(list(self.tree_dict.keys())[idx:])
+        color_list = tree_colors.make_color_palette(n_nodes)
         for i, node in enumerate(list(self.tree_dict.keys())[idx:]):
             try:
                 self.tree_dict[node]["color"] = constants.LABEL_COLORS_DICT[node]
             except:
-                self.tree_dict[node]["color"] = constants.CLONES_PAL[i]
+                self.tree_dict[node]["color"] = color_list[i]
         
         root_name = root_node
         for node in self.tree_dict:
@@ -203,6 +205,9 @@ class ObservedTree(ABC):
                     self.tree_dict[i]["children"].append(j)
 
     def generate_tree(self):
+        # Use either constants or scanpy to get node colors
+        color_list = tree_colors.make_color_palette(self.n_nodes)
+
         alphabet = list(string.ascii_uppercase)
         # Add healthy node
         if self.add_root:
@@ -239,7 +244,7 @@ class ObservedTree(ABC):
             eta=self.eta,
             weight=self.node_weights[0],
             size=int(self.node_weights[0] * 100),
-            color=constants.CLONES_PAL[0],
+            color=color_list[0],
             label="A",
         )
         for c in range(1, self.n_nodes):
@@ -257,7 +262,7 @@ class ObservedTree(ABC):
                 eta=self.eta,
                 weight=self.node_weights[c],
                 size=int(self.node_weights[c] * 100),
-                color=constants.CLONES_PAL[c],
+                color=color_list[c],
                 label=alphabet[c],
             )
 
@@ -436,9 +441,9 @@ class ObservedTree(ABC):
         self.tree_dict = dict()
         self.n_nodes = len(self.tree_dict.keys())
         fixed_color = None
-        if self.n_nodes > len(constants.CLONES_PAL):
-            fixed_color = "lightgray"
-
+        color_list = tree_colors.make_color_palette(self.n_nodes)
+        LABEL_COLORS_DICT = zip(list(string.ascii_uppercase)[: len(color_list)], color_list)
+        
         sizes = None
         try:
             sizes = [tree_dict[node][input_sizes_key] for node in tree_dict]
@@ -463,13 +468,13 @@ class ObservedTree(ABC):
                     color = (
                         "lightgray"
                         if parent_id == "-1"
-                        else constants.LABEL_COLORS_DICT[
+                        else LABEL_COLORS_DICT[
                             tree_dict[node][input_label_key]
                         ]
                     )
                 else:
                     color = (
-                        constants.CLONES_PAL[idx]
+                        color_list[idx]
                         if "color" not in tree_dict[node]
                         else tree_dict[node]["color"]
                     )

@@ -147,6 +147,8 @@ class NTSSB(object):
 
                 rng = np.random.default_rng(int(self.seed+idx*1e6))
                 stick = boundbeta(1, self.dp_gamma, rng)
+                if i >= len(input_root['children']) - 1:
+                    stick = 1.0
                 psi_prior = {"alpha_psi": 1., "beta_psi": self.dp_gamma}
                 if use_weights:
                     stick = self.input_tree.get_sum_weights_subtree(child_root["label"])
@@ -158,7 +160,7 @@ class NTSSB(object):
                     else:
                         stick = 1.0
                     psi_prior["alpha_psi"] = stick * (weights_concentration - 2) + 1 
-                    psi_prior["beta_psi"] = (1-stick) * (weights_concentration -2) + 1
+                    psi_prior["beta_psi"] = (1-stick) * (weights_concentration - 2) + 1
                 psi_priors.append(psi_prior)
                 sticks.append(stick)
             if len(sticks) == 0:
@@ -374,13 +376,21 @@ class NTSSB(object):
         for subtree in subtrees:
             subtree.ntssb = self
 
-    def get_node(self, u, key=None, uniform=False, include_leaves=True):
+    def get_node(self, u, key=None, uniform=False, include_leaves=True, variational=True):
         # See in which subtree it lands
-        subtree, _, u = self.find_node(u)
+        if uniform:
+            key, subkey = jax.random.split(key)
+            subtree, _, u = self.find_node_uniform(subkey, include_leaves=True)
+        else:
+            if variational:
+                subtree, _, u = self.find_node_variational(u)
+            else:
+                subtree, _, u = self.find_node(u)
 
         # See in which node it lands
         if uniform:
-            _, _, root = subtree.find_node_uniform(key, include_leaves=include_leaves)
+            key, subkey = jax.random.split(key)
+            _, _, root = subtree.find_node_uniform(subkey, include_leaves=include_leaves)
         else:
             _, _, root = subtree.find_node(u, include_leaves=include_leaves)
 
@@ -955,6 +965,64 @@ class NTSSB(object):
         ordered_dict["children"] = new_children
 
         return ordered_dict
+    
+    def find_node_uniform(self, key, include_leaves=True):
+        def descend(root, key, depth=0):
+            if depth >= self.max_depth:
+                return (root["node"], [], root)
+            elif len(root["children"]) == 0:
+                return (root["node"], [], root)
+            else:
+                key, subkey = jax.random.split(key)
+                n_children = len(root["children"])
+                if jax.random.bernoulli(subkey, p=1./(n_children+1)):
+                    return (root["node"], [], root)
+                else:
+                    key, subkey = jax.random.split(key)
+                    index = jax.random.choice(subkey, len(root["children"]))
+
+                    # Perhaps stop before continuing to a leaf
+                    if not include_leaves and len(root["children"][index]["children"]) == 0:
+                        return (root["node"], [], root)
+                    
+                    (node, path, root) = descend(root["children"][index], key, depth + 1)
+
+                    path.insert(0, index)
+
+                    return (node, path, root)
+
+        return descend(self.root, key)
+
+    def find_node_variational(self, u):
+        """This function breaks sticks in a tree where each node is a subtree."""
+
+        def descend(root, u, depth=0):
+            if depth >= self.max_depth:
+                # print >>sys.stderr, "WARNING: Reached maximum depth."
+                return (root["node"], [], u)
+            else:
+                main = np.exp(E_log_beta(root['node'].variational_parameters['delta_1'],root['node'].variational_parameters['delta_2']))
+                if u < main:
+                    return (root["node"], [], u / main)
+                else:
+                    # Rescale the uniform variate to the remaining interval.
+                    u = (u - main) / (1.0 - main)
+
+                    # Don't need to break sticks
+                    children_sticks = np.array(np.exp([E_log_beta(root["children"][i]['node'].variational_parameters['sigma_1'],root["children"][i]['node'].variational_parameters['sigma_2']) for i in range(len(root['children']))]))
+                    children_sticks[-1] = 1.
+                    edges = 1.0 - cumprod(1.0 - children_sticks)
+                    index = sum(u > edges)
+                    edges = hstack([0.0, edges])
+                    u = (u - edges[index]) / (edges[index + 1] - edges[index])
+
+                    (node, path, u_out) = descend(root["children"][index], u, depth + 1)
+
+                    path.insert(0, index)
+
+                    return (node, path, u_out)
+
+        return descend(self.root, u)    
 
     def find_node(self, u):
         """This function breaks sticks in a tree where each node is a subtree."""
@@ -1071,6 +1139,10 @@ class NTSSB(object):
     def make_batches(self, batch_size=None, seed=42):
         if batch_size is None:
             batch_size = self.num_data
+        
+        if batch_size > self.num_data:
+            batch_size = self.num_data
+
         self.batch_size = batch_size
 
         rng = np.random.RandomState(seed)
@@ -1127,7 +1199,7 @@ class NTSSB(object):
             idx = jnp.arange(self.num_data)
         else:
             idx = self.batch_indices[batch_idx]
-        def descend(root, depth=0, local_contrib=0, global_contrib=0):
+        def descend(root, depth=0, local_contrib=0, global_contrib=0, psi_priors=None):
             # Traverse inner TSSB
             subtree_ll_contrib, subtree_ass_contrib, subtree_node_contrib = root['node'].compute_elbo(idx)
             ll_contrib = subtree_ll_contrib * root['node'].variational_parameters['q_c'][idx]
@@ -1152,23 +1224,23 @@ class NTSSB(object):
             # Sticks
             E_log_nu = E_log_beta(root['node'].variational_parameters['delta_1'], root['node'].variational_parameters['delta_2'])
             E_log_1_nu = E_log_1_beta(root['node'].variational_parameters['delta_1'], root['node'].variational_parameters['delta_2'])
-            nu_kl = (self.dp_alpha * self.alpha_decay**depth - root['node'].variational_parameters['delta_2']) * E_log_1_nu
-            nu_kl -= (root['node'].variational_parameters['delta_1'] - 1) * E_log_nu
+            nu_kl = (root['beta_nu'] - root['node'].variational_parameters['delta_2']) * E_log_1_nu
+            nu_kl -= (root['node'].variational_parameters['delta_1'] - root['alpha_nu']) * E_log_nu
             nu_kl += logbeta_func(root['node'].variational_parameters['delta_1'], root['node'].variational_parameters['delta_2'])
-            nu_kl -= logbeta_func(1, self.dp_alpha * self.alpha_decay**depth)
+            nu_kl -= logbeta_func(root['alpha_nu'], root['beta_nu'])
             psi_kl = 0.
             if depth != 0:
                 E_log_psi = E_log_beta(root['node'].variational_parameters['sigma_1'], root['node'].variational_parameters['sigma_2'])
                 E_log_1_psi = E_log_1_beta(root['node'].variational_parameters['sigma_1'], root['node'].variational_parameters['sigma_2'])
-                psi_kl = (self.dp_gamma - root['node'].variational_parameters['sigma_2']) * E_log_1_psi
-                psi_kl -= (root['node'].variational_parameters['sigma_1'] - 1) * E_log_psi
+                psi_kl = (psi_priors['beta_psi'] - root['node'].variational_parameters['sigma_2']) * E_log_1_psi
+                psi_kl -= (root['node'].variational_parameters['sigma_1'] - psi_priors['alpha_psi']) * E_log_psi
                 psi_kl += logbeta_func(root['node'].variational_parameters['sigma_1'], root['node'].variational_parameters['sigma_2'])
-                psi_kl -= logbeta_func(1, self.dp_gamma)
+                psi_kl -= logbeta_func(psi_priors['alpha_psi'], psi_priors['beta_psi'])
             stick_contrib = nu_kl + psi_kl
 
             self.n_total_nodes += root['node'].n_nodes
             sum_E_log_1_psi = 0.
-            for child in root['children']:
+            for i, child in enumerate(root['children']):
                 # Auxiliary quantities
                 ## Branches
                 E_log_psi = E_log_beta(child['node'].variational_parameters['sigma_1'], child['node'].variational_parameters['sigma_2'])
@@ -1177,7 +1249,7 @@ class NTSSB(object):
                 sum_E_log_1_psi += E_log_1_psi
 
                 # Go down
-                local_contrib, global_contrib = descend(child, depth=depth+1, local_contrib=local_contrib, global_contrib=global_contrib)
+                local_contrib, global_contrib = descend(child, depth=depth+1, local_contrib=local_contrib, global_contrib=global_contrib, psi_priors=root['psi_priors'][i])
 
             local_contrib += ll_contrib + ass_contrib
             global_contrib += subtree_node_contrib + stick_contrib
@@ -1195,7 +1267,7 @@ class NTSSB(object):
         return elbo
 
     def compute_elbo_suff(self):
-        def descend(root, depth=0, local_contrib=0, global_contrib=0):
+        def descend(root, depth=0, local_contrib=0, global_contrib=0, psi_priors=None):
             # Traverse inner TSSB
             ll_contrib, subtree_ass_contrib, subtree_node_contrib = root['node'].compute_elbo_suff()
 
@@ -1214,23 +1286,23 @@ class NTSSB(object):
             # Sticks
             E_log_nu = E_log_beta(root['node'].variational_parameters['delta_1'], root['node'].variational_parameters['delta_2'])
             E_log_1_nu = E_log_1_beta(root['node'].variational_parameters['delta_1'], root['node'].variational_parameters['delta_2'])
-            nu_kl = (self.dp_alpha * self.alpha_decay**depth - root['node'].variational_parameters['delta_2']) * E_log_1_nu
-            nu_kl -= (root['node'].variational_parameters['delta_1'] - 1) * E_log_nu
+            nu_kl = (root['beta_nu'] - root['node'].variational_parameters['delta_2']) * E_log_1_nu
+            nu_kl -= (root['node'].variational_parameters['delta_1'] - root['alpha_nu']) * E_log_nu
             nu_kl += logbeta_func(root['node'].variational_parameters['delta_1'], root['node'].variational_parameters['delta_2'])
-            nu_kl -= logbeta_func(1, self.dp_alpha * self.alpha_decay**depth)
+            nu_kl -= logbeta_func(root['alpha_nu'], root['beta_nu'])
             psi_kl = 0.
             if depth != 0:
                 E_log_psi = E_log_beta(root['node'].variational_parameters['sigma_1'], root['node'].variational_parameters['sigma_2'])
                 E_log_1_psi = E_log_1_beta(root['node'].variational_parameters['sigma_1'], root['node'].variational_parameters['sigma_2'])
-                psi_kl = (self.dp_gamma - root['node'].variational_parameters['sigma_2']) * E_log_1_psi
-                psi_kl -= (root['node'].variational_parameters['sigma_1'] - 1) * E_log_psi
+                psi_kl = (psi_priors['beta_psi'] - root['node'].variational_parameters['sigma_2']) * E_log_1_psi
+                psi_kl -= (root['node'].variational_parameters['sigma_1'] - psi_priors['alpha_psi']) * E_log_psi
                 psi_kl += logbeta_func(root['node'].variational_parameters['sigma_1'], root['node'].variational_parameters['sigma_2'])
-                psi_kl -= logbeta_func(1, self.dp_gamma)
+                psi_kl -= logbeta_func(psi_priors['alpha_psi'], psi_priors['beta_psi'])
             stick_contrib = nu_kl + psi_kl
 
             self.n_total_nodes += root['node'].n_nodes
             sum_E_log_1_psi = 0.
-            for child in root['children']:
+            for i, child in enumerate(root['children']):
                 # Auxiliary quantities
                 ## Branches
                 E_log_psi = E_log_beta(child['node'].variational_parameters['sigma_1'], child['node'].variational_parameters['sigma_2'])
@@ -1239,7 +1311,7 @@ class NTSSB(object):
                 sum_E_log_1_psi += E_log_1_psi
 
                 # Go down
-                local_contrib, global_contrib = descend(child, depth=depth+1, local_contrib=local_contrib, global_contrib=global_contrib)
+                local_contrib, global_contrib = descend(child, depth=depth+1, local_contrib=local_contrib, global_contrib=global_contrib, psi_priors=root['psi_priors'][i])
 
             local_contrib += ll_contrib + ass_contrib
             global_contrib += subtree_node_contrib + stick_contrib

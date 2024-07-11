@@ -117,8 +117,10 @@ class StructureSearch(object):
         self.birth(key, moves_per_tssb=moves_per_tssb)
 
         # Update parameters in n_epochs passes through the data, interleaving node updates with local batch updates
-        self.tree.learn_params(n_epochs, update_roots=update_roots, mc_samples=mc_samples, 
-                                step_size=step_size, memoized=memoized, update_outer_ass=update_outer_ass)
+        self.tree.learn_params(int(n_epochs/2), update_roots=update_roots, mc_samples=mc_samples, 
+                                step_size=step_size, memoized=memoized, update_outer_ass=update_outer_ass, ass_anneal=.1)
+        self.tree.learn_params(int(n_epochs/2), update_roots=update_roots, mc_samples=mc_samples, 
+                                step_size=step_size, memoized=memoized, update_outer_ass=update_outer_ass, ass_anneal=1.)        
         self.tree.compute_elbo(memoized=memoized)
         self.proposed_tree = deepcopy(self.tree)
         
@@ -128,13 +130,18 @@ class StructureSearch(object):
 
     def birth(self, key, moves_per_tssb=1):
         """
-        Spawn `moves_per_tssb=1` nodes 
+        Spawn `moves_per_tssb=1` nodes. First select targets, and then add nodes. Gives a more local search
         """
         n_births = self.proposed_tree.n_nodes * moves_per_tssb
+        targets = []
         for _ in range(n_births):
             key, subkey = jax.random.split(key)
             u = jax.random.uniform(subkey)
-            target = self.proposed_tree.get_node(u, key=subkey, uniform=True)
+            target = self.proposed_tree.get_node(u, key=subkey, uniform=True, variational=True)
+            targets.append(target)
+        
+        for target in targets:
+            key, subkey = jax.random.split(key)
             new_node = target['node'].tssb.add_node(target, seed=int(subkey[1]))
             if jax.random.bernoulli(subkey):
                 new_node.init_new_node_kernel()

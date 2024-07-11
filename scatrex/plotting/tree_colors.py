@@ -2,6 +2,7 @@
 import matplotlib
 import seaborn as sns
 from colorsys import rgb_to_hls
+from . import constants
 
 def adjust_color(rgba, lightness_scale, saturation_scale):
     # scale the lightness (The values should be between 0 and 1)
@@ -36,3 +37,25 @@ def make_tree_colormap(tree, base_color, brightness_mult=0.7, saturation_mult=1.
             child['color'] = color
             descend(child, depth=depth+1, breadth=breadth)
     descend(tree)
+
+
+def make_color_palette(n_categories):
+    """
+    Adapted from scanpy.plotting._utils._set_default_colors_for_categorical_obs
+    """
+    from scanpy.plotting import palettes
+    # check if default matplotlib palette has enough colors
+    if n_categories <= len(constants.CLONES_PAL):
+        palette = constants.CLONES_PAL
+    elif n_categories <= 20:
+        palette = palettes.default_20
+    elif n_categories <= 28:
+        palette = palettes.default_28
+    elif n_categories <= len(palettes.default_102):  # 103 colors
+        palette = palettes.default_102
+    else:
+        palette = ["grey" for _ in range(n_categories)]
+    
+    return palette
+
+

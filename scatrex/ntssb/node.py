@@ -234,3 +234,11 @@ class AbstractNode(ABC):
     
     def reset_variational_state(self, **kwargs):
         return
+    
+    def reset_opt(self):
+        # For adaptive optimization
+        self.direction_states = self.initialize_direction_states()
+        self.state_states = self.initialize_state_states()
+
+    def init_new_node_kernel(self, **kwargs):
+        return

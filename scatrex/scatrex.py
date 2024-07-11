@@ -183,7 +183,8 @@ class SCATrEx(object):
         # Initialize MC samples
         self.ntssb.reset_variational_kernels(log_std=-4)
         self.ntssb.sample_variational_distributions(n_samples=mc_samples)
-        self.ntssb.update_sufficient_statistics()
+        for batch_idx in range(len(self.ntssb.batch_indices)):
+            self.ntssb.update_sufficient_statistics(batch_idx=batch_idx)
 
         # Update cell, gene scales, assignments
         self.ntssb.learn_globals(n_epochs=n_epochs, step_size=step_size,mc_samples=mc_samples,
@@ -207,7 +208,8 @@ class SCATrEx(object):
         self.ntssb.root['node'].root['node'].reset_variational_noise_factors()
         self.ntssb.reset_variational_kernels(log_std=0.)
         self.ntssb.sample_variational_distributions(n_samples=mc_samples)
-        self.ntssb.update_sufficient_statistics()
+        for batch_idx in range(len(self.ntssb.batch_indices)):
+            self.ntssb.update_sufficient_statistics(batch_idx=batch_idx)
         self.ntssb.learn_roots(n_epochs, memoized=False, mc_samples=mc_samples, step_size=step_size, return_trace=False)
 
         # Update assignments
@@ -232,7 +234,8 @@ class SCATrEx(object):
         self.ntssb.set_tssb_params(dp_alpha=.1, dp_gamma=.1,)
         self.ntssb.root['node'].root['node'].reset_variational_noise_factors()
         self.ntssb.sample_variational_distributions(n_samples=mc_samples)
-        self.ntssb.update_sufficient_statistics()
+        for batch_idx in range(len(self.ntssb.batch_indices)):
+            self.ntssb.update_sufficient_statistics(batch_idx=batch_idx)
         self.ntssb.compute_elbo(memoized=memoized)
         # Cleanup parameters: learn noise and update all parameters (including roots) except scales, no memoization needed
         self.ntssb.learn_model(n_epochs=n_epochs, update_ass=True, update_globals=True,
@@ -307,7 +310,7 @@ class SCATrEx(object):
                                 update_roots=False)
         self.ntssb = deepcopy(searcher.tree)        
 
-    def update_anndata(self, adata):
+    def update_anndata(self, adata, prefix='scatrex'):
         """
         Use learned NTSSB to add annotations to input AnnData object. 
         Cells and genes must be in same order as the data in NTSSB!
@@ -320,27 +323,27 @@ class SCATrEx(object):
         for i in range(adata.shape[0]):
             obs_node_assignments.append(self.ntssb.assignments[i].tssb.label)
         
-        adata.obs["scatrex_node"] = node_assignments
-        adata.obs["scatrex_obs_node"] = obs_node_assignments
+        adata.obs[f"{prefix}_node"] = node_assignments
+        adata.obs[f"{prefix}_obs_node"] = obs_node_assignments
 
-        adata.uns["scatrex_node_colors"] = [
+        adata.uns[f"{prefix}_node_colors"] = [
             self.observed_tree.tree_dict[node.split("-")[0]]["color"]
-            for node in np.unique(adata.obs["scatrex_node"])
+            for node in np.unique(adata.obs[f"{prefix}_node"])
         ]
-        adata.uns["scatrex_obs_node_colors"] = [
+        adata.uns[f"{prefix}_obs_node_colors"] = [
             self.observed_tree.tree_dict[node]["color"]
-            for node in np.unique(adata.obs["scatrex_obs_node"])
+            for node in np.unique(adata.obs[f"{prefix}_obs_node"])
         ]
 
         labels = list(self.observed_tree.tree_dict.keys())
         sizes = [
-            np.count_nonzero(adata.obs["scatrex_obs_node"] == label)
+            np.count_nonzero(adata.obs[f"{prefix}_obs_node"] == label)
             for label in labels
         ]
-        adata.uns["scatrex_estimated_frequencies"] = dict(zip(labels, sizes))
+        adata.uns[f"{prefix}_estimated_frequencies"] = dict(zip(labels, sizes))
 
         if self.ntssb.root["node"].root['node'].n_genes == adata.shape[1]:
-            adata.layers["scatrex_noise"] = (
+            adata.layers[f"{prefix}_noise"] = (
                 self.ntssb.root["node"]
                 .root["node"]
                 .variational_parameters["local"]["obs_weights"]['mean']
@@ -359,8 +362,8 @@ class SCATrEx(object):
             mean_mat = np.zeros(adata.shape)
             nodes = np.array(self.ntssb.get_nodes())
             nodes_labels = np.array([node.label for node in nodes])
-            for node_id in np.unique(adata.obs["scatrex_node"]):
-                cells = np.where(adata.obs["scatrex_node"] == node_id)[0]
+            for node_id in np.unique(adata.obs[f"{prefix}_node"]):
+                cells = np.where(adata.obs[f"{prefix}_node"] == node_id)[0]
                 node = nodes[np.where(node_id == nodes_labels)[0][0]]
                 pos = np.meshgrid(cells, genes_pos)
                 xi_mat[tuple(pos)] = (
@@ -383,13 +386,13 @@ class SCATrEx(object):
                     np.array(node.get_mean()).reshape(-1, 1)
                     * np.ones((len(cells), len(genes_pos))).T
                 )
-            adata.layers["scatrex_cell_states"] = xi_mat
-            adata.layers["scatrex_cell_state_events"] = om_mat
-            adata.layers["scatrex_cnvs"] = cnv_mat
-            adata.layers["scatrex_mean"] = mean_mat
+            adata.layers[f"{prefix}_cell_states"] = xi_mat
+            adata.layers[f"{prefix}_cell_state_events"] = om_mat
+            adata.layers[f"{prefix}_cnvs"] = cnv_mat
+            adata.layers[f"{prefix}_mean"] = mean_mat
 
     def learn(self, adata, observed_tree=None, counts_layer='counts', allow_subtrees=True, allow_root_subtrees=False, root_cells=None, 
-              batch_size=None, seed=42, weights_variance=1., update_outer_ass=False,
+              batch_size=None, seed=42, weights_concentration=1., update_outer_ass=False,
               n_epochs=100, mc_samples=10, step_size=0.01, n_iters=10, n_merges=10, n_swaps=10, memoized=True, dp_alpha=.1, dp_gamma=.1):
         """
         Complete NTSSB learning procedure. 
@@ -401,7 +404,7 @@ class SCATrEx(object):
         self.ntssb = NTSSB(self.observed_tree, 
                            node_hyperparams=self.model_args, 
                            seed=seed,
-                           weights_variance=weights_variance)
+                           weights_concentration=weights_concentration)
         self.ntssb.add_data(np.array(adata.layers[counts_layer]))
         self.ntssb.make_batches(batch_size, seed)
         self.ntssb.reset_variational_parameters()
@@ -739,12 +742,12 @@ class SCATrEx(object):
                 assignments[others_idx] = ids[diploid_clone_idx]
 
         assignments = np.array(assignments)
-        self.adata.obs["node"] = assignments.astype(str)
-        self.adata.obs["obs_node"] = assignments.astype(str)
+        self.adata.obs["corr_node"] = assignments.astype(str)
+        self.adata.obs["corr_obs_node"] = assignments.astype(str)
 
         labels = list(self.observed_tree.tree_dict.keys())
         sizes = [
-            np.count_nonzero(self.adata.obs["obs_node"] == label) for label in labels
+            np.count_nonzero(self.adata.obs["corr_obs_node"] == label) for label in labels
         ]
         self.adata.uns["corr_estimated_frequencies"] = dict(zip(labels, sizes))
 
@@ -2024,7 +2027,7 @@ class SCATrEx(object):
             rna_nodes = np.array(rna_nodes)[s]
             rna_nodes_labels = np.array(nodes_labels)[s]
             rna_props = np.array(rna_props)[s]
-            rna_colors = [node.tssb.color for node in rna_nodes]
+            rna_colors = [node.color for node in rna_nodes]
             if dna and "root" not in rna_nodes_labels:
                 # Add root
                 rna_nodes_labels = list(rna_nodes_labels)

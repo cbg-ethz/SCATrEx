@@ -568,7 +568,9 @@ class CNANode(AbstractNode):
     def get_noise_sample(self, idx):
         obs_weights = self.get_obs_weights_sample()[:,idx]
         factor_weights = self.get_factor_weights_sample()
-        return jax.vmap(sample_prod, in_axes=(0,0))(obs_weights,factor_weights)
+        jax.vmap(obs_weights,  factor_weights)
+        return jnp.einsum('snk,skg->sng', obs_weights,factor_weights)
+        # return jax.vmap(sample_prod, in_axes=(0,0))(obs_weights,factor_weights)
 
     def get_direction_sample(self):
         return self.samples[1]

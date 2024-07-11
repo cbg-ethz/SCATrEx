@@ -193,9 +193,9 @@ class TrajectoryNode(AbstractNode):
 
         # Sticks
         self.variational_parameters["delta_1"] = 1.
-        self.variational_parameters["delta_2"] = 1.
+        self.variational_parameters["delta_2"] = (self.tssb.alpha_decay**self.depth) * self.tssb.dp_alpha 
         self.variational_parameters["sigma_1"] = 1.
-        self.variational_parameters["sigma_2"] = 1.
+        self.variational_parameters["sigma_2"] = self.tssb.dp_gamma
 
         # Pivots
         self.variational_parameters["q_rho"] = np.ones(len(self.tssb.children_root_nodes),)
@@ -224,12 +224,12 @@ class TrajectoryNode(AbstractNode):
             # Kernel
             radius = self.node_hyperparams['loc_mean']
 
-            if "angle" not in parent.variational_parameters["kernel"]:
+            if "direction" not in parent.variational_parameters["kernel"]:
                 mean_angle = jnp.array([parent.observed_parameters[1]])
                 parent_loc = jnp.array(parent.observed_parameters[0])
             else:
-                mean_angle = parent.variational_parameters["kernel"]["angle"]["mean"]
-                parent_loc = parent.variational_parameters["kernel"]["loc"]["mean"]
+                mean_angle = parent.variational_parameters["kernel"]["direction"]["mean"]
+                parent_loc = parent.variational_parameters["kernel"]["state"]["mean"]
 
             rng = np.random.default_rng(self.seed+2)
             mean_angle = rng.vonmises(mean_angle, self.node_hyperparams['angle_concentration'] * self.depth)
@@ -237,11 +237,11 @@ class TrajectoryNode(AbstractNode):
             rng = np.random.default_rng(self.seed+3)
             mean_loc = rng.normal(mean_loc, self.node_hyperparams['loc_variance'])
             self.variational_parameters["kernel"] = {
-                'angle': {'mean': jnp.array(mean_angle), 'log_kappa': jnp.array([-1.])},
-                'loc': {'mean': jnp.array(mean_loc), 'log_std': jnp.array([-1., -1.])}
+                'direction': {'mean': jnp.array(mean_angle), 'log_kappa': jnp.array([-1.])},
+                'state': {'mean': jnp.array(mean_loc), 'log_std': jnp.array([-1., -1.])}
             }
-            self.params = [self.variational_parameters["kernel"]["loc"]["mean"], 
-                        self.variational_parameters["kernel"]["angle"]["mean"]]
+            self.params = [self.variational_parameters["kernel"]["state"]["mean"], 
+                        self.variational_parameters["kernel"]["direction"]["mean"]]
 
     def set_learned_parameters(self):
         if self.parent() is None and self.tssb.parent() is None:
@@ -251,8 +251,8 @@ class TrajectoryNode(AbstractNode):
         elif self.parent() is None:
             self.params = self.observed_parameters
         else:
-            self.params = [self.variational_parameters["kernel"]["loc"]["mean"], 
-                        self.variational_parameters["kernel"]["angle"]["mean"]]
+            self.params = [self.variational_parameters["kernel"]["state"]["mean"], 
+                        self.variational_parameters["kernel"]["direction"]["mean"]]
 
     def reset_sufficient_statistics(self, num_batches=1):
         self.suff_stats = {
@@ -543,14 +543,14 @@ class TrajectoryNode(AbstractNode):
             return self.compute_root_entropy()
         
         # Angle
-        angle_logpdf = tfd.VonMises(np.exp(self.variational_parameters['kernel']['angle']['mean']),
-                                    jnp.exp(self.variational_parameters['kernel']['angle']['log_kappa'])
+        angle_logpdf = tfd.VonMises(np.exp(self.variational_parameters['kernel']['direction']['mean']),
+                                    jnp.exp(self.variational_parameters['kernel']['direction']['log_kappa'])
                                     ).entropy()        
         angle_logpdf = jnp.sum(angle_logpdf) 
 
         # Location
-        loc_logpdf = tfd.Normal(self.variational_parameters['kernel']['loc']['mean'], 
-                                jnp.exp(self.variational_parameters['kernel']['loc']['log_std'])
+        loc_logpdf = tfd.Normal(self.variational_parameters['kernel']['state']['mean'], 
+                                jnp.exp(self.variational_parameters['kernel']['state']['log_std'])
                                 ).entropy()
         loc_logpdf = jnp.sum(loc_logpdf) # Sum across features
 
@@ -595,24 +595,28 @@ class TrajectoryNode(AbstractNode):
     
     def state_sample_and_grad(self, key, n_samples):
         """Sample and take gradient of state"""
-        mu = self.variational_parameters['kernel']['loc']['mean']
-        log_std = self.variational_parameters['kernel']['loc']['log_std']
+        mu = self.variational_parameters['kernel']['state']['mean']
+        log_std = self.variational_parameters['kernel']['state']['log_std']
         key, *sub_keys = jax.random.split(key, n_samples+1)
         return key, mc_sample_loc_val_and_grad(jnp.array(sub_keys), mu, log_std)
 
     def direction_sample_and_grad(self, key, n_samples):
         """Sample and take gradient of direction"""
-        mu = self.variational_parameters['kernel']['angle']['mean']
-        log_kappa = self.variational_parameters['kernel']['angle']['log_kappa']
+        mu = self.variational_parameters['kernel']['direction']['mean']
+        log_kappa = self.variational_parameters['kernel']['direction']['log_kappa']
         key, *sub_keys = jax.random.split(key, n_samples+1)
         return key, mc_sample_angle_val_and_grad(jnp.array(sub_keys), mu, log_kappa)
 
     def state_sample_and_grad(self, key, n_samples):
         """Sample and take gradient of state"""
-        mu = self.variational_parameters['kernel']['loc']['mean']
-        log_std = self.variational_parameters['kernel']['loc']['log_std']
+        mu = self.variational_parameters['kernel']['state']['mean']
+        log_std = self.variational_parameters['kernel']['state']['log_std']
         key, *sub_keys = jax.random.split(key, n_samples+1)
         return key, mc_sample_loc_val_and_grad(jnp.array(sub_keys), mu, log_std)
+
+    def compute_direction_prior_grad(self, alpha, parent_alpha, parent_loc):
+        """Gradient of logp(alpha|parent_alpha,parent_loc)"""
+        return self.compute_direction_prior_grad_wrt_direction(alpha, parent_alpha, parent_loc)
 
     def compute_direction_prior_grad_wrt_direction(self, alpha, parent_alpha, parent_loc):
         """Gradient of logp(alpha|parent_alpha) wrt this alpha"""
@@ -622,6 +626,14 @@ class TrajectoryNode(AbstractNode):
     def compute_direction_prior_grad_wrt_state(self, alpha, parent_alpha, parent_loc):
         """Gradient of logp(alpha|parent_alpha) wrt this alpha"""
         return 0.
+
+    def compute_direction_prior_child_grad_wrt_state(self, child_direction, direction, state):
+        """Gradient of logp(child_alpha|alpha) wrt this direction"""
+        return 0.
+
+    def compute_direction_prior_child_grad_wrt_direction(self, child_direction, direction, state):
+        """Gradient of logp(child_alpha|alpha) wrt this direction"""
+        return self.compute_direction_prior_child_grad(child_direction, direction)
 
     def compute_direction_prior_child_grad(self, child_alpha, alpha):
         """Gradient of logp(child_alpha|alpha) wrt this alpha"""
@@ -654,14 +666,14 @@ class TrajectoryNode(AbstractNode):
 
     def compute_direction_entropy_grad(self):
         """Gradient of logq(alpha) wrt this alpha"""
-        mu = self.variational_parameters['kernel']['angle']['mean']
-        log_kappa = self.variational_parameters['kernel']['angle']['log_kappa']        
+        mu = self.variational_parameters['kernel']['direction']['mean']
+        log_kappa = self.variational_parameters['kernel']['direction']['log_kappa']        
         return angle_logq_val_and_grad(mu, log_kappa)[1]
 
     def compute_state_entropy_grad(self):
         """Gradient of logq(psi) wrt this psi"""
-        mu = self.variational_parameters['kernel']['loc']['mean']
-        log_std = self.variational_parameters['kernel']['loc']['log_std']        
+        mu = self.variational_parameters['kernel']['state']['mean']
+        log_std = self.variational_parameters['kernel']['state']['log_std']        
         return loc_logq_val_and_grad(mu, log_std)[1]
 
     def compute_ll_state_grad(self, x, weights, psi):
@@ -697,20 +709,20 @@ class TrajectoryNode(AbstractNode):
     def update_direction_params(self, direction_params_grad, direction_sample_grad, direction_params_entropy_grad, step_size=0.001):
         mc_grad = jnp.mean(direction_params_grad[0] * direction_sample_grad, axis=0)
         angle_mean_grad = mc_grad + direction_params_entropy_grad[0]
-        self.variational_parameters['kernel']['angle']['mean'] += angle_mean_grad * step_size
+        self.variational_parameters['kernel']['direction']['mean'] += angle_mean_grad * step_size
 
         mc_grad = jnp.mean(direction_params_grad[1] * direction_sample_grad, axis=0)
         angle_log_kappa_grad = mc_grad + direction_params_entropy_grad[1]
-        self.variational_parameters['kernel']['angle']['log_kappa'] += angle_log_kappa_grad * step_size
+        self.variational_parameters['kernel']['direction']['log_kappa'] += angle_log_kappa_grad * step_size
 
     def update_state_params(self, state_params_grad, state_sample_grad, state_params_entropy_grad, step_size=0.001):
         mc_grad = jnp.mean(state_params_grad[0] * state_sample_grad, axis=0)
         loc_mean_grad = mc_grad + state_params_entropy_grad[0]
-        self.variational_parameters['kernel']['loc']['mean'] += loc_mean_grad * step_size
+        self.variational_parameters['kernel']['state']['mean'] += loc_mean_grad * step_size
 
         mc_grad = jnp.mean(state_params_grad[1] * state_sample_grad, axis=0)
         loc_log_std_grad = mc_grad + state_params_entropy_grad[1]
-        self.variational_parameters['kernel']['loc']['log_std'] += loc_log_std_grad * step_size
+        self.variational_parameters['kernel']['state']['log_std'] += loc_log_std_grad * step_size
 
     def update_local_params(self, idx, local_params_grad, local_sample_grad, local_params_entropy_grad, ent_anneal=1., step_size=0.001):
         mc_grad = jnp.mean(local_params_grad[0] * local_sample_grad, axis=0)
@@ -770,3 +782,80 @@ class TrajectoryNode(AbstractNode):
 
         states = (state1, state2)
         return states
+    
+    def initialize_state_states(self):
+        m = jnp.zeros((self.n_genes,))
+        v = jnp.zeros((self.n_genes,))
+        state1 = (m,v)
+        m = jnp.zeros((self.n_genes,))
+        v = jnp.zeros((self.n_genes,))
+        state2 = (m,v)
+        states = (state1, state2)
+        return states    
+
+    def update_state_adaptive(self, state_params_grad, state_sample_grad, state_params_entropy_grad, i, b1=0.9,
+        b2=0.999, eps=1e-8, step_size=0.001):
+        states = self.state_states
+
+        mc_grad = jnp.mean(state_params_grad[0] * state_sample_grad, axis=0)
+        param_grad = mc_grad + state_params_entropy_grad[0]
+        
+        m, v = states[0]
+        m = (1 - b1) * param_grad + b1 * m  # First  moment estimate.
+        v = (1 - b2) * jnp.square(param_grad) + b2 * v  # Second moment estimate.
+        mhat = m / (1 - jnp.asarray(b1, m.dtype) ** (i + 1))  # Bias correction.
+        vhat = v / (1 - jnp.asarray(b2, m.dtype) ** (i + 1))
+        state1 = (m, v)
+        self.variational_parameters['kernel']['state']['mean'] += step_size * mhat / (jnp.sqrt(vhat) + eps)
+
+        mc_grad = jnp.mean(state_params_grad[1] * state_sample_grad, axis=0)
+        param_grad = mc_grad + state_params_entropy_grad[1]
+        
+        m, v = states[1]
+        m = (1 - b1) * param_grad + b1 * m  # First  moment estimate.
+        v = (1 - b2) * jnp.square(param_grad) + b2 * v  # Second moment estimate.
+        mhat = m / (1 - jnp.asarray(b1, m.dtype) ** (i + 1))  # Bias correction.
+        vhat = v / (1 - jnp.asarray(b2, m.dtype) ** (i + 1))
+        state2 = (m, v)
+        self.variational_parameters['kernel']['state']['log_std'] += step_size * mhat / (jnp.sqrt(vhat) + eps)
+
+        states = (state1, state2)
+        self.state_states = states
+    
+    def initialize_direction_states(self):
+        m = jnp.zeros((1,))
+        v = jnp.zeros((1,))
+        state1 = (m,v)
+        m = jnp.zeros((1,))
+        v = jnp.zeros((1,))
+        state2 = (m,v)
+        states = (state1, state2)
+        return states   
+
+    def update_direction_adaptive(self, direction_params_grad, direction_sample_grad, direction_params_entropy_grad, i, b1=0.9,
+        b2=0.999, eps=1e-8, step_size=0.001):
+        states = self.direction_states
+        mc_grad = jnp.mean(direction_params_grad[0] * direction_sample_grad, axis=0)
+        param_grad = mc_grad + direction_params_entropy_grad[0]
+        
+        m, v = states[0]
+        m = (1 - b1) * param_grad + b1 * m  # First  moment estimate.
+        v = (1 - b2) * jnp.square(param_grad) + b2 * v  # Second moment estimate.
+        mhat = m / (1 - jnp.asarray(b1, m.dtype) ** (i + 1))  # Bias correction.
+        vhat = v / (1 - jnp.asarray(b2, m.dtype) ** (i + 1))
+        state1 = (m, v)
+        self.variational_parameters['kernel']['direction']['mean'] += step_size * mhat / (jnp.sqrt(vhat) + eps)
+
+        mc_grad = jnp.mean(direction_params_grad[1] * direction_sample_grad, axis=0)
+        param_grad = mc_grad + direction_params_entropy_grad[1]
+        
+        m, v = states[1]
+        m = (1 - b1) * param_grad + b1 * m  # First  moment estimate.
+        v = (1 - b2) * jnp.square(param_grad) + b2 * v  # Second moment estimate.
+        mhat = m / (1 - jnp.asarray(b1, m.dtype) ** (i + 1))  # Bias correction.
+        vhat = v / (1 - jnp.asarray(b2, m.dtype) ** (i + 1))
+        state2 = (m, v)
+        self.variational_parameters['kernel']['direction']['log_kappa'] += step_size * mhat / (jnp.sqrt(vhat) + eps)
+
+        states = (state1, state2)
+        self.direction_states = states    
