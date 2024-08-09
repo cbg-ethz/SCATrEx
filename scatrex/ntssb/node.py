@@ -232,13 +232,11 @@ class AbstractNode(ABC):
         top_obs = idx[np.where(lls > np.percentile(lls, q=q))[0]]
         return top_obs
     
-    def reset_variational_state(self, **kwargs):
-        return
-    
     def reset_opt(self):
         # For adaptive optimization
         self.direction_states = self.initialize_direction_states()
         self.state_states = self.initialize_state_states()
+        self.event_states = self.initialize_event_states()
 
     def init_new_node_kernel(self, **kwargs):
         return

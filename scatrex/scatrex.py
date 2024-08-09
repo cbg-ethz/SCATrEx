@@ -674,7 +674,7 @@ class SCATrEx(object):
         ]
         ids = [clone for clone in self.observed_tree.tree_dict]
         clones = [
-            self.observed_tree.tree_dict[clone]["params"]
+            self.observed_tree.tree_dict[clone]["param"]
             for clone in self.observed_tree.tree_dict
         ]
         clones = np.array(clones)

@@ -22,9 +22,10 @@ class TrajectoryNode(AbstractNode):
     def __init__(
         self,
         observed_parameters, # subtree root location and angle
-        root_loc_mean=2.,
-        loc_mean=.5,
+        root_event_mean=2.,
+        event_mean=.5,
         angle_concentration=10.,
+        event_concentration=.1,
         loc_variance=.1,
         obs_variance=.1,
         n_factors=2,
@@ -45,9 +46,10 @@ class TrajectoryNode(AbstractNode):
         # Node hyperparameters
         if self.parent() is None:
             self.node_hyperparams = dict(
-                root_loc_mean=root_loc_mean,
+                root_event_mean=root_event_mean,
                 angle_concentration=angle_concentration,
-                loc_mean=loc_mean,
+                event_mean=event_mean,
+                event_concentration=event_concentration,
                 loc_variance=loc_variance,
                 obs_variance=obs_variance,
                 n_factors=n_factors,
@@ -102,9 +104,10 @@ class TrajectoryNode(AbstractNode):
 
     def reset_parameters(
         self,
-        root_loc_mean=2.,
-        loc_mean=.5,
+        root_event_mean=2.,
+        event_mean=.5,
         angle_concentration=10.,
+        event_concentration=.1,
         loc_variance=.1,
         obs_variance=.1,
         n_factors=2,
@@ -112,9 +115,10 @@ class TrajectoryNode(AbstractNode):
         factor_variance=1.,
     ):
         self.node_hyperparams = dict(
-            root_loc_mean=root_loc_mean,
+            root_event_mean=root_event_mean,
             angle_concentration=angle_concentration,
-            loc_mean=loc_mean,
+            event_mean=event_mean,
+            event_concentration=event_concentration,
             loc_variance=loc_variance,
             obs_variance=obs_variance,
             n_factors=n_factors,
@@ -153,16 +157,18 @@ class TrajectoryNode(AbstractNode):
             self.params = self.observed_parameters # loc and angle
         else:  # Non-root node: inherits everything from upstream node
             self.depth = parent.depth + 1
-            loc_mean = self.node_hyperparams['loc_mean']
+            event_mean = self.node_hyperparams['event_mean']
+            event_concentration = self.node_hyperparams['event_concentration']
             angle_concentration = self.node_hyperparams['angle_concentration'] * self.depth
             rng = np.random.default_rng(seed=self.seed)
             sampled_angle = rng.vonmises(parent.params[1], angle_concentration)
-            sampled_loc = rng.normal(
-                loc_mean,
+            sampled_event = rng.gamma(event_concentration, event_mean/event_concentration)
+            state_mean = parent.params[0] + np.array([np.cos(sampled_angle)*np.abs(sampled_event), np.sin(sampled_angle)*np.abs(sampled_event)])
+            sampled_state = rng.normal(
+                state_mean,
                 self.node_hyperparams['loc_variance']
             )
-            sampled_loc = parent.params[0] + np.array([np.cos(sampled_angle)*np.abs(sampled_loc), np.sin(sampled_angle)*np.abs(sampled_loc)])
-            self.params = [sampled_loc, sampled_angle]
+            self.params = [sampled_state, sampled_angle, sampled_event]
         
         self.set_mean()
             
@@ -222,26 +228,29 @@ class TrajectoryNode(AbstractNode):
             return # no variational parameters for root nodes of TSSBs in this model
         else: # only the non-root nodes have variational parameters
             # Kernel
-            radius = self.node_hyperparams['loc_mean']
-
             if "direction" not in parent.variational_parameters["kernel"]:
                 mean_angle = jnp.array([parent.observed_parameters[1]])
-                parent_loc = jnp.array(parent.observed_parameters[0])
+                parent_state = jnp.array(parent.observed_parameters[0])
             else:
                 mean_angle = parent.variational_parameters["kernel"]["direction"]["mean"]
-                parent_loc = parent.variational_parameters["kernel"]["state"]["mean"]
+                parent_state = parent.variational_parameters["kernel"]["state"]["mean"]
+
+            event_concentration = self.node_hyperparams['event_concentration'] * 10.
 
             rng = np.random.default_rng(self.seed+2)
             mean_angle = rng.vonmises(mean_angle, self.node_hyperparams['angle_concentration'] * self.depth)
-            mean_loc = parent_loc + jnp.array([np.cos(mean_angle[0])*radius, jnp.sin(mean_angle[0])*radius])
+            mean_event = rng.gamma(event_concentration, self.node_hyperparams['event_mean']/event_concentration)
+            mean_state = parent_state + jnp.array([np.cos(mean_angle[0])*mean_event, jnp.sin(mean_angle[0])*mean_event])
             rng = np.random.default_rng(self.seed+3)
-            mean_loc = rng.normal(mean_loc, self.node_hyperparams['loc_variance'])
+            mean_state = rng.normal(mean_state, self.node_hyperparams['loc_variance'])
             self.variational_parameters["kernel"] = {
                 'direction': {'mean': jnp.array(mean_angle), 'log_kappa': jnp.array([-1.])},
-                'state': {'mean': jnp.array(mean_loc), 'log_std': jnp.array([-1., -1.])}
+                'state': {'mean': jnp.array(mean_state), 'log_std': jnp.array([-1., -1.])},
+                'event': {'log_alpha': jnp.array([jnp.log(event_concentration)]), 'log_beta': jnp.array([jnp.log(event_concentration/mean_event)])}
             }
             self.params = [self.variational_parameters["kernel"]["state"]["mean"], 
-                        self.variational_parameters["kernel"]["direction"]["mean"]]
+                        self.variational_parameters["kernel"]["direction"]["mean"],
+                        jnp.exp(self.variational_parameters["kernel"]["event"]["log_alpha"]-self.variational_parameters["kernel"]["event"]["log_beta"])]
 
     def set_learned_parameters(self):
         if self.parent() is None and self.tssb.parent() is None:
@@ -252,7 +261,8 @@ class TrajectoryNode(AbstractNode):
             self.params = self.observed_parameters
         else:
             self.params = [self.variational_parameters["kernel"]["state"]["mean"], 
-                        self.variational_parameters["kernel"]["direction"]["mean"]]
+                        self.variational_parameters["kernel"]["direction"]["mean"],
+                        jnp.exp(self.variational_parameters["kernel"]["event"]["log_alpha"]-self.variational_parameters["kernel"]["event"]["log_beta"])]
 
     def reset_sufficient_statistics(self, num_batches=1):
         self.suff_stats = {
@@ -386,11 +396,14 @@ class TrajectoryNode(AbstractNode):
         factor_weights = self.get_factor_weights_sample()
         return jax.vmap(sample_prod, in_axes=(0,0))(obs_weights,factor_weights)
 
-    def get_direction_sample(self):
-        return self.samples[1]
-    
     def get_state_sample(self):
         return self.samples[0]
+
+    def get_direction_sample(self):
+        return self.samples[1]
+
+    def get_event_sample(self):
+        return self.samples[2]
 
     def get_prior_angle_concentration(self, depth=None):
         if depth is None:
@@ -455,13 +468,17 @@ class TrajectoryNode(AbstractNode):
             return self._sample_root_kernel(n_samples=n_samples, store=store)
         
         key = jax.random.PRNGKey(self.seed)
+        
+        key, sample_grad = self.state_sample_and_grad(key, n_samples=n_samples)
+        sampled_state, _ = sample_grad
+
         key, sample_grad = self.direction_sample_and_grad(key, n_samples=n_samples)
         sampled_angle, _ = sample_grad
-
-        key, sample_grad = self.state_sample_and_grad(key, n_samples=n_samples)
-        sampled_loc, _ = sample_grad
         
-        samples = [sampled_loc, sampled_angle]
+        key, sample_grad = self.event_sample_and_grad(key, n_samples=n_samples)
+        sampled_event, _ = sample_grad
+
+        samples = [sampled_state, sampled_angle, sampled_event]
         if store:
             self.samples = samples
         else:
@@ -469,11 +486,15 @@ class TrajectoryNode(AbstractNode):
 
     def _sample_root_kernel(self, n_samples=10, store=True):
         # In this model the root is just the known parameters, so just store n_samples copies of them to mimic a sample
+        observed_state = jnp.array([self.observed_parameters[0]]) # Observed location
         observed_angle = jnp.array([self.observed_parameters[1]]) # Observed angle
-        observed_loc = jnp.array([self.observed_parameters[0]]) # Observed location
+        observed_event = jnp.array([self.observed_parameters[2]]) # Observed event
+        
+        sampled_state = jnp.vstack(jnp.repeat(observed_state, n_samples, axis=0))
         sampled_angle = jnp.vstack(jnp.repeat(observed_angle, n_samples, axis=0))
-        sampled_loc = jnp.vstack(jnp.repeat(observed_loc, n_samples, axis=0))
-        samples = [sampled_loc, sampled_angle]
+        sampled_event = jnp.vstack(jnp.repeat(observed_event, n_samples, axis=0))
+
+        samples = [sampled_state, sampled_angle, sampled_event]
         if store:
             self.samples = samples
         else:
@@ -507,31 +528,41 @@ class TrajectoryNode(AbstractNode):
         angle_samples = self.get_direction_sample()
         angle_logpdf = mc_angle_logp_val_and_grad(angle_samples, prior_mean_angle, prior_angle_concentration)[0]
 
-        radius = self.node_hyperparams['loc_mean']
-        parent_loc = self.parent().get_state_sample() 
-        log_std = jnp.log(jnp.sqrt(self.node_hyperparams['loc_variance']))
-        loc_samples = self.get_state_sample()
-        loc_logpdf = mc_loc_logp_val_and_grad(loc_samples, parent_loc, angle_samples, log_std, radius)[0]
+        event_mean = self.node_hyperparams['event_mean']
+        event_concentration = self.node_hyperparams['event_concentration']
+        event_samples = self.get_event_sample()
+        event_logpdf = mc_event_logp_val_and_grad(event_samples, event_mean, event_concentration)[0]
 
-        return jnp.mean(angle_logpdf + loc_logpdf)
+        log_std = jnp.log(jnp.sqrt(self.node_hyperparams['loc_variance']))
+        state_samples = self.get_state_sample()
+        parent_state_samples = self.parent().get_state_sample() 
+        state_logpdf = mc_loc_logp_val_and_grad(state_samples, parent_state_samples, angle_samples, log_std, event_samples)[0]
+
+        return jnp.mean(state_logpdf + angle_logpdf + event_logpdf)
     
     def compute_root_direction_prior(self, parent_alpha):
         concentration = self.get_prior_angle_concentration()
         alpha = self.get_direction_sample()
         return jnp.mean(mc_angle_logp_val_and_grad(alpha, parent_alpha, concentration)[0])
     
+    def compute_root_event_prior(self):
+        event_concentration = self.node_hyperparams['event_concentration']
+        root_event_mean = self.node_hyperparams['event_mean']
+        return jnp.mean(mc_event_logp_val_and_grad(self.get_event_sample(), root_event_mean, event_concentration)[0])
+
     def compute_root_state_prior(self, parent_psi):
         log_std = jnp.log(jnp.sqrt(self.node_hyperparams['loc_variance']))
-        radius = self.node_hyperparams['root_loc_mean']
         psi = self.get_state_sample()
         alpha = self.get_direction_sample()
-        return jnp.mean(mc_loc_logp_val_and_grad(psi, parent_psi, alpha, log_std, radius)[0])
+        event = self.get_event_sample()
+        return jnp.mean(mc_loc_logp_val_and_grad(psi, parent_psi, alpha, log_std, event)[0])
 
     def compute_root_kernel_prior(self, samples):
         parent_alpha = samples[0]
         logp = self.compute_root_direction_prior(parent_alpha)
         parent_psi = samples[1]
         logp += self.compute_root_state_prior(parent_psi)
+        logp += self.compute_root_event_prior()        
         return logp
 
     def compute_root_prior(self):
@@ -542,19 +573,25 @@ class TrajectoryNode(AbstractNode):
         if parent is None:
             return self.compute_root_entropy()
         
+        # Location
+        state_logpdf = tfd.Normal(self.variational_parameters['kernel']['state']['mean'], 
+                                jnp.exp(self.variational_parameters['kernel']['state']['log_std'])
+                                ).entropy()
+        state_logpdf = jnp.sum(state_logpdf) # Sum across features
+
         # Angle
         angle_logpdf = tfd.VonMises(np.exp(self.variational_parameters['kernel']['direction']['mean']),
                                     jnp.exp(self.variational_parameters['kernel']['direction']['log_kappa'])
                                     ).entropy()        
         angle_logpdf = jnp.sum(angle_logpdf) 
 
-        # Location
-        loc_logpdf = tfd.Normal(self.variational_parameters['kernel']['state']['mean'], 
-                                jnp.exp(self.variational_parameters['kernel']['state']['log_std'])
-                                ).entropy()
-        loc_logpdf = jnp.sum(loc_logpdf) # Sum across features
+        # Event
+        event_logpdf = tfd.Gamma(np.exp(self.variational_parameters['kernel']['event']['log_alpha']),
+                                    jnp.exp(self.variational_parameters['kernel']['event']['log_beta'])
+                                    ).entropy()        
+        event_logpdf = jnp.sum(event_logpdf) 
 
-        return angle_logpdf + loc_logpdf
+        return state_logpdf + angle_logpdf + event_logpdf
     
     def compute_root_entropy(self):
         # In this model the root nodes have no unknown parameters
@@ -607,12 +644,12 @@ class TrajectoryNode(AbstractNode):
         key, *sub_keys = jax.random.split(key, n_samples+1)
         return key, mc_sample_angle_val_and_grad(jnp.array(sub_keys), mu, log_kappa)
 
-    def state_sample_and_grad(self, key, n_samples):
-        """Sample and take gradient of state"""
-        mu = self.variational_parameters['kernel']['state']['mean']
-        log_std = self.variational_parameters['kernel']['state']['log_std']
+    def event_sample_and_grad(self, key, n_samples):
+        """Sample and take gradient of event"""
+        log_alpha = self.variational_parameters['kernel']['event']['log_alpha']
+        log_beta = self.variational_parameters['kernel']['event']['log_beta']
         key, *sub_keys = jax.random.split(key, n_samples+1)
-        return key, mc_sample_loc_val_and_grad(jnp.array(sub_keys), mu, log_std)
+        return key, mc_sample_event_val_and_grad(jnp.array(sub_keys), log_alpha, log_beta)
 
     def compute_direction_prior_grad(self, alpha, parent_alpha, parent_loc):
         """Gradient of logp(alpha|parent_alpha,parent_loc)"""
@@ -640,29 +677,36 @@ class TrajectoryNode(AbstractNode):
         concentration = self.get_prior_angle_concentration(depth=self.depth+1)
         return mc_angle_logp_val_and_grad_wrt_parent(child_alpha, alpha, concentration)[1]
 
-    def compute_state_prior_grad(self, psi, parent_psi, alpha):
+    def compute_state_prior_grad(self, psi, parent_psi, alpha, event):
         """Gradient of logp(psi|parent_psi,new_alpha) wrt this psi"""
         log_std = jnp.log(jnp.sqrt(self.node_hyperparams['loc_variance']))
-        radius = self.node_hyperparams['loc_mean']
-        return mc_loc_logp_val_and_grad(psi, parent_psi, alpha, log_std, radius)[1]
+        return mc_loc_logp_val_and_grad(psi, parent_psi, alpha, log_std, event)[1]
 
-    def compute_state_prior_child_grad(self, child_psi, psi, child_alpha):
+    def compute_state_prior_child_grad(self, child_psi, psi, child_alpha, child_event):
+        """Gradient of logp(child_psi|psi,child_alpha,child_event) wrt this psi"""
+        log_std = jnp.log(jnp.sqrt(self.node_hyperparams['loc_variance']))
+        return mc_loc_logp_val_and_grad_wrt_parent(child_psi, psi, child_alpha, log_std, child_event)[1]
+
+    def compute_root_state_prior_child_grad(self, child_psi, psi, child_alpha, child_event):
         """Gradient of logp(child_psi|psi,child_alpha) wrt this psi"""
         log_std = jnp.log(jnp.sqrt(self.node_hyperparams['loc_variance']))
-        radius = self.node_hyperparams['loc_mean']
-        return mc_loc_logp_val_and_grad_wrt_parent(child_psi, psi, child_alpha, log_std, radius)[1]
+        return mc_loc_logp_val_and_grad_wrt_parent(child_psi, psi, child_alpha, log_std, child_event)[1]
 
-    def compute_root_state_prior_child_grad(self, child_psi, psi, child_alpha):
-        """Gradient of logp(child_psi|psi,child_alpha) wrt this psi"""
-        log_std = jnp.log(jnp.sqrt(self.node_hyperparams['loc_variance']))
-        radius = self.node_hyperparams['root_loc_mean']
-        return mc_loc_logp_val_and_grad_wrt_parent(child_psi, psi, child_alpha, log_std, radius)[1]
-
-    def compute_state_prior_grad_wrt_direction(self, psi, parent_psi, alpha):
+    def compute_state_prior_grad_wrt_direction(self, psi, parent_psi, alpha, event):
         """Gradient of logp(psi|parent_psi,alpha) wrt this alpha"""
         log_std = jnp.log(jnp.sqrt(self.node_hyperparams['loc_variance']))
-        radius = self.node_hyperparams['loc_mean']
-        return mc_loc_logp_val_and_grad_wrt_angle(psi, parent_psi, alpha, log_std, radius)[1]
+        return mc_loc_logp_val_and_grad_wrt_angle(psi, parent_psi, alpha, log_std, event)[1]
+
+    def compute_state_prior_grad_wrt_event(self, psi, parent_psi, alpha, event):
+        """Gradient of logp(psi|parent_psi,alpha) wrt this event"""
+        log_std = jnp.log(jnp.sqrt(self.node_hyperparams['loc_variance']))
+        return mc_loc_logp_val_and_grad_wrt_event(psi, parent_psi, alpha, log_std, event)[1]
+
+    def compute_event_prior_grad(self, event):
+        """Gradient of logp(event|parent_psi,new_alpha) wrt this psi"""
+        event_mean = self.node_hyperparams['event_mean']
+        event_concentration = self.node_hyperparams['event_concentration']
+        return mc_event_logp_val_and_grad(event, event_mean, event_concentration)[1]
 
     def compute_direction_entropy_grad(self):
         """Gradient of logq(alpha) wrt this alpha"""
@@ -675,6 +719,12 @@ class TrajectoryNode(AbstractNode):
         mu = self.variational_parameters['kernel']['state']['mean']
         log_std = self.variational_parameters['kernel']['state']['log_std']        
         return loc_logq_val_and_grad(mu, log_std)[1]
+
+    def compute_event_entropy_grad(self):
+        """Gradient of logq(mu) wrt this mu"""
+        log_alpha = self.variational_parameters['kernel']['event']['log_alpha']
+        log_beta = self.variational_parameters['kernel']['event']['log_beta']        
+        return event_logq_val_and_grad(log_alpha, log_beta)[1]
 
     def compute_ll_state_grad(self, x, weights, psi):
         """Gradient of logp(x|psi,noise) wrt this psi"""
@@ -714,6 +764,20 @@ class TrajectoryNode(AbstractNode):
         mc_grad = jnp.mean(direction_params_grad[1] * direction_sample_grad, axis=0)
         angle_log_kappa_grad = mc_grad + direction_params_entropy_grad[1]
         self.variational_parameters['kernel']['direction']['log_kappa'] += angle_log_kappa_grad * step_size
+
+    def update_event_params(self, event_params_grad, event_sample_grad, event_params_entropy_grad, step_size=0.001):
+        param = 'log_alpha'
+        param_idx = 0
+
+        mc_grad = jnp.mean(event_params_grad[param_idx] * event_sample_grad, axis=0)
+        g = mc_grad + event_params_entropy_grad[param_idx]
+        self.variational_parameters['kernel']['event'][param] += g * step_size
+
+        param = 'log_beta'
+        param_idx = 1
+        mc_grad = jnp.mean(event_params_grad[param_idx] * event_sample_grad, axis=0)
+        g = mc_grad + event_params_entropy_grad[param_idx]
+        self.variational_parameters['kernel']['event'][param] += g * step_size
 
     def update_state_params(self, state_params_grad, state_sample_grad, state_params_entropy_grad, step_size=0.001):
         mc_grad = jnp.mean(state_params_grad[0] * state_sample_grad, axis=0)
@@ -859,3 +923,54 @@ class TrajectoryNode(AbstractNode):
 
         states = (state1, state2)
         self.direction_states = states    
+
+    def initialize_event_states(self):
+        m = jnp.zeros((1,))
+        v = jnp.zeros((1,))
+        state1 = (m,v)
+        m = jnp.zeros((1,))
+        v = jnp.zeros((1,))
+        state2 = (m,v)
+        states = (state1, state2)
+        return states   
+
+    def update_event_adaptive(self, event_params_grad, event_sample_grad, event_params_entropy_grad, i, b1=0.9,
+        b2=0.999, eps=1e-8, step_size=0.001):
+        states = self.event_states
+
+        param = 'log_alpha'
+        param_idx = 0
+        mc_grad = jnp.mean(event_params_grad[param_idx] * event_sample_grad, axis=0)
+        param_grad = mc_grad + event_params_entropy_grad[param_idx]
+        
+        m, v = states[param_idx]
+        m = (1 - b1) * param_grad + b1 * m  # First  moment estimate.
+        v = (1 - b2) * jnp.square(param_grad) + b2 * v  # Second moment estimate.
+        mhat = m / (1 - jnp.asarray(b1, m.dtype) ** (i + 1))  # Bias correction.
+        vhat = v / (1 - jnp.asarray(b2, m.dtype) ** (i + 1))
+        state1 = (m, v)
+        self.variational_parameters['kernel']['event'][param] += step_size * mhat / (jnp.sqrt(vhat) + eps)
+
+        param = 'log_beta'
+        param_idx = 1
+        mc_grad = jnp.mean(event_params_grad[param_idx] * event_sample_grad, axis=0)
+        param_grad = mc_grad + event_params_entropy_grad[param_idx]
+        
+        m, v = states[param_idx]
+        m = (1 - b1) * param_grad + b1 * m  # First  moment estimate.
+        v = (1 - b2) * jnp.square(param_grad) + b2 * v  # Second moment estimate.
+        mhat = m / (1 - jnp.asarray(b1, m.dtype) ** (i + 1))  # Bias correction.
+        vhat = v / (1 - jnp.asarray(b2, m.dtype) ** (i + 1))
+        state2 = (m, v)
+        self.variational_parameters['kernel']['event'][param] += step_size * mhat / (jnp.sqrt(vhat) + eps)
+
+        states = (state1, state2)
+        self.event_states = states            
+
+
+    def update_event_and_angle(self):
+        parent_state = self.parent().variational_parameters['kernel']['state']['mean']
+        this_state = self.variational_parameters['kernel']['state']['mean']
+        direction_mean = jnp.arctan((this_state[0] - parent_state[0]) / (this_state[1] - parent_state[1]))
+        event_mean = (this_state[0] - parent_state[0]) / jnp.cos(direction_mean)
+        

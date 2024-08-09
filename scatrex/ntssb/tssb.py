@@ -87,6 +87,7 @@ class TSSB(object):
         self.ew = -1e6
         self.kl = -1e6
         self._data = set()
+        self.elbo = 0.
 
         self.n_nodes = 1
 
@@ -135,6 +136,21 @@ class TSSB(object):
         
         descend(self.root, param_dict)
         return param_dict
+
+    def get_node_dict(self):
+        self.node_dict = dict()
+
+        def descend(node):
+            self.node_dict[node.label] = dict()
+            if node.parent() is not None:
+                self.node_dict[node.label]["parent"] = node.parent().label
+            else:
+                self.node_dict[node.label]["parent"] = "NULL"
+            for child in list(node.children()):
+                descend(child)
+
+        descend(self.root["node"])
+        return self.node_dict
 
     def add_datum(self, id):
         self._data.add(id)
@@ -500,7 +516,35 @@ class TSSB(object):
 
         self.n_nodes -= 1
 
-    def compute_elbo(self, idx):
+    def prune_reattach(self, parent_node_root, source_node_root, target_parent_root, update_names=True):
+        """
+        TODO: Don't necessarily reattach as last child of target. Also for the births, maybe
+        """
+        # Move subtree
+        source_node_root['node'].set_parent(target_parent_root['node'])
+
+        # Update dict: copy dict into new parent
+        target_parent_root["children"].append(source_node_root)
+        target_parent_root["sticks"] = np.vstack([target_parent_root["sticks"], 1.0])
+
+        # Remove dict from previous parent
+        children_nodes = np.array([r['node'] for r in parent_node_root['children']])
+        tokeep = np.where(children_nodes != source_node_root['node'])[0].astype(int).ravel()
+        parent_node_root["sticks"] = parent_node_root["sticks"][tokeep]
+        parent_node_root["children"] = list(
+            np.array(parent_node_root["children"])[tokeep]
+        )
+
+        if update_names:
+            self.set_node_names(root_name=self.label)
+
+    def compute_elbo(self, memoized=True, batch_idx=None, **kwargs):
+        if memoized:
+            return self.compute_elbo_suff()
+        else:
+            return self.compute_elbo_batch(batch_idx)
+
+    def compute_elbo_batch(self, idx):
         """
         Compute the ELBO of the model in a tree traversal, abstracting away the likelihood and kernel specific functions
         for the model. The seed is used for MC sampling from the variational distributions for which Eq[logp] is not analytically
@@ -580,7 +624,7 @@ class TSSB(object):
             for child in root['children']:
                 # Auxiliary quantities
                 E_log_psi = E_log_beta(child['node'].variational_parameters['sigma_1'], child['node'].variational_parameters['sigma_2'])
-                child['node'].variational_parameters['E_log_phi'] = E_log_psi + sum_E_log_1_psi
+                child['node'].variational_parameters['E_log_phi'] = root['node'].variational_parameters['E_log_phi'] + E_log_psi + sum_E_log_1_psi
                 E_log_1_psi = E_log_1_beta(child['node'].variational_parameters['sigma_1'], child['node'].variational_parameters['sigma_2'])
                 sum_E_log_1_psi += E_log_1_psi
 
@@ -593,7 +637,10 @@ class TSSB(object):
             return ll_contrib, ass_contrib, global_contrib
 
         self.n_nodes = 0
-        return descend(self.root)
+        ll_contrib, ass_contrib, global_contrib = descend(self.root)
+
+        self.elbo = ll_contrib + ass_contrib + global_contrib
+        return ll_contrib, ass_contrib, global_contrib
 
     def compute_elbo_suff(self):
         """
@@ -672,7 +719,7 @@ class TSSB(object):
             for child in root['children']:
                 # Auxiliary quantities
                 E_log_psi = E_log_beta(child['node'].variational_parameters['sigma_1'], child['node'].variational_parameters['sigma_2'])
-                child['node'].variational_parameters['E_log_phi'] = E_log_psi + sum_E_log_1_psi
+                child['node'].variational_parameters['E_log_phi'] = root['node'].variational_parameters['E_log_phi'] + E_log_psi + sum_E_log_1_psi
                 E_log_1_psi = E_log_1_beta(child['node'].variational_parameters['sigma_1'], child['node'].variational_parameters['sigma_2'])
                 sum_E_log_1_psi += E_log_1_psi
 
@@ -685,7 +732,10 @@ class TSSB(object):
             return ll_contrib, ass_contrib, global_contrib
 
         self.n_nodes = 0
-        return descend(self.root)
+        ll_contrib, ass_contrib, global_contrib = descend(self.root)
+
+        self.elbo = ll_contrib + ass_contrib + global_contrib
+        return ll_contrib, ass_contrib, global_contrib
 
 
     def update_sufficient_statistics(self, batch_idx=None):
@@ -754,7 +804,7 @@ class TSSB(object):
             sum_E_log_1_psi = 0.
             for child in root['children']:
                 E_log_psi = E_log_beta(child['node'].variational_parameters['sigma_1'], child['node'].variational_parameters['sigma_2'])
-                child['node'].variational_parameters['E_log_phi'] = E_log_psi + sum_E_log_1_psi
+                child['node'].variational_parameters['E_log_phi'] = root['node'].variational_parameters['E_log_phi'] + E_log_psi + sum_E_log_1_psi
                 E_log_1_psi = E_log_1_beta(child['node'].variational_parameters['sigma_1'], child['node'].variational_parameters['sigma_2'])
                 sum_E_log_1_psi += E_log_1_psi
 
@@ -837,7 +887,7 @@ class TSSB(object):
             root = self.root
         descend(root)
 
-    def update_node_params(self, key, root=None, memoized=True, step_size=0.0001, mc_samples=10, i=0, adaptive=True, **kwargs):
+    def update_node_params(self, key, root=None, memoized=True, step_size=0.0001, mc_samples=10, i=0, adaptive=True, update_state=True, **kwargs):
         """
         Update variational parameters for kernels, sticks and pivots
 
@@ -881,37 +931,51 @@ class TSSB(object):
         """
         def descend(root, key, depth=0):
             direction_sample_grad = 0.
+            event_sample_grad = 0.
             state_sample_grad = 0.
 
             if depth != 0:
                 key, sample_grad = root['node'].direction_sample_and_grad(key, n_samples=mc_samples)
                 direction_curr_sample, direction_params_grad = sample_grad
+                key, sample_grad = root['node'].event_sample_and_grad(key, n_samples=mc_samples)
+                event_curr_sample, event_params_grad = sample_grad
                 key, sample_grad = root['node'].state_sample_and_grad(key, n_samples=mc_samples)
                 state_curr_sample, state_params_grad = sample_grad
             else:
                 root['node'].sample_kernel(n_samples=mc_samples)
                 direction_curr_sample = root['node'].get_direction_sample()
-                state_curr_sample = root['node'].get_state_sample()
+                event_curr_sample = root['node'].get_event_sample()
+                state_curr_sample = root['node'].get_state_sample()                
             
+            if not update_state:
+                state_curr_sample = root['node'].get_state_sample()
+
+
             if depth != 0:
                 direction_parent_sample = root["node"].parent().get_direction_sample()
                 state_parent_sample = root["node"].parent().get_state_sample()
 
                 direction_sample_grad += root["node"].compute_direction_prior_grad(direction_curr_sample, direction_parent_sample, state_parent_sample)
-                direction_sample_grad += root["node"].compute_state_prior_grad_wrt_direction(state_curr_sample, state_parent_sample, direction_curr_sample)
+                direction_sample_grad += root["node"].compute_state_prior_grad_wrt_direction(state_curr_sample, state_parent_sample, direction_curr_sample, event_curr_sample)
                 
-                direction_params_entropy_grad = root["node"].compute_direction_entropy_grad()
-                state_params_entropy_grad = root["node"].compute_state_entropy_grad()
+                event_sample_grad += root["node"].compute_event_prior_grad(event_curr_sample)
+                event_sample_grad += root["node"].compute_state_prior_grad_wrt_event(state_curr_sample, state_parent_sample, direction_curr_sample, event_curr_sample)
 
-                if memoized:
-                    state_sample_grad += root["node"].compute_ll_state_grad_suff(state_curr_sample)
-                else:
-                    weights = root['node'].variational_parameters['q_z'] * self.variational_parameters['q_c']
-                    state_sample_grad += root["node"].compute_ll_state_grad(self.ntssb.data, weights, state_curr_sample)
+                direction_params_entropy_grad = root["node"].compute_direction_entropy_grad()
+                event_params_entropy_grad = root["node"].compute_event_entropy_grad()
+                if update_state:
+                    state_params_entropy_grad = root["node"].compute_state_entropy_grad()
+
+                if update_state:
+                    if memoized:
+                        state_sample_grad += root["node"].compute_ll_state_grad_suff(state_curr_sample)
+                    else:
+                        weights = root['node'].variational_parameters['q_z'] * self.variational_parameters['q_c']
+                        state_sample_grad += root["node"].compute_ll_state_grad(self.ntssb.data, weights, state_curr_sample)
 
             mass_down = 0
             for child in root['children'][::-1]:
-                child_mass, direction_child_sample, state_child_sample = descend(child, key, depth=depth+1)
+                child_mass, direction_child_sample, state_child_sample, event_child_sample = descend(child, key, depth=depth+1)
 
                 child['node'].variational_parameters['sigma_1'] = 1.0 + child_mass
                 child['node'].variational_parameters['sigma_2'] = self.dp_gamma + mass_down
@@ -919,14 +983,16 @@ class TSSB(object):
 
                 if depth != 0:
                     direction_sample_grad += root["node"].compute_direction_prior_child_grad_wrt_direction(direction_child_sample, direction_curr_sample, state_curr_sample)
-                    state_sample_grad += root["node"].compute_direction_prior_child_grad_wrt_state(direction_child_sample, direction_curr_sample, state_curr_sample)
-                    state_sample_grad += root["node"].compute_state_prior_child_grad(state_child_sample, state_curr_sample, direction_child_sample)
+                    # state_sample_grad += root["node"].compute_direction_prior_child_grad_wrt_state(direction_child_sample, direction_curr_sample, state_curr_sample)
+                    if update_state:
+                        state_sample_grad += root["node"].compute_state_prior_child_grad(state_child_sample, state_curr_sample, direction_child_sample, event_child_sample)
             
             if depth != 0:
                 for ii, child_root in enumerate(self.children_root_nodes):
                     direction_sample_grad += root["node"].compute_direction_prior_child_grad_wrt_direction(child_root.get_direction_sample(), direction_curr_sample, state_curr_sample) * root['node'].variational_parameters['q_rho'][ii]
-                    state_sample_grad += root["node"].compute_direction_prior_child_grad_wrt_state(child_root.get_direction_sample(), direction_curr_sample, state_curr_sample) * root['node'].variational_parameters['q_rho'][ii]
-                    state_sample_grad += root["node"].compute_root_state_prior_child_grad(child_root.get_state_sample(), state_curr_sample, child_root.get_direction_sample()) * root['node'].variational_parameters['q_rho'][ii]
+                    # state_sample_grad += root["node"].compute_direction_prior_child_grad_wrt_state(child_root.get_direction_sample(), direction_curr_sample, state_curr_sample) * root['node'].variational_parameters['q_rho'][ii]
+                    if update_state:
+                        state_sample_grad += root["node"].compute_root_state_prior_child_grad(child_root.get_state_sample(), state_curr_sample, child_root.get_direction_sample(), child_root.get_event_sample()) * root['node'].variational_parameters['q_rho'][ii]
 
             if depth != 0:
                 if adaptive and i == 0:
@@ -942,18 +1008,31 @@ class TSSB(object):
                 key, sample_grad = root['node'].direction_sample_and_grad(key, n_samples=mc_samples)
                 direction_curr_sample, _ = sample_grad
 
-                state_sample_grad += root["node"].compute_state_prior_grad(state_curr_sample, state_parent_sample, direction_curr_sample)
-                
                 if adaptive:
-                    root['node'].update_state_adaptive(state_params_grad, state_sample_grad, state_params_entropy_grad, 
-                                                        step_size=step_size, i=i)    
+                    root['node'].update_event_adaptive(event_params_grad, event_sample_grad, event_params_entropy_grad, 
+                                                    step_size=step_size, i=i)
                 else:
-                    root['node'].update_state_params(state_params_grad, state_sample_grad, state_params_entropy_grad, 
+                    root['node'].update_event_params(event_params_grad, event_sample_grad, event_params_entropy_grad, 
                                                         step_size=step_size)
-                key, sample_grad = root['node'].state_sample_and_grad(key, n_samples=mc_samples)
-                state_curr_sample, _ = sample_grad
-                root['node'].samples[0] = state_curr_sample
+                key, sample_grad = root['node'].event_sample_and_grad(key, n_samples=mc_samples)
+                event_curr_sample, _ = sample_grad                
+
+                if update_state:
+                    state_sample_grad += root["node"].compute_state_prior_grad(state_curr_sample, state_parent_sample, direction_curr_sample, event_curr_sample)
+                
+                if update_state:
+                    if adaptive:
+                        root['node'].update_state_adaptive(state_params_grad, state_sample_grad, state_params_entropy_grad, 
+                                                            step_size=step_size, i=i)    
+                    else:
+                        root['node'].update_state_params(state_params_grad, state_sample_grad, state_params_entropy_grad, 
+                                                            step_size=step_size)
+                    key, sample_grad = root['node'].state_sample_and_grad(key, n_samples=mc_samples)
+                    state_curr_sample, _ = sample_grad
+                if update_state:    
+                    root['node'].samples[0] = state_curr_sample
                 root['node'].samples[1] = direction_curr_sample
+                root['node'].samples[2] = event_curr_sample
 
             if memoized:
                 mass_here = root['node'].suff_stats['mass']['total']
@@ -962,13 +1041,163 @@ class TSSB(object):
             root['node'].variational_parameters['delta_1'] = 1.0 + mass_here
             root['node'].variational_parameters['delta_2'] = (self.alpha_decay**depth) * self.dp_alpha + mass_down
 
-            return mass_here + mass_down, direction_curr_sample, state_curr_sample
+            return mass_here + mass_down, direction_curr_sample, state_curr_sample, event_curr_sample
 
         # Update kernels and sticks
         if root is None:
             root = self.root
-        descend(root, key)
+        depth = root['node'].depth
+        descend(root, key, depth=depth)
 
+
+    def update_node_kernel_params(self, key, root=None,  memoized=True, step_size=0.0001, mc_samples=10, n_steps=10, adaptive=True, update_state=True, return_trace=False, **kwargs):
+        """
+        Update variational parameters for kernels using variational inference with moment matching
+
+        Each node must have two parameters for the kernel: a direction and a state.
+        We assume the tree kernel, regardless of the model, is always defined as 
+        P(direction|parent_direction) and P(state|direction,parent_state).
+        For each node, we first update the direction and then the state, taking one gradient step for each
+        parameter and then moving on to the next nodes in the tree traversal
+
+        PSEUDOCODE:
+        def descend(root):
+            alpha, alpha_grad = sample_grad_alpha
+            psi, psi_grad = sample_grad_psi
+
+            alpha_grad += Gradient of logp(alpha|parent_alpha) wrt this alpha 
+            alpha_grad += Gradient of logp(psi|parent_psi,alpha) wrt this alpha
+
+            alpha_grad += Gradient of logq(alpha) wrt this alpha
+            psi_grad += Gradient of logq(psi) wrt this psi
+
+            psi_grad += Gradient of logp(x|psi) wrt this psi
+
+            for each child:
+                child_alpha, child_psi = descend(child)
+                alpha_grad += Gradient of logp(child_alpha|alpha) wrt this alpha
+                psi_grad += Gradient of logp(child_psi|psi,child_alpha) wrt this psi
+
+            for each child_root:
+                alpha_grad += Gradient of logp(child_root_alpha|alpha) wrt this alpha
+                psi_grad += Gradient of logp(child_root_psi|psi,child_root_alpha) wrt this psi
+
+            new_alpha_params = alpha_params + alpha_grad * step_size
+            new_alpha = sample_alpha
+
+            psi_grad += Gradient of logp(psi|parent_psi,new_alpha) wrt this psi
+            new_psi_params = psi_params + psi_grad * step_size
+            new_psi = sample_psi
+
+            return new_alpha, new_psi
+        
+        """
+         # Update kernels and sticks
+        if root is None:
+            root = self.root  
+
+        elbos = []
+        for i in range(n_steps):
+            direction_sample_grad = 0.
+            event_sample_grad = 0.
+            state_sample_grad = 0.
+
+            key, sample_grad = root['node'].direction_sample_and_grad(key, n_samples=mc_samples)
+            direction_curr_sample, direction_params_grad = sample_grad
+            key, sample_grad = root['node'].event_sample_and_grad(key, n_samples=mc_samples)
+            event_curr_sample, event_params_grad = sample_grad
+            if update_state:
+                key, sample_grad = root['node'].state_sample_and_grad(key, n_samples=mc_samples)
+                state_curr_sample, state_params_grad = sample_grad         
+            else:
+                state_curr_sample = root['node'].get_state_sample()
+
+            direction_parent_sample = root["node"].parent().get_direction_sample()
+            state_parent_sample = root["node"].parent().get_state_sample()
+
+            direction_sample_grad += root["node"].compute_direction_prior_grad(direction_curr_sample, direction_parent_sample, state_parent_sample)
+            direction_sample_grad += root["node"].compute_state_prior_grad_wrt_direction(state_curr_sample, state_parent_sample, direction_curr_sample, event_curr_sample)
+            
+            event_sample_grad += root["node"].compute_event_prior_grad(event_curr_sample)
+            event_sample_grad += root["node"].compute_state_prior_grad_wrt_event(state_curr_sample, state_parent_sample, direction_curr_sample, event_curr_sample)
+
+            direction_params_entropy_grad = root["node"].compute_direction_entropy_grad()
+            event_params_entropy_grad = root["node"].compute_event_entropy_grad()
+            if update_state:
+                state_params_entropy_grad = root["node"].compute_state_entropy_grad()
+
+            if update_state:
+                if memoized:
+                    state_sample_grad += root["node"].compute_ll_state_grad_suff(state_curr_sample)
+                else:
+                    weights = root['node'].variational_parameters['q_z'] * self.variational_parameters['q_c']
+                    state_sample_grad += root["node"].compute_ll_state_grad(self.ntssb.data, weights, state_curr_sample)
+
+            for child in root['children'][::-1]:
+                direction_child_sample = child['node'].get_direction_sample()
+                state_child_sample = child['node'].get_state_sample()
+                event_child_sample = child['node'].get_event_sample()
+
+                direction_sample_grad += root["node"].compute_direction_prior_child_grad_wrt_direction(direction_child_sample, direction_curr_sample, state_curr_sample)
+                # state_sample_grad += root["node"].compute_direction_prior_child_grad_wrt_state(direction_child_sample, direction_curr_sample, state_curr_sample)
+                if update_state:
+                    state_sample_grad += root["node"].compute_state_prior_child_grad(state_child_sample, state_curr_sample, direction_child_sample, event_child_sample)
+            
+            for ii, child_root in enumerate(self.children_root_nodes):
+                direction_sample_grad += root["node"].compute_direction_prior_child_grad_wrt_direction(child_root.get_direction_sample(), direction_curr_sample, state_curr_sample) * root['node'].variational_parameters['q_rho'][ii]
+                # state_sample_grad += root["node"].compute_direction_prior_child_grad_wrt_state(child_root.get_direction_sample(), direction_curr_sample, state_curr_sample) * root['node'].variational_parameters['q_rho'][ii]
+                if update_state:
+                    state_sample_grad += root["node"].compute_root_state_prior_child_grad(child_root.get_state_sample(), state_curr_sample, child_root.get_direction_sample(), child_root.get_event_sample()) * root['node'].variational_parameters['q_rho'][ii]
+
+            if adaptive and i == 0:
+                root['node'].reset_opt()
+        
+            # Combine gradients of functions wrt sample with gradient of sample wrt var params
+            if adaptive:
+                root['node'].update_direction_adaptive(direction_params_grad, direction_sample_grad, direction_params_entropy_grad, 
+                                                step_size=step_size, i=i)
+            else:
+                root['node'].update_direction_params(direction_params_grad, direction_sample_grad, direction_params_entropy_grad, 
+                                                    step_size=step_size)
+            key, sample_grad = root['node'].direction_sample_and_grad(key, n_samples=mc_samples)
+            direction_curr_sample, _ = sample_grad
+
+            if adaptive:
+                root['node'].update_event_adaptive(event_params_grad, event_sample_grad, event_params_entropy_grad, 
+                                                step_size=step_size, i=i)
+            else:
+                root['node'].update_event_params(event_params_grad, event_sample_grad, event_params_entropy_grad, 
+                                                    step_size=step_size)
+            key, sample_grad = root['node'].event_sample_and_grad(key, n_samples=mc_samples)
+            event_curr_sample, _ = sample_grad                
+
+            if update_state:
+                state_sample_grad += root["node"].compute_state_prior_grad(state_curr_sample, state_parent_sample, direction_curr_sample, event_curr_sample)
+            
+            if update_state:
+                if adaptive:
+                    root['node'].update_state_adaptive(state_params_grad, state_sample_grad, state_params_entropy_grad, 
+                                                        step_size=step_size, i=i)    
+                else:
+                    root['node'].update_state_params(state_params_grad, state_sample_grad, state_params_entropy_grad, 
+                                                        step_size=step_size)
+                key, sample_grad = root['node'].state_sample_and_grad(key, n_samples=mc_samples)
+                state_curr_sample, _ = sample_grad
+
+            if update_state:
+                root['node'].samples[0] = state_curr_sample
+                
+            root['node'].samples[1] = direction_curr_sample
+            root['node'].samples[2] = event_curr_sample
+
+            if return_trace:
+                self.ntssb.compute_elbo(memoized=memoized)
+                elbos.append(self.ntssb.elbo)
+
+        if return_trace:
+            return elbos
+
+       
 
     def sample_grad_root_node(self, key, memoized=True, mc_samples=10, **kwargs):
         """
@@ -980,14 +1209,18 @@ class TSSB(object):
         root = self.root
         direction_sample_grad = 0.
         state_sample_grad = 0.
+        event_sample_grad = 0.
 
         key, sample_grad = root['node'].direction_sample_and_grad(key, n_samples=mc_samples)
         direction_curr_sample, direction_params_grad = sample_grad
         key, sample_grad = root['node'].state_sample_and_grad(key, n_samples=mc_samples)
         state_curr_sample, state_params_grad = sample_grad
+        key, sample_grad = root['node'].event_sample_and_grad(key, n_samples=mc_samples)
+        event_curr_sample, event_params_grad = sample_grad        
         
         # Gradient of entropy
         direction_params_entropy_grad = root["node"].compute_direction_entropy_grad()
+        event_params_entropy_grad = root["node"].compute_event_entropy_grad()
         state_params_entropy_grad = root["node"].compute_state_entropy_grad()
 
         # Gradient of likelihood
@@ -1001,23 +1234,26 @@ class TSSB(object):
         for child in root['children'][::-1]:
             direction_child_sample = child['node'].get_direction_sample()
             state_child_sample = child['node'].get_state_sample()
+            event_child_sample = child['node'].get_event_sample()
             direction_sample_grad += root["node"].compute_direction_prior_child_grad_wrt_direction(direction_child_sample, direction_curr_sample, state_curr_sample)
-            state_sample_grad += root["node"].compute_direction_prior_child_grad_wrt_state(direction_child_sample, direction_curr_sample, state_curr_sample)
-            state_sample_grad += root["node"].compute_state_prior_child_grad(state_child_sample, state_curr_sample, direction_child_sample)
+            # state_sample_grad += root["node"].compute_direction_prior_child_grad_wrt_state(direction_child_sample, direction_curr_sample, state_curr_sample)
+            state_sample_grad += root["node"].compute_state_prior_child_grad(state_child_sample, state_curr_sample, direction_child_sample, event_child_sample)
 
         # Gradient of roots of children TSSB
         for i, child_root in enumerate(self.children_root_nodes):
             direction_child_sample = child_root.get_direction_sample()
             state_child_sample = child_root.get_state_sample()
+            event_child_sample = child_root.get_event_sample()
             # Gradient of the root nodes of children TSSBs wrt to their parameters using this TSSB root as parent
             direction_sample_grad += root["node"].compute_direction_prior_child_grad_wrt_direction(direction_child_sample, direction_curr_sample, state_curr_sample) * root['node'].variational_parameters['q_rho'][i]
-            state_sample_grad += root["node"].compute_direction_prior_child_grad_wrt_state(direction_child_sample, direction_curr_sample, state_curr_sample) * root['node'].variational_parameters['q_rho'][i]
-            state_sample_grad += root["node"].compute_state_prior_child_grad(state_child_sample, state_curr_sample, direction_child_sample) * root['node'].variational_parameters['q_rho'][i]
+            # state_sample_grad += root["node"].compute_direction_prior_child_grad_wrt_state(direction_child_sample, direction_curr_sample, state_curr_sample) * root['node'].variational_parameters['q_rho'][i]
+            state_sample_grad += root["node"].compute_state_prior_child_grad(state_child_sample, state_curr_sample, direction_child_sample, event_child_sample) * root['node'].variational_parameters['q_rho'][i]
 
         direction_locals_grads = [direction_params_grad, direction_params_entropy_grad]
         state_locals_grads = [state_params_grad, state_params_entropy_grad]
+        event_locals_grads = [event_params_grad, event_params_entropy_grad]
 
-        return ll_grad, [direction_locals_grads, state_locals_grads], [direction_sample_grad, state_sample_grad]
+        return ll_grad, [direction_locals_grads, state_locals_grads, event_locals_grads], [direction_sample_grad, state_sample_grad, event_sample_grad]
 
     def compute_children_root_node_grads(self, **kwargs):
         """
@@ -1027,19 +1263,23 @@ class TSSB(object):
         def descend(root, children_grads=None):
             direction_curr_sample = root['node'].samples[1]
             state_curr_sample = root['node'].samples[0]
+            event_curr_sample = root['node'].samples[2]
         
             # Compute gradient of children roots wrt their params
             if children_grads is None:
-                children_grads = [[0., 0.]] * len(self.children_root_nodes)
+                children_grads = [[0., 0., 0.]] * len(self.children_root_nodes)
             for i, child_root in enumerate(self.children_root_nodes):
                 # Gradient of the root nodes of children TSSBs wrt to their parameters using this 
                 direction_child_sample = child_root.get_direction_sample()
                 state_child_sample = child_root.get_state_sample()
+                event_child_sample = child_root.get_event_sample()
                 direction_sample_grad = root["node"].compute_direction_prior_grad(direction_child_sample, direction_curr_sample, state_curr_sample) * root['node'].variational_parameters['q_rho'][i]
-                direction_sample_grad += root["node"].compute_state_prior_grad_wrt_direction(state_child_sample, state_curr_sample, direction_child_sample) * root['node'].variational_parameters['q_rho'][i]
-                state_sample_grad = root["node"].compute_state_prior_grad(state_child_sample, state_curr_sample, direction_child_sample) * root['node'].variational_parameters['q_rho'][i]
+                direction_sample_grad += root["node"].compute_state_prior_grad_wrt_direction(state_child_sample, state_curr_sample, direction_child_sample, event_child_sample) * root['node'].variational_parameters['q_rho'][i]
+                event_sample_grad += root["node"].compute_state_prior_grad_wrt_event(state_child_sample, state_curr_sample, direction_child_sample, event_child_sample) * root['node'].variational_parameters['q_rho'][i]
+                state_sample_grad = root["node"].compute_state_prior_grad(state_child_sample, state_curr_sample, direction_child_sample, event_child_sample) * root['node'].variational_parameters['q_rho'][i]
                 children_grads[i][0] += direction_sample_grad
                 children_grads[i][1] += state_sample_grad
+                children_grads[i][2] += event_sample_grad
 
             for child in root['children']:
                 descend(child, children_grads=children_grads)
@@ -1074,6 +1314,20 @@ class TSSB(object):
         direction_curr_sample, _ = sample_grad
         self.root['node'].samples[1] = direction_curr_sample
         
+
+        event_params_grad, event_params_entropy_grad = local_grads[2]
+        event_sample_grad = children_grads[2] + parent_grads[2]
+
+        if adaptive:
+            self.root['node'].update_event_adaptive(event_params_grad, event_sample_grad, event_params_entropy_grad, 
+                                                step_size=step_size, i=i)
+        else:
+            self.root['node'].update_direction_params(event_params_grad, event_sample_grad, event_params_entropy_grad, 
+                                                step_size=step_size)
+        key, sample_grad = self.root['node'].event_sample_and_grad(key, n_samples=mc_samples)
+        event_curr_sample, _ = sample_grad
+        self.root['node'].samples[2] = event_curr_sample
+
         state_params_grad, state_params_entropy_grad = local_grads[1]
         state_sample_grad = children_grads[1] + parent_grads[1]
         state_sample_grad += ll_grad
@@ -1580,7 +1834,7 @@ class TSSB(object):
 
         return descend(self.root, u)
 
-    def find_node_uniform(self, key, include_leaves=True):
+    def find_node_uniform(self, key, root=None, include_leaves=True, return_parent=False):
         def descend(root, key, depth=0):
             if depth >= self.max_depth:
                 return (root["node"], [], root)
@@ -1605,7 +1859,16 @@ class TSSB(object):
 
                     return (node, path, root)
 
-        return descend(self.root, key)
+        if root is None:
+            root = self.root
+        parent_root = root
+        n, p, r = descend(root, key)
+        if return_parent:
+            for i in p[:-1]:
+                parent_root = parent_root['children'][i]
+            return n, p, r, parent_root
+        else:
+            return n, p, r
 
     def get_expected_mixture(self, reset_names=False):
         """
@@ -2070,21 +2333,26 @@ class TSSB(object):
         elif not names or counts is True:
             self.label_nodes_counts()
 
-    def set_node_names(self, root=None, root_name="X"):
+    def set_node_names(self, root=None, root_name="X", return_map=False):
         if root is None:
             root = self.root
 
+        old_to_new = {}
+        old_to_new[root["label"]] = str(root_name)
         root["label"] = str(root_name)
         root["node"].label = str(root_name)
 
         def descend(root, name):
             for i, child in enumerate(root["children"]):
                 child_name = f"{name}-{i}"
+                old_to_new[child["label"]] = str(child_name)
                 root["children"][i]["label"] = child_name
                 root["children"][i]["node"].label = child_name
                 descend(child, child_name)
 
         descend(root, root_name)
+        if return_map:
+            return old_to_new
 
     def set_subcluster_node_names(self):
         # Assumes the other fixed nodes have already been named, and ignores the root

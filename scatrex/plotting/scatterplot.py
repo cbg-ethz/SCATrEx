@@ -8,12 +8,15 @@ import numpy as np
 from ..utils.tree_utils import tree_to_dict
 
 
-def plot_full_tree(tree, ax=None, figsize=(6,6), **kwargs):
+def plot_full_tree(tree, ax=None, figsize=(6,6), subtree_parent_probs=None, edge_labels=True, font_size=12, **kwargs):
     if ax is None:
         plt.figure(figsize=figsize)
         ax = plt.gca()
     def descend(root, graph, pos={}):
-        pos_out = plot_tree(root['node'], G=graph, ax=ax, alpha=1., draw=False, **kwargs) # Draw subtree
+        if subtree_parent_probs is not None:
+            pos_out = plot_tree(root['node'], G=graph, ax=ax, alpha=1., draw=False, parent_probs=subtree_parent_probs[root['label']], edge_labels=edge_labels, font_size=font_size, **kwargs) # Draw subtree
+        else:
+            pos_out = plot_tree(root['node'], G=graph, ax=ax, alpha=1., draw=False, edge_labels=edge_labels, font_size=font_size, **kwargs) # Draw subtree
         pos.update(pos_out)
         for child in root['children']:
             descend(child, graph, pos)
@@ -22,8 +25,11 @@ def plot_full_tree(tree, ax=None, figsize=(6,6), **kwargs):
             parent = sub_root['label']
             for i, super_child in enumerate(root['children']):
                 child = super_child['label']
-                graph.add_edge(parent, child, alpha=sub_root['pivot_probs'][i], ls='--')
-                nx.draw_networkx_edges(graph, pos, edgelist=[(parent, child)], edge_color=sub_root['color'], alpha=sub_root['pivot_probs'][i], style='--')
+                prob = sub_root['pivot_probs'][i]
+                graph.add_edge(parent, child, alpha=prob, ls='--')
+                nx.draw_networkx_edges(graph, pos, edgelist=[(parent, child)], edge_color=sub_root['color'], alpha=prob, style='--')
+                if edge_labels and prob > 0.01:
+                    nx.draw_networkx_edge_labels(graph, pos, font_color=sub_root['color'], edge_labels={(parent, child):f"{prob:.3f}"}, font_size=int(font_size/2), alpha=float(prob))
             for child in sub_root['children']:
                 sub_descend(child, graph)
 
@@ -39,7 +45,10 @@ def plot_full_tree(tree, ax=None, figsize=(6,6), **kwargs):
     ax.spines['top'].set_visible(False)
 
 
-def plot_tree(tree, G = None, param_key='param', data=None, labels=True, alpha=0.5, font_size=12, node_size=1500, edge_width=1., arrows=True, draw=True, ax=None):
+def plot_tree(tree, G = None, param_key='param', data=None, labels=True, alpha=0.5, font_size=12, node_size=1500, edge_width=1., arrows=True, draw=True, ax=None, parent_probs=None, edge_labels=True):
+    """
+    parent_probs is a pandas dataframe containing the probability of each node being the child of every other node
+    """
     tree_dict = tree_to_dict(tree, param_key=param_key)
 
     # Get all positions
@@ -52,8 +61,7 @@ def plot_tree(tree, G = None, param_key='param', data=None, labels=True, alpha=0
     # Draw graph
     node_options = {'alpha': alpha,
                      'node_size': node_size,}
-    edge_options = {'alpha': alpha,
-                    'width': edge_width,
+    edge_options = {'width': edge_width,
                     'node_size':node_size,
                     'arrows': arrows}
     label_options = {'alpha': alpha,
@@ -64,13 +72,23 @@ def plot_tree(tree, G = None, param_key='param', data=None, labels=True, alpha=0
 
     if G is None:
         G = nx.DiGraph()
+    
     for node in tree_dict:
         nx.draw_networkx_nodes(G, pos, nodelist=[node], node_color=tree_dict[node]['color'],
                                 **node_options)
         if tree_dict[node]['parent'] != '-1':
-            parent = tree_dict[node]['parent']
-            G.add_edge(parent, node)
-            nx.draw_networkx_edges(G, pos, edgelist=[(parent, node)], edge_color=tree_dict[parent]['color'],**edge_options)
+            if parent_probs is not None:
+                for parent in tree_dict:
+                    G.add_edge(parent, node)
+                    nx.draw_networkx_edges(G, pos, edgelist=[(parent, node)], edge_color=tree_dict[parent]['color'], alpha=parent_probs.loc[node, parent]*alpha, **edge_options)
+                    if edge_labels and parent_probs.loc[node, parent] > 0.01:
+                        nx.draw_networkx_edge_labels(G, pos, edge_labels={(parent, node):f'{parent_probs.loc[node, parent]:.3f}'}, font_color=tree_dict[parent]['color'], 
+                                                     font_size=int(font_size/2), alpha=parent_probs.loc[node, parent]*alpha)
+            else:
+                parent = tree_dict[node]['parent']
+                G.add_edge(parent, node)
+                nx.draw_networkx_edges(G, pos, edgelist=[(parent, node)], edge_color=tree_dict[parent]['color'], alpha=alpha, **edge_options)
+                
     if labels:
         labs = dict(zip(list(tree_dict.keys()), list(tree_dict.keys())))
         nx.draw_networkx_labels(G, pos, labs, **label_options)

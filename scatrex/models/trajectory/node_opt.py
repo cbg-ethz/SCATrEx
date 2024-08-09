@@ -9,6 +9,13 @@ sample_angle_val_and_grad = jax.vmap(jax.value_and_grad(sample_angle, argnums=(1
 mc_sample_angle_val_and_grad = jax.jit(jax.vmap(sample_angle_val_and_grad, in_axes=(0,None,None))) # Multiple sample value_and_grad
 
 @jax.jit
+def sample_event(key, log_alpha, log_beta): # univariate: one sample
+    return tfd.Gamma(jnp.exp(log_alpha), jnp.exp(log_beta)).sample(seed=key)
+sample_event_val_and_grad = jax.vmap(jax.value_and_grad(sample_event, argnums=(1,2)), in_axes=(None, 0, 0)) # per-dimension val and grad
+mc_sample_event_val_and_grad = jax.jit(jax.vmap(sample_event_val_and_grad, in_axes=(0,None,None))) # Multiple sample value_and_grad
+
+
+@jax.jit
 def sample_loc(key, mu, log_std): # univariate: one sample
     return tfd.Normal(mu, jnp.exp(log_std)).sample(seed=key)
 sample_loc_val_and_grad = jax.vmap(jax.value_and_grad(sample_loc, argnums=(1,2)), in_axes=(None, 0, 0)) # per-dimension val and grad
@@ -29,20 +36,35 @@ def angle_logq(mu, log_kappa):
 angle_logq_val_and_grad = jax.jit(jax.value_and_grad(angle_logq, argnums=(0,1))) # Take grad wrt to parameters
 
 @jax.jit
+def event_logp(this_event, mean, concentration): # single sample
+    return jnp.sum(tfd.Gamma(concentration, concentration / mean).log_prob(this_event))
+event_logp_val_and_grad = jax.jit(jax.value_and_grad(event_logp, argnums=0)) # Take grad wrt to this
+mc_event_logp_val_and_grad = jax.jit(jax.vmap(event_logp_val_and_grad, in_axes=(0,None,None))) # Multiple sample value_and_grad
+
+@jax.jit
+def event_logq(log_alpha, log_beta):
+    return jnp.sum(tfd.Gamma(jnp.exp(log_alpha), jnp.exp(log_beta)).entropy())
+event_logq_val_and_grad = jax.jit(jax.value_and_grad(event_logq, argnums=(0,1))) # Take grad wrt to parameters
+
+@jax.jit
 def loc_logp(this_loc, parent_loc, this_angle, log_std, radius): # single sample
     mean = parent_loc + jnp.hstack([jnp.cos(this_angle)*radius, jnp.sin(this_angle)*radius]) # Use samples from parent
     return jnp.sum(tfd.Normal(mean, jnp.exp(log_std)).log_prob(this_loc)) # sum across dimensions
 loc_logp_val = jax.jit(loc_logp) 
-mc_loc_logp_val = jax.jit(jax.vmap(loc_logp_val, in_axes=(0,0,0, None, None))) # Multiple sample 
+mc_loc_logp_val = jax.jit(jax.vmap(loc_logp_val, in_axes=(0,0,0, None, 0))) # Multiple sample 
 
 loc_logp_val_and_grad = jax.jit(jax.value_and_grad(loc_logp, argnums=0)) # Take grad wrt to this
-mc_loc_logp_val_and_grad = jax.jit(jax.vmap(loc_logp_val_and_grad, in_axes=(0,0,0, None, None))) # Multiple sample value_and_grad
+mc_loc_logp_val_and_grad = jax.jit(jax.vmap(loc_logp_val_and_grad, in_axes=(0,0,0, None, 0))) # Multiple sample value_and_grad
 
 loc_logp_val_and_grad_wrt_parent = jax.jit(jax.value_and_grad(loc_logp, argnums=1)) # Take grad wrt to parent
-mc_loc_logp_val_and_grad_wrt_parent = jax.jit(jax.vmap(loc_logp_val_and_grad_wrt_parent, in_axes=(0,0,0, None, None))) # Multiple sample value_and_grad
+mc_loc_logp_val_and_grad_wrt_parent = jax.jit(jax.vmap(loc_logp_val_and_grad_wrt_parent, in_axes=(0,0,0, None, 0))) # Multiple sample value_and_grad
 
 loc_logp_val_and_grad_wrt_angle = jax.jit(jax.value_and_grad(loc_logp, argnums=2)) # Take grad wrt to angle
-mc_loc_logp_val_and_grad_wrt_angle = jax.jit(jax.vmap(loc_logp_val_and_grad_wrt_angle, in_axes=(0,0,0, None, None))) # Multiple sample value_and_grad
+mc_loc_logp_val_and_grad_wrt_angle = jax.jit(jax.vmap(loc_logp_val_and_grad_wrt_angle, in_axes=(0,0,0, None, 0))) # Multiple sample value_and_grad
+
+loc_logp_val_and_grad_wrt_event = jax.jit(jax.value_and_grad(loc_logp, argnums=4)) # Take grad wrt to event
+mc_loc_logp_val_and_grad_wrt_event = jax.jit(jax.vmap(loc_logp_val_and_grad_wrt_event, in_axes=(0,0,0, None, 0))) # Multiple sample value_and_grad
+
 
 @jax.jit
 def loc_logq(mu, log_std):

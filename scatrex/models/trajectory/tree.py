@@ -8,18 +8,19 @@ class TrajectoryTree(ObservedTree):
         super(TrajectoryTree, self).__init__(**kwargs)
         self.node_constructor = TrajectoryNode
 
-    def sample_kernel(self, parent_params, mean_dist=1., angle_concentration=1., loc_variance=.1, seed=42, depth=1., **kwargs):
+    def sample_kernel(self, parent_params, event_mean=1., event_concentration=1., angle_concentration=1., loc_variance=.1, seed=42, depth=1., **kwargs):
         rng = np.random.default_rng(seed=seed)
         parent_loc = parent_params[0]
         parent_angle = parent_params[1]
         angle_concentration = angle_concentration * depth
         sampled_angle = rng.vonmises(parent_angle, angle_concentration)
-        sampled_loc = rng.normal(mean_dist, loc_variance)
-        sampled_loc = parent_loc + np.array([np.cos(sampled_angle)*np.abs(sampled_loc), np.sin(sampled_angle)*np.abs(sampled_loc)])
-        return [sampled_loc, sampled_angle]
+        sampled_event = rng.gamma(event_concentration, event_mean/event_concentration)
+        loc_mean = parent_loc + np.array([np.cos(sampled_angle)*sampled_event, np.sin(sampled_angle)*sampled_event])
+        sampled_loc = rng.normal(loc_mean, loc_variance)
+        return [sampled_loc, sampled_angle, sampled_event]
     
     def sample_root(self, **kwargs):
-        return [np.array([0., 0.]), 0.]
+        return [np.array([0., 0.]), 0., 0.]
 
     def get_param_size(self):
         return self.tree["param"][0].size

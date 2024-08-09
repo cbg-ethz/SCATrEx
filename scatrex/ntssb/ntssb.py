@@ -1201,7 +1201,7 @@ class NTSSB(object):
             idx = self.batch_indices[batch_idx]
         def descend(root, depth=0, local_contrib=0, global_contrib=0, psi_priors=None):
             # Traverse inner TSSB
-            subtree_ll_contrib, subtree_ass_contrib, subtree_node_contrib = root['node'].compute_elbo(idx)
+            subtree_ll_contrib, subtree_ass_contrib, subtree_node_contrib = root['node'].compute_elbo_batch(idx)
             ll_contrib = subtree_ll_contrib * root['node'].variational_parameters['q_c'][idx]
 
             # Assignments
@@ -1244,7 +1244,7 @@ class NTSSB(object):
                 # Auxiliary quantities
                 ## Branches
                 E_log_psi = E_log_beta(child['node'].variational_parameters['sigma_1'], child['node'].variational_parameters['sigma_2'])
-                child['node'].variational_parameters['E_log_phi'] = E_log_psi + sum_E_log_1_psi
+                child['node'].variational_parameters['E_log_phi'] = root['node'].variational_parameters['E_log_phi'] + E_log_psi + sum_E_log_1_psi
                 E_log_1_psi = E_log_1_beta(child['node'].variational_parameters['sigma_1'], child['node'].variational_parameters['sigma_2'])
                 sum_E_log_1_psi += E_log_1_psi
 
@@ -1306,7 +1306,7 @@ class NTSSB(object):
                 # Auxiliary quantities
                 ## Branches
                 E_log_psi = E_log_beta(child['node'].variational_parameters['sigma_1'], child['node'].variational_parameters['sigma_2'])
-                child['node'].variational_parameters['E_log_phi'] = E_log_psi + sum_E_log_1_psi
+                child['node'].variational_parameters['E_log_phi'] = root['node'].variational_parameters['E_log_phi'] + E_log_psi + sum_E_log_1_psi
                 E_log_1_psi = E_log_1_beta(child['node'].variational_parameters['sigma_1'], child['node'].variational_parameters['sigma_2'])
                 sum_E_log_1_psi += E_log_1_psi
 
@@ -1474,7 +1474,7 @@ class NTSSB(object):
             sum_E_log_1_psi = 0.
             for child in root['children']:
                 E_log_psi = E_log_beta(child['node'].variational_parameters['sigma_1'], child['node'].variational_parameters['sigma_2'])
-                child['node'].variational_parameters['E_log_phi'] = E_log_psi + sum_E_log_1_psi
+                child['node'].variational_parameters['E_log_phi'] = root['node'].variational_parameters['E_log_phi'] + E_log_psi + sum_E_log_1_psi
                 E_log_1_psi = E_log_1_beta(child['node'].variational_parameters['sigma_1'], child['node'].variational_parameters['sigma_2'])
                 sum_E_log_1_psi += E_log_1_psi
 
@@ -2888,13 +2888,14 @@ class NTSSB(object):
                 descend(child)
         descend(self.root)        
 
-    def show_tree(self, **kwargs):
+    def show_tree(self, ax=None, **kwargs):
         self.set_learned_parameters()
         self.set_node_names()
         self.set_expected_weights()
         self.assign_samples()
         self.set_ntssb_colors()
         tree = self.get_param_dict()
-        plt.figure(figsize=(4,4))
-        ax = plt.gca()
+        if ax is None:
+            plt.figure(figsize=(4,4))
+            ax = plt.gca()
         plot_full_tree(tree, ax=ax, node_size=101, **kwargs)
