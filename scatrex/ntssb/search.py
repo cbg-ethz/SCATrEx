@@ -375,6 +375,7 @@ class StructureSearch(object):
                             self.proposed_tree = deepcopy(self.tree)
 
     def prune_reattach(self, key, proposed_tssb, tssb, n_tries=5, memoized=True, update_names=True, **learn_kwargs):
+        # TODO: instead of sampling target uniformly, sample proportionally to similarity of node states. I can pre-compute this and re-use it for sampling, so it only adds a small offset O(n^2) to the beginning of the MCMC!
         changed = False
         accepted = False
         if tssb.n_nodes > 1:

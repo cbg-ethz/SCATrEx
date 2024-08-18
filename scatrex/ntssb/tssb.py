@@ -809,11 +809,11 @@ class TSSB(object):
                 sum_E_log_1_psi += E_log_1_psi
 
                 # Go down
-                child_log_probs, child_local_param_grads = descend(child, local_grads=local_grads)
+                child_log_probs, _ = descend(child, local_grads=local_grads)
                 logqs.extend(child_log_probs)
-                if child_local_param_grads is not None:
-                    for i, grads in enumerate(list(child_local_param_grads)):
-                        local_grads[i] += grads
+                # if child_local_param_grads is not None:
+                #     for i, grads in enumerate(list(child_local_param_grads)):
+                #         local_grads[i] += grads
                 # local_grads += child_local_param_grads
             
             return logqs, local_grads

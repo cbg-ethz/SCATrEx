@@ -213,13 +213,13 @@ class TrajectoryNode(AbstractNode):
             n_factors = self.node_hyperparams['n_factors']
             self.variational_parameters["global"] = {
                 'factor_weights': {'mean': jnp.array(self.node_hyperparams['factor_variance']/10.*rng.normal(size=(n_factors, 2))),
-                                   'log_std': -2. + jnp.zeros((n_factors, 2))}
+                                   'log_std': jnp.array(-2. + 0.1 * rng.normal(size=(n_factors, 2)))}
             }
             if num_data is not None:
                 rng = np.random.default_rng(self.seed+1)
                 self.variational_parameters["local"] = {
                     'obs_weights': {'mean': jnp.array(self.node_hyperparams['obs_weight_variance']/10.*rng.normal(size=(num_data, n_factors))),
-                                    'log_std': -2. + jnp.zeros((num_data, n_factors))}
+                                    'log_std': jnp.array(-2. + 0.1 * rng.normal(size=(num_data, n_factors)))}
                 }
                 self.obs_weights = self.variational_parameters["local"]["obs_weights"]["mean"]
                 self.factor_weights = self.variational_parameters["global"]["factor_weights"]["mean"]
@@ -381,15 +381,21 @@ class TrajectoryNode(AbstractNode):
         return self.tssb.ntssb.root['node'].root['node'].obs_weights_sample
 
     def set_local_sample(self, sample, idx=None):
+        """
+        obs_weights,
+        """
         if idx is None:
             idx = jnp.arange(self.tssb.ntssb.num_data)
-        self.tssb.ntssb.root['node'].root['node'].obs_weights_sample = self.tssb.ntssb.root['node'].root['node'].obs_weights_sample.at[:,idx].set(sample)
+        self.tssb.ntssb.root['node'].root['node'].obs_weights_sample = self.tssb.ntssb.root['node'].root['node'].obs_weights_sample.at[:,idx].set(sample[0])
 
     def get_factor_weights_sample(self):
         return self.tssb.ntssb.root['node'].root['node'].factor_weights_sample
 
     def set_global_sample(self, sample):
-        self.tssb.ntssb.root['node'].root['node'].factor_weights_sample = jnp.array(sample)
+        """
+        factor_weights, 
+        """
+        self.tssb.ntssb.root['node'].root['node'].factor_weights_sample = jnp.array(sample[0])
 
     def get_noise_sample(self, idx):
         obs_weights = self.get_obs_weights_sample()[:,idx]
@@ -447,20 +453,40 @@ class TrajectoryNode(AbstractNode):
     def sample_locals(self, n_samples, store=True):
         key = jax.random.PRNGKey(self.seed)
         key, sample_grad = self.local_sample_and_grad(jnp.arange(self.tssb.ntssb.num_data), key, n_samples=n_samples)
-        sampled_obs_weights, _ = sample_grad
+        sample, _ = sample_grad
+        obs_weights_sample = sample[0]
         if store:
-            self.obs_weights_sample = sampled_obs_weights
+            self.obs_weights_sample = obs_weights_sample
         else:
-            return sampled_obs_weights
+            return [obs_weights_sample]
         
     def sample_globals(self, n_samples, store=True):
         key = jax.random.PRNGKey(self.seed)
         key, sample_grad = self.global_sample_and_grad(key, n_samples=n_samples)
-        sampled_factor_weights, _ = sample_grad
+        sample, _ = sample_grad
+        factor_weights_sample = sample[0]
         if store:
-            self.factor_weights_sample = sampled_factor_weights
+            self.factor_weights_sample = factor_weights_sample
         else:
-            return sampled_factor_weights
+            return [factor_weights_sample]
+
+    # def sample_locals(self, n_samples, store=True):
+    #     key = jax.random.PRNGKey(self.seed)
+    #     key, sample_grad = self.local_sample_and_grad(jnp.arange(self.tssb.ntssb.num_data), key, n_samples=n_samples)
+    #     sampled_obs_weights, _ = sample_grad
+    #     if store:
+    #         self.obs_weights_sample = sampled_obs_weights
+    #     else:
+    #         return sampled_obs_weights
+        
+    # def sample_globals(self, n_samples, store=True):
+    #     key = jax.random.PRNGKey(self.seed)
+    #     key, sample_grad = self.global_sample_and_grad(key, n_samples=n_samples)
+    #     sampled_factor_weights, _ = sample_grad
+    #     if store:
+    #         self.factor_weights_sample = sampled_factor_weights
+    #     else:
+    #         return sampled_factor_weights
 
     def sample_kernel(self, n_samples=10, store=True):
         parent = self.parent()
@@ -502,11 +528,11 @@ class TrajectoryNode(AbstractNode):
 
     def compute_global_priors(self):
         log_std = jnp.log(jnp.sqrt(self.node_hyperparams['factor_variance']))
-        return jnp.mean(mc_factor_weights_logp_val_and_grad(self.factor_weights_sample, 0., log_std)[0])
+        return jnp.sum(jnp.mean(mc_factor_weights_logp_val_and_grad(self.factor_weights_sample, 0., log_std)[0], axis=0))
     
     def compute_local_priors(self, batch_indices):
         log_std = jnp.log(jnp.sqrt(self.node_hyperparams['obs_weight_variance']))
-        return jnp.mean(mc_obs_weights_logp_val_and_grad(self.obs_weights_sample[:,batch_indices], 0., log_std)[0])
+        return jnp.sum(jnp.mean(mc_obs_weights_logp_val_and_grad(self.obs_weights_sample[:,batch_indices], 0., log_std)[0], axis=0))
 
     def compute_global_entropies(self):
         mean = self.variational_parameters['global']['factor_weights']['mean']
@@ -603,32 +629,42 @@ class TrajectoryNode(AbstractNode):
         mean = self.variational_parameters['local']['obs_weights']['mean'][idx]
         log_std = self.variational_parameters['local']['obs_weights']['log_std'][idx]
         key, *sub_keys = jax.random.split(key, n_samples+1)
-        return key, mc_sample_obs_weights_val_and_grad(jnp.array(sub_keys), mean, log_std)
+        obs_weights_sample_grad = mc_sample_obs_weights_val_and_grad(jnp.array(sub_keys), mean, log_std)
+
+        sample = [obs_weights_sample_grad[0]]
+        grad = [obs_weights_sample_grad[1]]
+
+        return key, (sample, grad)
 
     def global_sample_and_grad(self, key, n_samples):
         """Sample and take gradient of global parameters. Must be root"""
         mean = self.variational_parameters['global']['factor_weights']['mean']
         log_std = self.variational_parameters['global']['factor_weights']['log_std']
         key, *sub_keys = jax.random.split(key, n_samples+1)
-        return key, mc_sample_factor_weights_val_and_grad(jnp.array(sub_keys), mean, log_std)
+        factor_weights_sample_grad = mc_sample_factor_weights_val_and_grad(jnp.array(sub_keys), mean, log_std)
+
+        sample = [factor_weights_sample_grad[0]]
+        grad = [factor_weights_sample_grad[1]]
+
+        return key, (sample, grad)
 
     def compute_locals_prior_grad(self, sample):
         log_std = jnp.log(jnp.sqrt(self.node_hyperparams['obs_weight_variance']))
-        return mc_obs_weights_logp_val_and_grad(sample, 0., log_std)[1]
+        return [mc_obs_weights_logp_val_and_grad(sample[0], 0., log_std)[1]]
 
     def compute_globals_prior_grad(self, sample):
         log_std = jnp.log(jnp.sqrt(self.node_hyperparams['factor_variance']))
-        return mc_factor_weights_logp_val_and_grad(sample, 0., log_std)[1]
+        return [mc_factor_weights_logp_val_and_grad(sample[0], 0., log_std)[1]]
 
     def compute_locals_entropy_grad(self, idx):
         mean = self.variational_parameters['local']['obs_weights']['mean'][idx]
         log_std = self.variational_parameters['local']['obs_weights']['log_std'][idx]
-        return obs_weights_logq_val_and_grad(mean, log_std)[1]
+        return [obs_weights_logq_val_and_grad(mean, log_std)[1]]
     
     def compute_globals_entropy_grad(self):
         mean = self.variational_parameters['global']['factor_weights']['mean']
         log_std = self.variational_parameters['global']['factor_weights']['log_std']        
-        return factor_weights_logq_val_and_grad(mean, log_std)[1]
+        return [factor_weights_logq_val_and_grad(mean, log_std)[1]]
     
     def state_sample_and_grad(self, key, n_samples):
         """Sample and take gradient of state"""
@@ -746,7 +782,7 @@ class TrajectoryNode(AbstractNode):
         psi = self.get_state_sample()
         locals = self.get_obs_weights_sample()[:,idx]
         globals = self.get_factor_weights_sample()
-        return mc_ll_val_and_grad_obs_weights(x, weights, psi, locals, globals, log_std)[1]
+        return [mc_ll_val_and_grad_obs_weights(x, weights, psi, locals, globals, log_std)[1]]
 
     def compute_ll_globals_grad(self, x, idx, weights):
         """Gradient of logp(x|psi,locals,globals) wrt globals"""
@@ -754,7 +790,7 @@ class TrajectoryNode(AbstractNode):
         psi = self.get_state_sample()
         locals = self.get_obs_weights_sample()[:,idx]
         globals = self.get_factor_weights_sample()
-        return mc_ll_val_and_grad_factor_weights(x, weights, psi, locals, globals, log_std)[1]
+        return [mc_ll_val_and_grad_factor_weights(x, weights, psi, locals, globals, log_std)[1]]
     
     def update_direction_params(self, direction_params_grad, direction_sample_grad, direction_params_entropy_grad, step_size=0.001):
         mc_grad = jnp.mean(direction_params_grad[0] * direction_sample_grad, axis=0)
@@ -788,7 +824,46 @@ class TrajectoryNode(AbstractNode):
         loc_log_std_grad = mc_grad + state_params_entropy_grad[1]
         self.variational_parameters['kernel']['state']['log_std'] += loc_log_std_grad * step_size
 
-    def update_local_params(self, idx, local_params_grad, local_sample_grad, local_params_entropy_grad, ent_anneal=1., step_size=0.001):
+    def initialize_local_opt_states(self, param_names=["obs_weights"]):
+        states = dict()
+        if param_names is None:
+            param_names=["obs_weights"]             
+        if "obs_weights" in param_names:
+            obs_weights_states = self.initialize_obs_weights_states()
+            states["obs_weights"] = obs_weights_states
+        return states
+
+    def initialize_obs_weights_states(self):
+        n_obs = self.tssb.ntssb.num_data
+        n_factors = self.node_hyperparams['n_factors']
+        m = jnp.zeros((n_obs,n_factors))
+        v = jnp.zeros((n_obs,n_factors))
+        state1 = (m,v)
+        m = jnp.zeros((n_obs,n_factors))
+        v = jnp.zeros((n_obs,n_factors))
+        state2 = (m,v)
+        states = (state1, state2)
+        return states
+
+    def update_local_params(self, idx, local_params_grad, local_sample_grad, local_params_entropy_grad, ent_anneal=1., step_size=.001, param_names=["obs_weights"], **kwargs):
+        if param_names is None:
+            param_names=["obs_weights"]
+        if "obs_weights" in param_names:
+            self.update_obs_weights_params(idx, local_params_grad[0], local_sample_grad[0], local_params_entropy_grad[0], ent_anneal=ent_anneal, step_size=step_size)
+
+
+    def update_local_params_adaptive(self, idx, local_params_grad, local_sample_grad, local_params_entropy_grad, i, states, ent_anneal=1., b1=0.9,
+        b2=0.999, eps=1e-8, step_size=0.001, param_names=["obs_weights"], **kwargs):
+        if param_names is None:
+            param_names = ["obs_weights"]
+
+        if "obs_weights" in param_names:
+            obs_weights_states = self.update_obs_weights_adaptive(idx, local_params_grad[0], local_sample_grad[0], local_params_entropy_grad[0], 
+                                                   i=i, states=states["obs_weights"], b1=b1, b2=b2, eps=eps, step_size=step_size, ent_anneal=ent_anneal)
+            states["obs_weights"] = obs_weights_states
+        return states
+    
+    def update_obs_weights_params(self, idx, local_params_grad, local_sample_grad, local_params_entropy_grad, ent_anneal=1., step_size=0.001):
         mc_grad = jnp.mean(local_params_grad[0] * local_sample_grad, axis=0)
         param_grad = mc_grad + ent_anneal * local_params_entropy_grad[0]
         new_param = self.variational_parameters['local']['obs_weights']['mean'][idx] + param_grad * step_size
@@ -799,16 +874,52 @@ class TrajectoryNode(AbstractNode):
         new_param = self.variational_parameters['local']['obs_weights']['log_std'][idx] + param_grad * step_size
         self.variational_parameters['local']['obs_weights']['log_std'] = self.variational_parameters['local']['obs_weights']['log_std'].at[idx].set(new_param)
 
-    def update_global_params(self, global_params_grad, global_sample_grad, global_params_entropy_grad, step_size=0.001):
-        mc_grad = jnp.mean(global_params_grad[0] * global_sample_grad, axis=0)
-        param_grad = mc_grad + global_params_entropy_grad[0]
-        self.variational_parameters['global']['factor_weights']['mean'] += param_grad * step_size
+    def update_obs_weights_adaptive(self, idx, local_params_grad, local_sample_grad, local_params_entropy_grad, i, states, b1=0.9,
+        b2=0.999, eps=1e-8, step_size=0.001, ent_anneal=1.):
+        """
+        states are not indexed
+        """
+        mc_grad = jnp.mean(local_params_grad[0] * local_sample_grad, axis=0)
+        param_grad = mc_grad + ent_anneal * local_params_entropy_grad[0]
+        
+        m, v = states[0]
+        new_m = (1 - b1) * param_grad + b1 * m[idx] # First  moment estimate.
+        new_v = (1 - b2) * jnp.square(param_grad) + b2 * v[idx]  # Second moment estimate.
+        m = m.at[idx].set(new_m)
+        v = v.at[idx].set(new_v)
+        mhat = new_m / (1 - jnp.asarray(b1, m.dtype) ** (i + 1))  # Bias correction.
+        vhat = new_v / (1 - jnp.asarray(b2, m.dtype) ** (i + 1))
+        state1 = (m, v)
+        new_param = self.variational_parameters['local']['obs_weights']['mean'][idx] + step_size * mhat / (jnp.sqrt(vhat) + eps)
+        self.variational_parameters['local']['obs_weights']['mean'] = self.variational_parameters['local']['obs_weights']['mean'].at[idx].set(new_param)
 
-        mc_grad = jnp.mean(global_params_grad[1] * global_sample_grad, axis=0)
-        param_grad = mc_grad + global_params_entropy_grad[1]
-        self.variational_parameters['global']['factor_weights']['log_std'] += param_grad * step_size
+        mc_grad = jnp.mean(local_params_grad[1] * local_sample_grad, axis=0)
+        param_grad = mc_grad + ent_anneal * local_params_entropy_grad[1]
+        
+        m, v = states[1]      
+        new_m = (1 - b1) * param_grad + b1 * m[idx]  # First  moment estimate.
+        new_v = (1 - b2) * jnp.square(param_grad) + b2 * v[idx]  # Second moment estimate.
+        m = m.at[idx].set(new_m)
+        v = v.at[idx].set(new_v)
+        mhat = new_m / (1 - jnp.asarray(b1, m.dtype) ** (i + 1))  # Bias correction.
+        vhat = new_v / (1 - jnp.asarray(b2, m.dtype) ** (i + 1))
+        state2 = (m, v)
+        new_param = self.variational_parameters['local']['obs_weights']['log_std'][idx] + step_size * mhat / (jnp.sqrt(vhat) + eps)
+        self.variational_parameters['local']['obs_weights']['log_std'] = self.variational_parameters['local']['obs_weights']['log_std'].at[idx].set(new_param)
 
-    def initialize_global_opt_states(self):
+        states = (state1, state2)
+        return states
+
+    def initialize_global_opt_states(self, param_names=["factor_weights"]):
+        states = dict()
+        if param_names is None:
+            param_names=["factor_weights"]
+        if "factor_weights" in param_names:
+            factor_weights_states = self.initialize_factor_weights_states()
+            states["factor_weights"] = factor_weights_states
+        return states
+    
+    def initialize_factor_weights_states(self):
         n_factors = self.node_hyperparams['n_factors']
         m = jnp.zeros((n_factors,self.n_genes))
         v = jnp.zeros((n_factors,self.n_genes))
@@ -819,8 +930,35 @@ class TrajectoryNode(AbstractNode):
         states = (state1, state2)
         return states
 
+    def update_global_params(self, global_params_grad, global_sample_grad, global_params_entropy_grad, step_size=0.001, 
+                             param_names=["factor_weights"], **kwargs):
+        if param_names is None:
+            param_names=["factor_weights"]
+        if "factor_weights" in param_names:
+            self.update_factor_weights_params(global_params_grad[0], global_sample_grad[0], global_params_entropy_grad[0], step_size=step_size)
+
     def update_global_params_adaptive(self, global_params_grad, global_sample_grad, global_params_entropy_grad, i, states, b1=0.9,
+        b2=0.999, eps=1e-8, step_size=0.001, param_names=["factor_weights"], **kwargs):
+        if param_names is None:
+            param_names=["factor_weights"]        
+        if "factor_weights" in param_names:
+            factor_weights_states = self.update_factor_weights_adaptive(global_params_grad[0], global_sample_grad[0], global_params_entropy_grad[0], 
+                                                    i=i, states=states["factor_weights"], b1=b1, b2=b2, eps=eps, step_size=step_size)
+            states["factor_weights"] = factor_weights_states
+        return states
+
+    def update_factor_weights_params(self, global_params_grad, global_sample_grad, global_params_entropy_grad, step_size=0.001):
+        mc_grad = jnp.mean(global_params_grad[0] * global_sample_grad, axis=0)
+        param_grad = mc_grad + global_params_entropy_grad[0]
+        self.variational_parameters['global']['factor_weights']['mean'] += param_grad * step_size
+
+        mc_grad = jnp.mean(global_params_grad[1] * global_sample_grad, axis=0)
+        param_grad = mc_grad + global_params_entropy_grad[1]
+        self.variational_parameters['global']['factor_weights']['log_std'] += param_grad * step_size
+
+    def update_factor_weights_adaptive(self, global_params_grad, global_sample_grad, global_params_entropy_grad, i, states, b1=0.9,
         b2=0.999, eps=1e-8, step_size=0.001):
+
         mc_grad = jnp.mean(global_params_grad[0] * global_sample_grad, axis=0)
         param_grad = mc_grad + global_params_entropy_grad[0]
         
@@ -831,7 +969,6 @@ class TrajectoryNode(AbstractNode):
         vhat = v / (1 - jnp.asarray(b2, m.dtype) ** (i + 1))
         state1 = (m, v)
         self.variational_parameters['global']['factor_weights']['mean'] += step_size * mhat / (jnp.sqrt(vhat) + eps)
-
 
         mc_grad = jnp.mean(global_params_grad[1] * global_sample_grad, axis=0)
         param_grad = mc_grad + global_params_entropy_grad[1]

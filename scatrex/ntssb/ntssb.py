@@ -1347,7 +1347,7 @@ class NTSSB(object):
                 local_states = self.update_local_params(subkey, batch_idx=batch_idx, adaptive=adaptive, states=local_states, i=it, 
                                                         param_names=locals_names, update_globals=update_globals, **kwargs)
                 if memoized:
-                    self.update_sufficient_statistics(batch_idx=batch_idx)    
+                    self.update_sufficient_statistics(batch_idx=batch_idx)
                 self.update_node_params(subkey, i=it, adaptive=adaptive, memoized=memoized, **kwargs)
                 if update_roots:
                     self.update_root_node_params(subkey, memoized=memoized, batch_idx=batch_idx, adaptive=adaptive, i=it, **kwargs)                
@@ -1479,11 +1479,8 @@ class NTSSB(object):
                 sum_E_log_1_psi += E_log_1_psi
 
                 # Go down
-                child_log_probs, child_local_grads = descend(child, local_grads=local_grads)
+                child_log_probs, _ = descend(child, local_grads=local_grads)
                 logqs.extend(child_log_probs)
-                if child_local_grads is not None:
-                    for ii, grads in enumerate(list(child_local_grads)):
-                        local_grads[ii] += grads
             
             return logqs, local_grads # batch-sized
 

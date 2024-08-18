@@ -89,8 +89,9 @@ mc_sample_factor_weights_val_and_grad = jax.jit(jax.vmap(sample_factor_weights_v
 
 @jax.jit
 def obs_weights_logp(sample, mean, log_std): # single sample, NxK
-    return jnp.sum(tfd.Normal(mean, jnp.exp(log_std)).log_prob(sample)) # sum across obs and dimensions
-obs_weights_logp_val_and_grad = jax.jit(jax.value_and_grad(obs_weights_logp, argnums=0)) # Take grad wrt to sample (NxK)
+    return tfd.Normal(mean, jnp.exp(log_std)).log_prob(sample) # sum across obs and dimensions
+univ_obs_weights_logp_val_and_grad = jax.jit(jax.value_and_grad(obs_weights_logp, argnums=0)) # Take grad wrt to sample (Nx1)
+obs_weights_logp_val_and_grad = jax.jit(jax.vmap(jax.vmap(univ_obs_weights_logp_val_and_grad, in_axes=(0, None, None)), in_axes=(0,None,None))) # Take grad wrt to sample (NxK)
 mc_obs_weights_logp_val_and_grad = jax.jit(jax.vmap(obs_weights_logp_val_and_grad, in_axes=(0,None,None))) # Multiple sample value_and_grad: SxNxK
 
 @jax.jit

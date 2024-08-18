@@ -29,7 +29,7 @@ def plot_full_tree(tree, ax=None, figsize=(6,6), subtree_parent_probs=None, edge
                 graph.add_edge(parent, child, alpha=prob, ls='--')
                 nx.draw_networkx_edges(graph, pos, edgelist=[(parent, child)], edge_color=sub_root['color'], alpha=prob, style='--')
                 if edge_labels and prob > 0.01:
-                    nx.draw_networkx_edge_labels(graph, pos, font_color=sub_root['color'], edge_labels={(parent, child):f"{prob:.3f}"}, font_size=int(font_size/2), alpha=float(prob))
+                    nx.draw_networkx_edge_labels(graph, pos, font_color=sub_root['color'], edge_labels={(parent, child):f"{prob:.3f}"}, font_size=int(font_size/2), alpha=float(prob), bbox=dict(alpha=0))
             for child in sub_root['children']:
                 sub_descend(child, graph)
 
@@ -83,7 +83,7 @@ def plot_tree(tree, G = None, param_key='param', data=None, labels=True, alpha=0
                     nx.draw_networkx_edges(G, pos, edgelist=[(parent, node)], edge_color=tree_dict[parent]['color'], alpha=parent_probs.loc[node, parent]*alpha, **edge_options)
                     if edge_labels and parent_probs.loc[node, parent] > 0.01:
                         nx.draw_networkx_edge_labels(G, pos, edge_labels={(parent, node):f'{parent_probs.loc[node, parent]:.3f}'}, font_color=tree_dict[parent]['color'], 
-                                                     font_size=int(font_size/2), alpha=parent_probs.loc[node, parent]*alpha)
+                                                     font_size=int(font_size/2), alpha=parent_probs.loc[node, parent]*alpha, bbox=dict(alpha=0))
             else:
                 parent = tree_dict[node]['parent']
                 G.add_edge(parent, node)
